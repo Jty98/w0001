@@ -36,14 +36,14 @@ class MyApp extends StatelessWidget {
       title: 'Flutter Demo',
       theme: ThemeData(
         colorSchemeSeed: Colors.blue,
-        cardTheme: CardTheme(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(
-                width: 2, color: Color.fromARGB(255, 177, 176, 176)),
-          ),
-        ),
+        // cardTheme: CardTheme(
+        //   elevation: 0,
+        //   shape: RoundedRectangleBorder(
+        //     borderRadius: BorderRadius.circular(10),
+        //     side: const BorderSide(
+        //         width: 2, color: Color.fromARGB(255, 177, 176, 176)),
+        //   ),
+        // ),
         searchBarTheme: const SearchBarThemeData(
           elevation: MaterialStatePropertyAll(0),
           backgroundColor: MaterialStatePropertyAll(Colors.transparent),

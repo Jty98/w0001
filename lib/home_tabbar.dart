@@ -79,7 +79,7 @@ class _HomeTabBarState extends State<HomeTabBar>
     return Container(
       height: 80,
       decoration: BoxDecoration(
-        color: Colors.blueGrey.withOpacity(0.15), // 원하는 배경색 설정
+        color: Colors.blueGrey.withValues(alpha: 0.15), // 원하는 배경색 설정
       ),
       child: TabBar(
         controller: _tabController,
