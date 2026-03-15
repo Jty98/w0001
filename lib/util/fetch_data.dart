@@ -1,18 +1,15 @@
 import 'package:get/get.dart';
-import 'package:w0001/controller/calendar_controller.dart';
-import 'package:w0001/controller/place_list_controller.dart';
-import 'package:w0001/controller/worker_controller.dart';
+import 'package:w0001/presentation/controller/calendar_controller.dart';
+import 'package:w0001/presentation/controller/worker_controller.dart';
 
 class FetchData {
   static Future<void> fetchAllData() async {
-    CalendarController calendarController = Get.find<CalendarController>();
-    WorkerController workerController = Get.find<WorkerController>();
-    PlaceListController placesController = Get.find<PlaceListController>();
+    final calendarController = Get.find<CalendarController>();
+    final workerController = Get.find<WorkerController>();
 
     calendarController.fetchTotalCost();
     calendarController.fetchAllEvents();
     workerController.fetchWorkCost();
-    placesController.fetchAllPlace();
     workerController.fetchWorkerInfo();
     workerController.checkboxStates = {};
   }

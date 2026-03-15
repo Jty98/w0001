@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:w0001/controller/add_cost_controller.dart';
+import 'package:w0001/presentation/controller/add_cost_controller.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
 

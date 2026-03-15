@@ -1,7 +1,7 @@
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:w0001/controller/add_cost_controller.dart';
+import 'package:w0001/presentation/controller/add_cost_controller.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/ui/screen/2_add/add_screen.dart';

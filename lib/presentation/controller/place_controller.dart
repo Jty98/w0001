@@ -8,7 +8,6 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:w0001/controller/place_list_controller.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
@@ -39,7 +38,6 @@ class PlaceController extends GetxController {
   DbHelper dbHelper = DbHelper();
   // DateTimeRange 오늘 날짜 기준 한 달로 초기화
   DateTimeRange dateTimeRange = getMonthDateRange(DateTime.now());
-  late PlaceListController placeListController = Get.find<PlaceListController>();
   // TextEditingController 초기화
   TextEditingController mNameController = TextEditingController();
   TextEditingController mPriceController = TextEditingController();
@@ -116,7 +114,6 @@ class PlaceController extends GetxController {
   Future<void> deleteRevenue({required int rid}) async {
     await dbHelper.deleteRevenue(rid, pid);
     fetchAllRevenueFromPlace();
-    placeListController.fetchAllPlace();
   }
 
   Future<void> updateRevenue({required int rid}) async {
@@ -136,7 +133,6 @@ class PlaceController extends GetxController {
     );
     await dbHelper.updateRevenue(revenue: revenueModel, placeId: pid);
     fetchAllRevenueFromPlace();
-    placeListController.fetchAllPlace();
   }
 
   Future<void> insertRevenue() async {
@@ -151,7 +147,6 @@ class PlaceController extends GetxController {
     }
     await dbHelper.insertRevenue(pid: pid, rprice: rprice, rname: rname);
     fetchAllRevenueFromPlace();
-    placeListController.fetchAllPlace();
     resetRevenueTextContoller();
     Get.dialog(saveDialog(text: '추가되었습니다.'));
   }

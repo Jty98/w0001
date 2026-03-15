@@ -1,0 +1,70 @@
+import 'package:w0001/domain/repository/workcost_abst.dart';
+import 'package:w0001/data/model/place_dropdown_model.dart';
+import 'package:w0001/data/model/total_workcost_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
+
+class WorkCostUseCase {
+  WorkCostUseCase(this._repository);
+
+  final WorkCostRepository _repository;
+
+  Future<List<TotalWorkCostModel>> getWorkCostsByDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    return _repository.getWorkCostsByDateRange(startDate, endDate);
+  }
+
+  Future<List<WorkCost2Model>> getWorkCostsByPlaceAndDate(
+    int hid,
+    DateTime startDate,
+    DateTime endDate,
+    int pid,
+  ) {
+    return _repository.getWorkCostsByPlaceAndDate(
+      hid,
+      startDate,
+      endDate,
+      pid,
+    );
+  }
+
+  Future<bool> addWorkCosts(List<WorkCostModel> wCostList) {
+    return _repository.addWorkCosts(wCostList);
+  }
+
+  Future<void> updateWorkCostItem(WorkCostModel workCost) {
+    return _repository.updateWorkCostItem(workCost);
+  }
+
+  Future<void> toggleWorkCostCompletionStatus(int wcomplete, int wid) {
+    return _repository.toggleWorkCostCompletionStatus(wcomplete, wid);
+  }
+
+  Future<void> updateWorkCostsToComplete(List<int> widList) {
+    return _repository.updateWorkCostsToComplete(widList);
+  }
+
+  Future<void> deleteWorkCost(int wid) {
+    return _repository.deleteWorkCost(wid);
+  }
+
+  Future<List<Map<String, dynamic>>> getWorkCostDetailsForCsv(
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    return _repository.getWorkCostDetailsForCsv(startDate, endDate);
+  }
+
+  Future<List<Map<String, dynamic>>> getWorkCostTotalsForCsv(
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    return _repository.getWorkCostTotalsForCsv(startDate, endDate);
+  }
+
+  Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid) {
+    return _repository.getPlacesForWorkCost(hid);
+  }
+}
+

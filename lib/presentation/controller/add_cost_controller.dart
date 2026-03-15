@@ -1,7 +1,7 @@
 import 'package:date_picker_plus/date_picker_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:w0001/controller/worker_controller.dart';
+import 'package:w0001/presentation/controller/worker_controller.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/materialcost_model.dart';

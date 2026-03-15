@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:w0001/controller/add_cost_controller.dart';
-import 'package:w0001/controller/calendar_controller.dart';
-import 'package:w0001/controller/place_list_controller.dart';
-import 'package:w0001/controller/worker_controller.dart';
+import 'package:w0001/presentation/controller/add_cost_controller.dart';
+import 'package:w0001/presentation/controller/calendar_controller.dart';
+import 'package:w0001/presentation/controller/worker_controller.dart';
 import 'package:w0001/ui/screen/2_add/add_screen.dart';
 import 'package:w0001/ui/screen/3_calendar/calendar_screen.dart';
 import 'package:w0001/ui/screen/4_human/work_cost_screen.dart';
@@ -31,7 +30,6 @@ class _HomeTabBarState extends State<HomeTabBar>
     Get.put(CalendarController());
     Get.put(AddCostController());
     Get.put(WorkerController());
-    Get.put(PlaceListController());
   }
 
   @override

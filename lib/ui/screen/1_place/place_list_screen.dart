@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
-import 'package:w0001/controller/add_cost_controller.dart';
-import 'package:w0001/controller/place_controller.dart';
-import 'package:w0001/controller/place_list_controller.dart';
+import 'package:w0001/presentation/controller/add_cost_controller.dart';
+import 'package:w0001/presentation/controller/place_controller.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/ui/screen/1_place/place_screen.dart';
@@ -14,23 +14,23 @@ import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 
-class PlaceListScreen extends GetView<PlaceListController> {
+class PlaceListScreen extends ConsumerWidget {
   const PlaceListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(placeListProvider);
+    final viewModel = ref.read(placeListProvider.notifier);
+
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         appBar: AppBar(
-          title: GestureDetector(
-            // onDoubleTap: () => controller.importDB(),
-            // onLongPress: () => controller.exportDB(),
-            child: const Text('현장 관리'),
-          ),
+          title: const Text('현장 관리'),
           actions: [
-            _buildAppBarIconButton(),
+            _buildAppBarIconButton(viewModel, state),
           ],
         ),
         body: Padding(
@@ -38,9 +38,9 @@ class PlaceListScreen extends GetView<PlaceListController> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _buildSegmentButton(),
+              _buildSegmentButton(state, viewModel),
               Expanded(
-                child: _buildListView(),
+                child: _buildListView(state, viewModel),
               ),
             ],
           ),
@@ -49,65 +49,85 @@ class PlaceListScreen extends GetView<PlaceListController> {
     );
   }
 
-  GetBuilder<PlaceListController> _buildListView() {
-    return GetBuilder<PlaceListController>(
-      builder: (controller) => (controller.filteredPlaceList.isEmpty)
-          ? Center(
-              child: Text(
-                '${controller.placeState == PlaceState.incomplete ? '진행중인' : '완료된'} 현장이 없습니다.',
-                style: normalStyle,
-              ),
-            )
-          : ListView.builder(
-              itemCount: controller.filteredPlaceList.length,
-              itemBuilder: (context, index) => _buildPlaceListTile(
-                  element: controller.filteredPlaceList[index], index: index),
-            ),
-    );
-  }
-
-  Padding _buildSegmentButton() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: GetBuilder<PlaceListController>(
-        builder: (controller) => CupertinoSlidingSegmentedControl<PlaceState>(
-          groupValue: controller.placeState,
-          children: const {
-            PlaceState.incomplete: Text('진행중'),
-            PlaceState.complete: Text('완료'),
-          },
-          onValueChanged: (value) => controller.stateValueChanged(value),
+  Widget _buildListView(PlaceListState state, PlaceListViewModel viewModel) {
+    if (state.filteredPlaceList.isEmpty) {
+      final label =
+          state.placeState == PlaceState.incomplete ? '진행중인' : '완료된';
+      return Center(
+        child: Text(
+          '$label 현장이 없습니다.',
+          style: normalStyle,
         ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: state.filteredPlaceList.length,
+      itemBuilder: (context, index) => _buildPlaceListTile(
+        element: state.filteredPlaceList[index],
+        index: index,
+        viewModel: viewModel,
       ),
     );
   }
 
-  IconButton _buildAppBarIconButton() {
+  Padding _buildSegmentButton(
+    PlaceListState state,
+    PlaceListViewModel viewModel,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: CupertinoSlidingSegmentedControl<PlaceState>(
+        groupValue: state.placeState,
+        children: const {
+          PlaceState.incomplete: Text('진행중'),
+          PlaceState.complete: Text('완료'),
+        },
+        onValueChanged: viewModel.stateValueChanged,
+      ),
+    );
+  }
+
+  IconButton _buildAppBarIconButton(
+    PlaceListViewModel viewModel,
+    PlaceListState state,
+  ) {
     return IconButton(
       tooltip: '현장 추가',
-      onPressed: () async => await Get.dialog(
-        _placeDialog(
-          isAdd: true,
-          onPressed: () => controller.insertPlace(),
-          nameController: controller.placeNameController,
-          revenueController: controller.placeRevenueController,
-        ),
-      ).then((value) => controller.resetTextContoller()),
+      onPressed: () async {
+        await Get.dialog(
+          _placeDialog(
+            isAdd: true,
+            onPressed: () async {
+              await viewModel.insertPlace();
+              if (state.updateText.isEmpty) {
+                Get.back();
+                viewModel.resetTextController();
+              }
+            },
+            nameController: viewModel.placeNameController,
+            revenueController: viewModel.placeRevenueController,
+            state: state,
+          ),
+        ).then((_) => viewModel.resetTextController());
+      },
       icon: const Icon(Icons.add),
     );
   }
 
-  Dialog _placeDialog(
-      {VoidCallback? onPressed,
-      required bool isAdd,
-      TextEditingController? nameController,
-      TextEditingController? revenueController}) {
-    PlaceListController controller = Get.find<PlaceListController>();
+  Dialog _placeDialog({
+    VoidCallback? onPressed,
+    required bool isAdd,
+    required TextEditingController nameController,
+    required TextEditingController revenueController,
+    required PlaceListState state,
+  }) {
     return Dialog(
       child: Container(
         decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: const Color.fromARGB(255, 243, 243, 243)),
+          borderRadius: BorderRadius.circular(10),
+          color: const Color.fromARGB(255, 243, 243, 243),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -120,17 +140,13 @@ class PlaceListScreen extends GetView<PlaceListController> {
               ),
             ),
             AddTextField(
-              tController: nameController!,
+              tController: nameController,
               labelText: '현장 이름 (필수)',
               isPrice: false,
               readOnly: false,
-              onChanged: (value) {
-                controller.updateText = '';
-                controller.update();
-              },
             ),
             AddTextField(
-              tController: revenueController!,
+              tController: revenueController,
               labelText: '선수금',
               isPrice: true,
               keyboardType: TextInputType.number,
@@ -138,11 +154,10 @@ class PlaceListScreen extends GetView<PlaceListController> {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: GetBuilder<PlaceListController>(
-                  builder: (controller) => Text(
-                        controller.updateText,
-                        style: const TextStyle(color: Colors.red),
-                      )),
+              child: Text(
+                state.updateText,
+                style: const TextStyle(color: Colors.red),
+              ),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -150,8 +165,6 @@ class PlaceListScreen extends GetView<PlaceListController> {
                 TextButton(
                   onPressed: () {
                     Get.back();
-                    controller.updateText = '';
-                    controller.placeRevenueController.text = '0';
                   },
                   child: const Text(
                     '취소',
@@ -170,8 +183,11 @@ class PlaceListScreen extends GetView<PlaceListController> {
     );
   }
 
-  Widget _buildPlaceListTile(
-      {required PlaceInfoModel element, required int index}) {
+  Widget _buildPlaceListTile({
+    required PlaceInfoModel element,
+    required int index,
+    required PlaceListViewModel viewModel,
+  }) {
     return Slidable(
       closeOnScroll: true,
       startActionPane: ActionPane(
@@ -180,14 +196,12 @@ class PlaceListScreen extends GetView<PlaceListController> {
           SlidableAction(
             borderRadius: BorderRadius.circular(10),
             backgroundColor: Colors.green,
-            icon: controller.placeState == PlaceState.complete
+            icon: element.pcomplete == 1
                 ? Icons.autorenew_outlined
                 : Icons.check_circle,
-            label: controller.placeState == PlaceState.complete
-                ? '진행중으로 변경'
-                : '완료',
+            label: element.pcomplete == 1 ? '진행중으로 변경' : '완료',
             onPressed: (context) {
-              controller.updatePcomplete(index).then((value) {
+              viewModel.updatePcomplete(index).then((value) {
                 FetchData.fetchAllData();
                 Get.find<AddCostController>().selectedPlace = null;
               });
@@ -210,28 +224,37 @@ class PlaceListScreen extends GetView<PlaceListController> {
                   text: getPrice(
                       price: element.pfirstrevenue, isContainWon: false));
               Get.dialog(
-                GetBuilder<PlaceListController>(
-                  builder: (controller) => _placeDialog(
-                    isAdd: false,
-                    nameController: nameController,
-                    revenueController: revenueController,
-                    onPressed: () => controller
+                _placeDialog(
+                  isAdd: false,
+                  nameController: nameController,
+                  revenueController: revenueController,
+                  state: const PlaceListState(
+                    placeList: [],
+                    filteredPlaceList: [],
+                    placeState: PlaceState.incomplete,
+                    updateText: '',
+                    isLoading: false,
+                  ),
+                  onPressed: () {
+                    final prevenue = int.tryParse(
+                          revenueController.text
+                              .trim()
+                              .replaceAll(RegExp(r'[,원]'), ''),
+                        ) ??
+                        -1;
+                    viewModel
                         .updatePlace(
-                            element.pid!,
-                            nameController.text,
-                            int.tryParse(
-                                  revenueController.text
-                                      .trim()
-                                      .replaceAll(RegExp(r'[,원]'), ''),
-                                ) ??
-                                -1)
-                        .then((value) {
+                          element.pid!,
+                          nameController.text,
+                          prevenue,
+                        )
+                        .then((_) {
                       FetchData.fetchAllData();
                       Get.find<AddCostController>().selectedPlace = null;
-                    }),
-                  ),
+                    });
+                  },
                 ),
-              ).then((value) => controller.updateText = '');
+              ).then((value) => viewModel.state = viewModel.state.copyWith(updateText: ''));
             },
           ),
           SlidableAction(
@@ -241,12 +264,14 @@ class PlaceListScreen extends GetView<PlaceListController> {
             label: '삭제',
             onPressed: (context) => Get.dialog(
               deleteDialog(
-                  onPressed: () =>
-                      controller.deletePlace(element.pid!).then((value) {
-                        FetchData.fetchAllData();
-                        Get.find<AddCostController>().selectedPlace = null;
-                        Get.back();
-                      })),
+                onPressed: () => viewModel
+                    .deletePlace(element.pid!)
+                    .then((value) {
+                  FetchData.fetchAllData();
+                  Get.find<AddCostController>().selectedPlace = null;
+                  Get.back();
+                }),
+              ),
             ),
           ),
         ],
@@ -274,7 +299,7 @@ class PlaceListScreen extends GetView<PlaceListController> {
           ),
         ),
         child: Card(
-          color: Colors.blueGrey.withOpacity(0.1),
+          color: Colors.blueGrey.withValues(alpha: 0.1),
           child: ListTile(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

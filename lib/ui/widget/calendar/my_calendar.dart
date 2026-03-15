@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:w0001/controller/calendar_controller.dart';
+import 'package:w0001/presentation/controller/calendar_controller.dart';
 
 class CalendarWidget extends GetView<CalendarController> {
   const CalendarWidget({

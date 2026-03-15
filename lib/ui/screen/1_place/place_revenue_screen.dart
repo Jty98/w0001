@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
-import 'package:w0001/controller/place_controller.dart';
+import 'package:w0001/presentation/controller/place_controller.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';

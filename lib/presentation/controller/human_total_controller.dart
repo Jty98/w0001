@@ -1,5 +1,5 @@
 import 'package:get/get.dart';
-import 'package:w0001/controller/worker_controller.dart';
+import 'package:w0001/presentation/controller/worker_controller.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/data/model/workcost_model.dart';
