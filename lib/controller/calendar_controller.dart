@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/materialcost_model.dart';
-import 'package:w0001/model/total_cost_model.dart';
-import 'package:w0001/model/workcost_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/materialcost_model.dart';
+import 'package:w0001/data/model/total_cost_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
-import 'package:w0001/widget/total_price_bar.dart';
+import 'package:w0001/ui/widget/total_price_bar.dart';
 
 class CalendarController extends GetxController {
   @override

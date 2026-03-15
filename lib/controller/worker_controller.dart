@@ -8,13 +8,13 @@ import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/human_model.dart';
-import 'package:w0001/model/total_workcost_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/human_model.dart';
+import 'package:w0001/data/model/total_workcost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
 
 class WorkerController extends GetxController {
   @override

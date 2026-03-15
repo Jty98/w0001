@@ -6,14 +6,14 @@ import 'package:w0001/controller/add_cost_controller.dart';
 import 'package:w0001/controller/place_controller.dart';
 import 'package:w0001/controller/place_list_controller.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/place_info_model.dart';
-import 'package:w0001/screen/1_place/place_screen.dart';
+import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/ui/screen/1_place/place_screen.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/add_text_field.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/add_text_field.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
 
 class PlaceListScreen extends GetView<PlaceListController> {
   const PlaceListScreen({super.key});

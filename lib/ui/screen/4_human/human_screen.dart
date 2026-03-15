@@ -6,7 +6,7 @@ import 'package:w0001/controller/add_cost_controller.dart';
 import 'package:w0001/controller/worker_controller.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
 
 class HumanScreen extends GetView<WorkerController> {
   const HumanScreen({super.key});

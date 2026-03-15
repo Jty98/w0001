@@ -5,9 +5,9 @@ import 'package:get/get.dart';
 import 'package:w0001/controller/human_total_controller.dart';
 import 'package:w0001/controller/worker_controller.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/place_dropdown_model.dart';
-import 'package:w0001/model/workcost_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/place_dropdown_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
 

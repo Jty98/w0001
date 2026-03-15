@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:w0001/screen/4_human/human_screen.dart';
+import 'package:w0001/ui/screen/4_human/human_screen.dart';
 
 class RoundTextField extends StatelessWidget {
   final TextEditingController controller;

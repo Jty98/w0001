@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:w0001/model/dbhelper.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/home_tabbar.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 

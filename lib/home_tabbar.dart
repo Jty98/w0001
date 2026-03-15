@@ -4,10 +4,10 @@ import 'package:w0001/controller/add_cost_controller.dart';
 import 'package:w0001/controller/calendar_controller.dart';
 import 'package:w0001/controller/place_list_controller.dart';
 import 'package:w0001/controller/worker_controller.dart';
-import 'package:w0001/screen/2_add/add_screen.dart';
-import 'package:w0001/screen/3_calendar/calendar_screen.dart';
-import 'package:w0001/screen/4_human/work_cost_screen.dart';
-import 'package:w0001/screen/1_place/place_list_screen.dart';
+import 'package:w0001/ui/screen/2_add/add_screen.dart';
+import 'package:w0001/ui/screen/3_calendar/calendar_screen.dart';
+import 'package:w0001/ui/screen/4_human/work_cost_screen.dart';
+import 'package:w0001/ui/screen/1_place/place_list_screen.dart';
 
 class HomeTabBar extends StatefulWidget {
   const HomeTabBar({super.key});

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:w0001/model/total_cost_model.dart';
+import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';

@@ -2,11 +2,11 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:w0001/controller/add_cost_controller.dart';
-import 'package:w0001/screen/2_add/add_screen.dart';
+import 'package:w0001/ui/screen/2_add/add_screen.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/add_text_field.dart';
-import 'package:w0001/widget/date_card_widget.dart';
+import 'package:w0001/ui/widget/add_text_field.dart';
+import 'package:w0001/ui/widget/date_card_widget.dart';
 
 Widget materialCostTab(context) {
   AddCostController controller = Get.find<AddCostController>();

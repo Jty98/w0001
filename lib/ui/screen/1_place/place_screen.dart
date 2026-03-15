@@ -6,18 +6,18 @@ import 'package:get/get.dart';
 import 'package:grouped_list/grouped_list.dart';
 import 'package:w0001/controller/place_controller.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/place_info_model.dart';
-import 'package:w0001/model/total_cost_model.dart';
-import 'package:w0001/screen/1_place/place_revenue_screen.dart';
+import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/data/model/total_cost_model.dart';
+import 'package:w0001/ui/screen/1_place/place_revenue_screen.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/add_text_field.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/save_dialog.dart';
-import 'package:w0001/widget/total_cost_card.dart';
-import 'package:w0001/widget/total_price_bar.dart';
-import 'package:w0001/widget/segment_widget.dart';
+import 'package:w0001/ui/widget/add_text_field.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/total_cost_card.dart';
+import 'package:w0001/ui/widget/total_price_bar.dart';
+import 'package:w0001/ui/widget/segment_widget.dart';
 
 class PlaceScreen extends GetView<PlaceController> {
   final PlaceInfoModel placeInfo;

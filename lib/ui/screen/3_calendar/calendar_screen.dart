@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
 import 'package:w0001/controller/calendar_controller.dart';
-import 'package:w0001/model/total_cost_model.dart';
+import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/add_text_field.dart';
-import 'package:w0001/widget/calendar/my_calendar.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/save_dialog.dart';
-import 'package:w0001/widget/total_cost_card.dart';
-import 'package:w0001/widget/total_price_bar.dart';
+import 'package:w0001/ui/widget/add_text_field.dart';
+import 'package:w0001/ui/widget/calendar/my_calendar.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/total_cost_card.dart';
+import 'package:w0001/ui/widget/total_price_bar.dart';
 
 class CalendarScreen extends GetView<CalendarController> {
   const CalendarScreen({super.key});

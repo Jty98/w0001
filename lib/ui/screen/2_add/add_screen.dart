@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
 import 'package:w0001/controller/add_cost_controller.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/place_model.dart';
-import 'package:w0001/screen/2_add/material_cost_tab.dart';
-import 'package:w0001/screen/2_add/work_cost_tab.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/ui/screen/2_add/material_cost_tab.dart';
+import 'package:w0001/ui/screen/2_add/work_cost_tab.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/round_text_field.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/round_text_field.dart';
 
 class AddScreen extends GetView<AddCostController> {
   const AddScreen({super.key});

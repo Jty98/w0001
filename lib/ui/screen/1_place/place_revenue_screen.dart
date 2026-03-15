@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
 import 'package:w0001/controller/place_controller.dart';
-import 'package:w0001/model/place_info_model.dart';
+import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/add_text_field.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/add_text_field.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
 
 class PlaceRevenueScreen extends GetView<PlaceController> {
   final PlaceInfoModel placeInfo;

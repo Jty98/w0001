@@ -10,15 +10,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:w0001/controller/place_list_controller.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/materialcost_model.dart';
-import 'package:w0001/model/revenue_model.dart';
-import 'package:w0001/model/total_cost_model.dart';
-import 'package:w0001/model/workcost_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/materialcost_model.dart';
+import 'package:w0001/data/model/revenue_model.dart';
+import 'package:w0001/data/model/total_cost_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/widget/save_dialog.dart';
-import 'package:w0001/widget/total_price_bar.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/total_price_bar.dart';
 
 class PlaceController extends GetxController {
   PlaceController({required this.pid});

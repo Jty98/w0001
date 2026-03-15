@@ -6,13 +6,13 @@ import 'package:grouped_list/grouped_list.dart';
 import 'package:w0001/controller/human_total_controller.dart';
 import 'package:w0001/controller/worker_controller.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/total_workcost_model.dart';
-import 'package:w0001/screen/4_human/human_screen.dart';
-import 'package:w0001/screen/4_human/w_detail_screen.dart';
+import 'package:w0001/data/model/total_workcost_model.dart';
+import 'package:w0001/ui/screen/4_human/human_screen.dart';
+import 'package:w0001/ui/screen/4_human/w_detail_screen.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
-import 'package:w0001/widget/save_dialog.dart';
-import 'package:w0001/widget/segment_widget.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/segment_widget.dart';
 
 class WorkCostScreen extends GetView<WorkerController> {
   const WorkCostScreen({super.key});

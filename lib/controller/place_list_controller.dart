@@ -8,9 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/place_info_model.dart';
-import 'package:w0001/model/place_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/data/model/place_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 
 class PlaceListController extends GetxController {

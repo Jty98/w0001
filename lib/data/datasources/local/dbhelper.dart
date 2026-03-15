@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:w0001/model/human_model.dart';
-import 'package:w0001/model/materialcost_model.dart';
-import 'package:w0001/model/place_dropdown_model.dart';
-import 'package:w0001/model/place_info_model.dart';
-import 'package:w0001/model/place_model.dart';
-import 'package:w0001/model/revenue_model.dart';
-import 'package:w0001/model/total_cost_model.dart';
-import 'package:w0001/model/total_workcost_model.dart';
-import 'package:w0001/model/workcost_model.dart';
+import 'package:w0001/data/model/human_model.dart';
+import 'package:w0001/data/model/materialcost_model.dart';
+import 'package:w0001/data/model/place_dropdown_model.dart';
+import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/revenue_model.dart';
+import 'package:w0001/data/model/total_cost_model.dart';
+import 'package:w0001/data/model/total_workcost_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 
 class DbHelper {
   final int curruntVersion = 3; 

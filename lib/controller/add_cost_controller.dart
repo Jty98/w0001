@@ -2,14 +2,14 @@ import 'package:date_picker_plus/date_picker_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:w0001/controller/worker_controller.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/human_model.dart';
-import 'package:w0001/model/materialcost_model.dart';
-import 'package:w0001/model/place_model.dart';
-import 'package:w0001/model/workcost_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/human_model.dart';
+import 'package:w0001/data/model/materialcost_model.dart';
+import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
-import 'package:w0001/widget/delete_dialog.dart';
-import 'package:w0001/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/save_dialog.dart';
 
 class AddCostController extends GetxController {
   var hNameController = TextEditingController();

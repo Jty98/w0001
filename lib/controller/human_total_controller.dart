@@ -1,8 +1,8 @@
 import 'package:get/get.dart';
 import 'package:w0001/controller/worker_controller.dart';
 import 'package:w0001/enums.dart';
-import 'package:w0001/model/dbhelper.dart';
-import 'package:w0001/model/workcost_model.dart';
+import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 
 class HumanTotalController extends GetxController {
   final int hid;
