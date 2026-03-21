@@ -2,18 +2,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:get/get.dart';
-import 'package:w0001/presentation/controller/add_cost_controller.dart';
-import 'package:w0001/presentation/controller/place_controller.dart';
+import 'package:go_router/go_router.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_info_model.dart';
-import 'package:w0001/ui/screen/1_place/place_screen.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 
 class PlaceListScreen extends ConsumerWidget {
@@ -30,7 +28,7 @@ class PlaceListScreen extends ConsumerWidget {
         appBar: AppBar(
           title: const Text('현장 관리'),
           actions: [
-            _buildAppBarIconButton(viewModel, state),
+            _buildAppBarIconButton(context, ref, viewModel, state),
           ],
         ),
         body: Padding(
@@ -40,7 +38,7 @@ class PlaceListScreen extends ConsumerWidget {
             children: [
               _buildSegmentButton(state, viewModel),
               Expanded(
-                child: _buildListView(state, viewModel),
+                child: _buildListView(context, ref, state, viewModel),
               ),
             ],
           ),
@@ -49,7 +47,12 @@ class PlaceListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildListView(PlaceListState state, PlaceListViewModel viewModel) {
+  Widget _buildListView(
+    BuildContext context,
+    WidgetRef ref,
+    PlaceListState state,
+    PlaceListViewModel viewModel,
+  ) {
     if (state.filteredPlaceList.isEmpty) {
       final label =
           state.placeState == PlaceState.incomplete ? '진행중인' : '완료된';
@@ -63,7 +66,9 @@ class PlaceListScreen extends ConsumerWidget {
 
     return ListView.builder(
       itemCount: state.filteredPlaceList.length,
-      itemBuilder: (context, index) => _buildPlaceListTile(
+      itemBuilder: (ctx, index) => _buildPlaceListTile(
+        context: ctx,
+        ref: ref,
         element: state.filteredPlaceList[index],
         index: index,
         viewModel: viewModel,
@@ -88,20 +93,24 @@ class PlaceListScreen extends ConsumerWidget {
     );
   }
 
-  IconButton _buildAppBarIconButton(
+  Widget _buildAppBarIconButton(
+    BuildContext context,
+    WidgetRef ref,
     PlaceListViewModel viewModel,
     PlaceListState state,
   ) {
     return IconButton(
       tooltip: '현장 추가',
       onPressed: () async {
-        await Get.dialog(
-          _placeDialog(
+        await showDialog<void>(
+          context: context,
+          builder: (dialogCtx) => _placeDialog(
             isAdd: true,
             onPressed: () async {
               await viewModel.insertPlace();
-              if (state.updateText.isEmpty) {
-                Get.back();
+              final cur = ref.read(placeListProvider);
+              if (cur.updateText.isEmpty) {
+                if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
                 viewModel.resetTextController();
               }
             },
@@ -109,7 +118,8 @@ class PlaceListScreen extends ConsumerWidget {
             revenueController: viewModel.placeRevenueController,
             state: state,
           ),
-        ).then((_) => viewModel.resetTextController());
+        );
+        viewModel.resetTextController();
       },
       icon: const Icon(Icons.add),
     );
@@ -123,67 +133,71 @@ class PlaceListScreen extends ConsumerWidget {
     required PlaceListState state,
   }) {
     return Dialog(
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          color: const Color.fromARGB(255, 243, 243, 243),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              child: Text(
-                isAdd ? '현장 추가' : '현장 수정',
-                style: bigStyle,
+      child: Builder(
+        builder: (context) => Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: const Color.fromARGB(255, 243, 243, 243),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                child: Text(
+                  isAdd ? '현장 추가' : '현장 수정',
+                  style: bigStyle,
+                ),
               ),
-            ),
-            AddTextField(
-              tController: nameController,
-              labelText: '현장 이름 (필수)',
-              isPrice: false,
-              readOnly: false,
-            ),
-            AddTextField(
-              tController: revenueController,
-              labelText: '선수금',
-              isPrice: true,
-              keyboardType: TextInputType.number,
-              readOnly: false,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(
-                state.updateText,
-                style: const TextStyle(color: Colors.red),
+              AddTextField(
+                tController: nameController,
+                labelText: '현장 이름 (필수)',
+                isPrice: false,
+                readOnly: false,
               ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                TextButton(
-                  onPressed: () {
-                    Get.back();
-                  },
-                  child: const Text(
-                    '취소',
-                    style: TextStyle(color: Colors.red),
+              AddTextField(
+                tController: revenueController,
+                labelText: '선수금',
+                isPrice: true,
+                keyboardType: TextInputType.number,
+                readOnly: false,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  state.updateText,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text(
+                      '취소',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: onPressed,
-                  child: const Text('확인'),
-                ),
-              ],
-            ),
-          ],
+                  TextButton(
+                    onPressed: onPressed,
+                    child: const Text('확인'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildPlaceListTile({
+    required BuildContext context,
+    required WidgetRef ref,
     required PlaceInfoModel element,
     required int index,
     required PlaceListViewModel viewModel,
@@ -203,7 +217,7 @@ class PlaceListScreen extends ConsumerWidget {
             onPressed: (context) {
               viewModel.updatePcomplete(index).then((value) {
                 FetchData.fetchAllData();
-                Get.find<AddCostController>().selectedPlace = null;
+                ref.read(addCostProvider.notifier).clearSelectedPlace();
               });
             },
           ),
@@ -223,8 +237,9 @@ class PlaceListScreen extends ConsumerWidget {
               TextEditingController revenueController = TextEditingController(
                   text: getPrice(
                       price: element.pfirstrevenue, isContainWon: false));
-              Get.dialog(
-                _placeDialog(
+              showDialog<void>(
+                context: context,
+                builder: (dialogCtx) => _placeDialog(
                   isAdd: false,
                   nameController: nameController,
                   revenueController: revenueController,
@@ -250,11 +265,11 @@ class PlaceListScreen extends ConsumerWidget {
                         )
                         .then((_) {
                       FetchData.fetchAllData();
-                      Get.find<AddCostController>().selectedPlace = null;
+                      ref.read(addCostProvider.notifier).clearSelectedPlace();
                     });
                   },
                 ),
-              ).then((value) => viewModel.state = viewModel.state.copyWith(updateText: ''));
+              ).then((value) => viewModel.clearUpdateText());
             },
           ),
           SlidableAction(
@@ -262,14 +277,15 @@ class PlaceListScreen extends ConsumerWidget {
             backgroundColor: Colors.red,
             icon: Icons.delete,
             label: '삭제',
-            onPressed: (context) => Get.dialog(
-              deleteDialog(
+            onPressed: (slidableCtx) => showDialog<void>(
+              context: slidableCtx,
+              builder: (dialogCtx) => deleteDialog(
                 onPressed: () => viewModel
                     .deletePlace(element.pid!)
                     .then((value) {
                   FetchData.fetchAllData();
-                  Get.find<AddCostController>().selectedPlace = null;
-                  Get.back();
+                  ref.read(addCostProvider.notifier).clearSelectedPlace();
+                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
                 }),
               ),
             ),
@@ -277,17 +293,10 @@ class PlaceListScreen extends ConsumerWidget {
         ],
       ),
       child: InkWell(
-        onTap: () => Get.to(
-          () => PlaceScreen(placeInfo: element),
-          binding: BindingsBuilder(
-            () {
-              Get.put(PlaceController(pid: element.pid!));
-            },
-          ),
-          fullscreenDialog: true,
-        ),
-        onLongPress: () => Get.dialog(
-          pageViewDialog(
+        onTap: () => context.push('/place/detail', extra: element),
+        onLongPress: () => showDialog<void>(
+          context: context,
+          builder: (_) => pageViewDialog(
             title: element.pname,
             height: 500,
             text: formatDuration(element.pstart, element.pend),

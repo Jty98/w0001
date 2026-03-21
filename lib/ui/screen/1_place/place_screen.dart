@@ -1,14 +1,13 @@
 import 'package:date_picker_plus/date_picker_plus.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:get/get.dart';
+import 'package:go_router/go_router.dart';
 import 'package:grouped_list/grouped_list.dart';
-import 'package:w0001/presentation/controller/place_controller.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
-import 'package:w0001/ui/screen/1_place/place_revenue_screen.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
@@ -18,13 +17,16 @@ import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/total_cost_card.dart';
 import 'package:w0001/ui/widget/total_price_bar.dart';
 import 'package:w0001/ui/widget/segment_widget.dart';
+import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 
-class PlaceScreen extends GetView<PlaceController> {
+class PlaceScreen extends ConsumerWidget {
   final PlaceInfoModel placeInfo;
   const PlaceScreen({super.key, required this.placeInfo});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(placeDetailProvider(placeInfo.pid!));
+    final vm = ref.read(placeDetailProvider(placeInfo.pid!).notifier);
     return Scaffold(
       appBar: AppBar(
         title: Text(placeInfo.pname),
@@ -33,7 +35,7 @@ class PlaceScreen extends GetView<PlaceController> {
           IconButton(
             visualDensity: VisualDensity.compact,
             onPressed: () =>
-                controller.exportAndSharePlaceInfoToExcel(placeInfo.pname),
+                vm.exportAndSharePlaceInfoToExcel(placeInfo.pname),
             icon: Image.asset(
               'assets/images/excel_logo.png',
               height: 28,
@@ -42,10 +44,11 @@ class PlaceScreen extends GetView<PlaceController> {
           ),
           IconButton(
             // visualDensity: VisualDensity.comfortable,
-            onPressed: () async => Get.to(
-              () => PlaceRevenueScreen(placeInfo: placeInfo),
-            )?.then((value) =>
-                Get.find<PlaceController>().resetRevenueTextContoller()),
+            onPressed: () async {
+              await context.push('revenue', extra: placeInfo);
+              if (!context.mounted) return;
+              vm.resetRevenueTextController();
+            },
             icon: Image.asset(
               'assets/images/add_money.png',
               height: 28,
@@ -59,17 +62,16 @@ class PlaceScreen extends GetView<PlaceController> {
             padding: const EdgeInsets.only(bottom: 10, left: 10, right: 10),
             child: Column(
               children: [
-                GetBuilder<PlaceController>(
-                  builder: (controller) => Text(
-                    formatDateTimeRangeToString(controller.dateTimeRange),
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey),
+                Text(
+                  formatDateTimeRangeToString(state.dateTimeRange),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey,
                   ),
                 ),
                 const SizedBox(height: 5),
-                _selectDurationButtons(context),
+                _selectDurationButtons(context, state, vm),
               ],
             ),
           ),
@@ -77,109 +79,106 @@ class PlaceScreen extends GetView<PlaceController> {
       ),
       body: Column(
         children: [
-          GetBuilder<PlaceController>(
-            builder: (controller) => TotalPriceBar(
-              totalCostList: controller.rangeFilterList,
-              categoryTapCallbacks: controller.categoryTapCallbacks,
-            ),
+          TotalPriceBar(
+            totalCostList: vm.rangeFilterList,
+            categoryTapCallbacks: {
+              for (final type in FilterType.values)
+                type.category: (category) => vm.changeFilterType(type),
+            },
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
-            child: GetBuilder<PlaceController>(
-              builder: (controller) => Text(
-                '${controller.selectedFilterType.category} ${getPrice(price: controller.selectedPrice)}',
-                style: const TextStyle(fontSize: 17),
-              ),
+            child: Text(
+              '${state.selectedFilterType.category} ${getPrice(price: vm.selectedPrice)}',
+              style: const TextStyle(fontSize: 17),
             ),
           ),
-          Expanded(child: expenseList(context, controller.dateTimeRange.start)),
+          Expanded(child: expenseList(context, state, vm)),
         ],
       ),
     );
   }
 
-  Row _selectDurationButtons(BuildContext context) {
+  Row _selectDurationButtons(
+    BuildContext context,
+    PlaceDetailState state,
+    PlaceDetailViewModel vm,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         SizedBox(
           height: 30,
-          child: GetBuilder<PlaceController>(
-            builder: (controller) => ToggleButtons(
-              borderWidth: 1,
-              borderColor: const Color.fromARGB(255, 177, 176, 176),
-              selectedBorderColor: const Color.fromARGB(255, 177, 176, 176),
-              textStyle: bold14Style,
-              borderRadius: BorderRadius.circular(5),
-              isSelected: controller.toggleState,
-              onPressed: (index) {
-                controller
-                    .changeDateTimeRange(index, context)
-                    .then((value) => controller.closeAllSliders());
-              },
-              children: [
-                toggleWidget(
-                  width: (MediaQuery.of(context).size.width - 25) / 3,
-                  height: 24,
-                  child: const Text('기간 선택'),
-                  icon: Icon(
-                    Icons.calendar_month,
-                    color: controller.selectedDayType == DayTpye.range
-                        ? const Color.fromARGB(255, 5, 5, 5)
-                        : const Color.fromARGB(255, 106, 116, 149),
-                  ),
+          child: ToggleButtons(
+            borderWidth: 1,
+            borderColor: const Color.fromARGB(255, 177, 176, 176),
+            selectedBorderColor: const Color.fromARGB(255, 177, 176, 176),
+            textStyle: bold14Style,
+            borderRadius: BorderRadius.circular(5),
+            isSelected: state.toggleState,
+            onPressed: (index) {
+              vm.changeDateTimeRange(index, context);
+            },
+            children: [
+              toggleWidget(
+                width: (MediaQuery.of(context).size.width - 25) / 3,
+                height: 24,
+                child: const Text('기간 선택'),
+                icon: Icon(
+                  Icons.calendar_month,
+                  color: state.selectedDayType == DayTpye.range
+                      ? const Color.fromARGB(255, 5, 5, 5)
+                      : const Color.fromARGB(255, 106, 116, 149),
                 ),
-                toggleWidget(
-                  height: 24,
-                  width: (MediaQuery.of(context).size.width - 25) / 3,
-                  child: const Text('전체 기간'),
-                ),
-                toggleWidget(
-                  height: 24,
-                  width: (MediaQuery.of(context).size.width - 25) / 3,
-                  child: const Text('이번 달'),
-                ),
-              ],
-            ),
+              ),
+              toggleWidget(
+                height: 24,
+                width: (MediaQuery.of(context).size.width - 25) / 3,
+                child: const Text('전체 기간'),
+              ),
+              toggleWidget(
+                height: 24,
+                width: (MediaQuery.of(context).size.width - 25) / 3,
+                child: const Text('이번 달'),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget expenseList(context, DateTime selectedDay) {
+  Widget expenseList(context, PlaceDetailState state, PlaceDetailViewModel vm) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-      child: GetBuilder<PlaceController>(
-        builder: (controller) => controller.filteredTotalCostList.isEmpty
-            ? const Center(
-                child: Text('지출 내역이 없습니다.'),
-              )
-            : GroupedListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                elements: controller.filteredTotalCostList,
-                order: GroupedListOrder.DESC,
-                groupBy: (element) => element.getDay,
-                groupSeparatorBuilder: (value) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-                      child: Text(
-                        value,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ],
-                ),
-                itemBuilder: (context, element) =>
-                    paymentList(context, element),
+      child: vm.filteredTotalCostList.isEmpty
+          ? const Center(child: Text('지출 내역이 없습니다.'))
+          : GroupedListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              elements: vm.filteredTotalCostList,
+              order: GroupedListOrder.DESC,
+              groupBy: (element) => element.getDay,
+              groupSeparatorBuilder: (value) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                    child: Text(value, style: const TextStyle(fontSize: 16)),
+                  ),
+                ],
               ),
-      ),
+              itemBuilder: (context, element) =>
+                  paymentList(context, element, state, vm),
+            ),
     );
   }
 
-  Widget paymentList(context, TotalCostModel element) {
+  Widget paymentList(
+    context,
+    TotalCostModel element,
+    PlaceDetailState state,
+    PlaceDetailViewModel vm,
+  ) {
     return Slidable(
       closeOnScroll: true,
       startActionPane: element.category == 'w'
@@ -195,15 +194,18 @@ class PlaceScreen extends GetView<PlaceController> {
                       ? Icons.autorenew_outlined
                       : Icons.check_circle,
                   label: element.wcomplete == 1 ? '미지급으로 변경' : '지급 완료',
-                  onPressed: (context) => controller
+                  onPressed: (slidableCtx) => vm
                       .updateWComplete(element.wcomplete, element.id)
-                      .then(
-                        (value) => Get.dialog(
-                          saveDialog(
-                              text:
-                                  '${element.wcomplete == 1 ? '미지급으로' : '완료로'} 변경되었습니다.'),
-                        ),
-                      ),
+                      .then((_) {
+                        if (!slidableCtx.mounted) return;
+                        showDialog<void>(
+                          context: slidableCtx,
+                          builder: (_) => saveDialog(
+                            text:
+                                '${element.wcomplete == 1 ? '미지급으로' : '완료로'} 변경되었습니다.',
+                          ),
+                        );
+                      }),
                 ),
               ],
             )
@@ -217,13 +219,14 @@ class PlaceScreen extends GetView<PlaceController> {
             backgroundColor: Colors.red,
             icon: Icons.delete,
             label: '삭제',
-            onPressed: (context) => Get.dialog(
-              deleteDialog(
-                onPressed: () => controller
+            onPressed: (slidableCtx) => showDialog<void>(
+              context: slidableCtx,
+              builder: (dialogCtx) => deleteDialog(
+                onPressed: () => vm
                     .deleteCost(element.category, element.id)
                     .then((value) {
                   FetchData.fetchAllData();
-                  Get.back();
+                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
                 }),
               ),
             ),
@@ -232,20 +235,19 @@ class PlaceScreen extends GetView<PlaceController> {
       ),
       child: Builder(
         builder: (context) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            controller.registerSlidable(context);
-          });
           return InkWell(
             onTap: () {
-              controller.selectedDropdownCategory = element.category;
-              controller.mNameController.text = element.name;
-              controller.mPriceController.text =
+              vm.dropDownCategoryChangeAction(element.category);
+              vm.mNameController.text = element.name;
+              vm.mPriceController.text =
                   getPrice(price: element.price, isContainWon: false);
-              controller.dialogDateTime = DateTime.parse(element.date);
+              vm.setDialogDateTime(DateTime.parse(element.date));
 
-              Get.dialog(
-                editCostDialog(element, context),
-              ).then((value) => controller.alertText = '');
+              showDialog<void>(
+                context: context,
+                builder: (dialogCtx) =>
+                    editCostDialog(element, dialogCtx, state, vm),
+              );
             },
             child: TotalCostCard(
               category: element.category,
@@ -259,10 +261,14 @@ class PlaceScreen extends GetView<PlaceController> {
     );
   }
 
-  Dialog editCostDialog(TotalCostModel element, context) {
+  Dialog editCostDialog(
+    TotalCostModel element,
+    context,
+    PlaceDetailState state,
+    PlaceDetailViewModel vm,
+  ) {
     return Dialog(
-      child: GetBuilder<PlaceController>(
-        builder: (controller) => Container(
+      child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             color: const Color.fromARGB(255, 243, 243, 243),
@@ -280,20 +286,19 @@ class PlaceScreen extends GetView<PlaceController> {
               ),
               TextButton.icon(
                 onPressed: () async {
-                  controller.dialogDateTime = await showDatePickerDialog(
+                  final picked = await showDatePickerDialog(
                         context: context,
                         minDate: DateTime(2000),
                         maxDate: DateTime(2099),
-                      ) ??
-                      controller.dialogDateTime;
-                  controller.update();
+                      ) ?? state.dialogDateTime;
+                  vm.setDialogDateTime(picked);
                 },
                 icon: const Icon(
                   Icons.date_range_outlined,
                   color: Color.fromARGB(255, 117, 154, 193),
                 ),
                 label: Text(
-                  formatDateTimeWeekDayToString(controller.dialogDateTime),
+                  formatDateTimeWeekDayToString(state.dialogDateTime),
                   style: smalldateStyle,
                 ),
               ),
@@ -302,11 +307,10 @@ class PlaceScreen extends GetView<PlaceController> {
                 child: SizedBox(
                   height: 60,
                   width: 230,
-                  child: GetBuilder<PlaceController>(
-                    builder: (controller) => DropdownSearch(
+                  child: DropdownSearch(
                       items: categoryList,
                       onChanged: (value) =>
-                          controller.dropDownCategoryChangeAction(value!),
+                          vm.dropDownCategoryChangeAction(value!),
                       selectedItem: element.category,
                       dropdownDecoratorProps: DropDownDecoratorProps(
                         dropdownSearchDecoration: InputDecoration(
@@ -315,40 +319,33 @@ class PlaceScreen extends GetView<PlaceController> {
                         ),
                       ),
                     ),
-                  ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 10, bottom: 3),
                 child: AddTextField(
-                  tController: controller.mNameController,
+                  tController: vm.mNameController,
                   labelText: '항목',
                   isPrice: false,
                   height: 60,
                   keyboardType: TextInputType.text,
                   readOnly: element.category == 'w' ? true : false,
-                  onChanged: (value) {
-                    controller.alertText = '';
-                    controller.update();
-                  },
+                  onChanged: (value) {},
                 ),
               ),
               AddTextField(
-                tController: controller.mPriceController,
+                tController: vm.mPriceController,
                 labelText: '금액',
                 isPrice: true,
                 height: 60,
                 keyboardType: TextInputType.number,
                 readOnly: false,
-                onChanged: (value) {
-                  controller.alertText = '';
-                  controller.update();
-                },
+                onChanged: (value) {},
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 5),
                 child: Text(
-                  controller.alertText,
+                  state.alertText,
                   style: const TextStyle(color: Colors.red),
                 ),
               ),
@@ -357,8 +354,7 @@ class PlaceScreen extends GetView<PlaceController> {
                 children: [
                   TextButton(
                     onPressed: () {
-                      controller.alertText = '';
-                      Get.back();
+                      Navigator.of(context).pop();
                     },
                     child: const Text(
                       '취소',
@@ -366,9 +362,12 @@ class PlaceScreen extends GetView<PlaceController> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => controller
-                        .updateCost(element.category, element.id,
-                            controller.dialogDateTime.toString())
+                    onPressed: () => vm
+                        .updateCost(
+                          element.category,
+                          element.id,
+                          state.dialogDateTime.toString(),
+                        )
                         .then((value) => FetchData.fetchAllData()),
                     child: const Text('수정'),
                   ),
@@ -377,7 +376,6 @@ class PlaceScreen extends GetView<PlaceController> {
             ],
           ),
         ),
-      ),
     );
   }
 }

@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:get/get.dart';
-import 'package:w0001/presentation/controller/add_cost_controller.dart';
-import 'package:w0001/presentation/controller/worker_controller.dart';
+import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
+import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 
-class HumanScreen extends GetView<WorkerController> {
+class HumanScreen extends ConsumerWidget {
   const HumanScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(workerProvider);
+    final vm = ref.read(workerProvider.notifier);
+
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
@@ -20,18 +23,18 @@ class HumanScreen extends GetView<WorkerController> {
           title: const Text('사람 관리'),
           actions: [
             TextButton(
-                onPressed: () => controller.refreshAction(),
+                onPressed: () => vm.refreshAction(),
                 child: const Text('비우기'))
           ],
         ),
         body: Column(
           children: [
-            _buildSearchBar(),
-            _buildHumanInfoBox(),
-            buildEditButton(context, controller),
-            const Divider( height: 0, color: Colors.black),
+            _buildSearchBar(vm),
+            _buildHumanInfoBox(vm),
+            _buildEditButton(context, ref, vm),
+            const Divider(height: 0, color: Colors.black),
             Expanded(
-              child: _buildHumanListView(),
+              child: _buildHumanListView(ref, vm),
             ),
           ],
         ),
@@ -39,25 +42,26 @@ class HumanScreen extends GetView<WorkerController> {
     );
   }
 
-  Padding _buildHumanListView() {
+  Widget _buildHumanListView(WidgetRef ref, WorkerViewModel vm) {
+    final state = ref.watch(workerProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      child: GetBuilder<WorkerController>(
-        builder: (controller) => ListView.builder(
-          itemCount: controller.filteredWorkerList.length,
-          itemBuilder: (context, index) => workerCard(
-            controller,
-            index,
-            controller.filteredWorkerList[index].hname,
-            controller.filteredWorkerList[index].hnumber,
-            controller.filteredWorkerList[index].hmemo ?? '',
-          ),
+      child: ListView.builder(
+        itemCount: state.filteredWorkerList.length,
+        itemBuilder: (context, index) => workerCard(
+          context,
+          ref,
+          vm,
+          index,
+          state.filteredWorkerList[index].hname,
+          state.filteredWorkerList[index].hnumber,
+          state.filteredWorkerList[index].hmemo ?? '',
         ),
       ),
     );
   }
 
-  Padding _buildHumanInfoBox() {
+  Widget _buildHumanInfoBox(WorkerViewModel vm) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
       child: Card(
@@ -69,12 +73,12 @@ class HumanScreen extends GetView<WorkerController> {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(
             children: [
-              humanInfoTextField(controller, controller.workerNameController,
-                  '이름', TextInputType.text, 1),
-              humanInfoTextField(controller, controller.workerNumController,
-                  '주민등록번호', TextInputType.number, 1),
-              humanInfoTextField(controller, controller.workerMemoController,
-                  '메모(선택)', TextInputType.text, 4),
+              humanInfoTextField(vm, vm.workerNameController, '이름',
+                  TextInputType.text, 1),
+              humanInfoTextField(vm, vm.workerNumController, '주민등록번호',
+                  TextInputType.number, 1),
+              humanInfoTextField(vm, vm.workerMemoController, '메모(선택)',
+                  TextInputType.text, 4),
             ],
           ),
         ),
@@ -82,36 +86,46 @@ class HumanScreen extends GetView<WorkerController> {
     );
   }
 
-  Container _buildSearchBar() {
+  Widget _buildSearchBar(WorkerViewModel vm) {
     return Container(
       height: 45,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: SearchBar(
-        controller: controller.searchWorkerDetailTextContoller,
+        controller: vm.searchWorkerDetailTextContoller,
         leading: const Icon(Icons.search, size: 30),
         hintText: '검색할 사람의 이름을 입력하세요.',
-        onChanged: (value) => controller.searchWokerInfo(value),
+        onChanged: vm.searchWokerInfo,
       ),
     );
   }
 
-  TextButton buildEditButton(context, WorkerController controller) {
+  Widget _buildEditButton(
+      BuildContext context, WidgetRef ref, WorkerViewModel vm) {
+    final state = ref.watch(workerProvider);
     return TextButton(
-      onPressed: () {
-        controller.editButtonAction();
-        FocusScope.of(context).unfocus();
+      onPressed: () async {
+        await vm.editButtonAction(context);
+        if (context.mounted) {
+          FocusScope.of(context).unfocus();
+        }
       },
-      child: GetBuilder<WorkerController>(
-        builder: (controller) => Text(
-          controller.isEditing ? '수정하기' : '등록하기',
-          style: normalStyle,
-        ),
+      child: Text(
+        state.isEditing ? '수정하기' : '등록하기',
+        style: normalStyle,
       ),
     );
   }
 
-  Widget workerCard(WorkerController controller, int index, String workerName,
-      String workerNum, String workerMemo) {
+  Widget workerCard(
+    BuildContext context,
+    WidgetRef ref,
+    WorkerViewModel vm,
+    int index,
+    String workerName,
+    String workerNum,
+    String workerMemo,
+  ) {
+    final state = ref.watch(workerProvider);
     return Slidable(
       closeOnScroll: true,
       endActionPane: ActionPane(
@@ -122,33 +136,40 @@ class HumanScreen extends GetView<WorkerController> {
             backgroundColor: Colors.red,
             icon: Icons.delete,
             label: '삭제',
-            onPressed: (context) => Get.dialog(
-              deleteDialog(
-                onPressed: () => controller.updateWorkerDelete(index).then(
-                  (value) {
-                    FetchData.fetchAllData();
-                    Get.find<AddCostController>().selectedWorker = null;
-                    Get.back();
+            onPressed: (slidableContext) {
+              final container = ProviderScope.containerOf(slidableContext);
+              showDialog<void>(
+                context: slidableContext,
+                builder: (dialogCtx) => deleteDialog(
+                  onPressed: () async {
+                    await vm.updateWorkerDelete(index);
+                    await FetchData.fetchAllData();
+                    container
+                        .read(addCostProvider.notifier)
+                        .clearSelectedWorker();
+                    if (dialogCtx.mounted) {
+                      Navigator.of(dialogCtx).pop();
+                    }
                   },
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),
       child: InkWell(
         onTap: () =>
-            controller.showWorkerInfo(index, workerName, workerNum, workerMemo),
+            vm.showWorkerInfo(index, workerName, workerNum, workerMemo),
         child: Card(
-          color: Colors.blueGrey.withOpacity(0.1),
+          color: Colors.blueGrey.withValues(alpha: 0.1),
           child: ListTile(
             title: Text(
               workerName,
               style: bigStyle,
             ),
             leading: IconButton(
-              onPressed: () => controller.updateHstarFromWorkerList(index),
-              icon: (controller.filteredWorkerList[index].hstar == 0)
+              onPressed: () => vm.updateHstarFromWorkerList(index),
+              icon: (state.filteredWorkerList[index].hstar == 0)
                   ? const Icon(
                       Icons.star_border,
                       color: Colors.grey,
@@ -169,11 +190,12 @@ class HumanScreen extends GetView<WorkerController> {
   }
 
   Widget humanInfoTextField(
-      WorkerController controller,
-      TextEditingController tController,
-      String hintText,
-      keyboardType,
-      maxline) {
+    WorkerViewModel vm,
+    TextEditingController tController,
+    String hintText,
+    TextInputType keyboardType,
+    int maxline,
+  ) {
     return TextField(
       maxLines: maxline,
       controller: tController,
@@ -188,7 +210,7 @@ class HumanScreen extends GetView<WorkerController> {
       inputFormatters: keyboardType == TextInputType.number
           ? [
               FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(13), // 13자리 숫자만 입력 가능
+              LengthLimitingTextInputFormatter(13),
               NumberFormatter(),
             ]
           : [],
@@ -207,12 +229,12 @@ class NumberFormatter extends TextInputFormatter {
     }
 
     var buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
+    for (var i = 0; i < text.length; i++) {
       buffer.write(text[i]);
       var nonZeroIndex = i + 1;
       if (nonZeroIndex <= 6) {
         if (nonZeroIndex % 6 == 0 && nonZeroIndex != text.length) {
-          buffer.write('-'); // Add double spaces.
+          buffer.write('-');
         }
       }
     }

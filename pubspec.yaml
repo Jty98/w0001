@@ -14,8 +14,8 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.6
   # 상태관리
-  get: ^4.6.6
   flutter_riverpod: ^3.1.3
+  go_router: ^14.8.1
   # 캘린더
   table_calendar: ^3.0.9
   # 로컬 데이터베이스

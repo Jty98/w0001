@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
@@ -21,14 +20,14 @@ class TotalPriceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.blueGrey.withOpacity(0.15),
+      color: Colors.blueGrey.withValues(alpha: 0.15),
       child: Column(
         children: [
           const Divider(height: 3, thickness: 2),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: _buildCategoryRows,
+              children: _buildCategoryRows(context),
             ),
           ),
           const Divider(height: 0, thickness: 2),
@@ -37,7 +36,7 @@ class TotalPriceBar extends StatelessWidget {
     );
   }
 
-  List<Widget> get _buildCategoryRows {
+  List<Widget> _buildCategoryRows(BuildContext context) {
     // 위젯 담을 List
     List<Widget> categoryRows = [];
 
@@ -130,13 +129,14 @@ class TotalPriceBar extends StatelessWidget {
     );
 
     categoryRows.add(IconButton(
-        onPressed: () => Get.bottomSheet(
+        onPressed: () => showModalBottomSheet<void>(
+              context: context,
               elevation: 0,
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
-              Column(
+              builder: (sheetContext) => Column(
                 children: [
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 10),
@@ -152,7 +152,7 @@ class TotalPriceBar extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.all(5.0),
                         child: Builder(
-                          builder: (context) {
+                          builder: (ctx) {
                             List<Map<String, dynamic>> sortedList = [];
                             for (var category in categoryList) {
                               int price = 0;
@@ -176,7 +176,7 @@ class TotalPriceBar extends StatelessWidget {
                                 crossAxisCount: 3,
                               ),
                               itemCount: sortedList.length,
-                              itemBuilder: (context, index) {
+                              itemBuilder: (ctx, index) {
                                 final category = sortedList[index]['category'];
                                 final price = sortedList[index]['price'];
                                 final callback = categoryTapCallbacks[category];
@@ -185,7 +185,7 @@ class TotalPriceBar extends StatelessWidget {
                                   onTap: callback != null
                                       ? () {
                                           callback(category);
-                                          Get.back();
+                                          Navigator.of(sheetContext).pop();
                                         }
                                       : null,
                                   child: Card(

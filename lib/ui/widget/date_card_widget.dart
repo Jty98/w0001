@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import 'package:w0001/presentation/controller/add_cost_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
 
-class SelectDateButton extends GetView<AddCostController> {
+class SelectDateButton extends ConsumerWidget {
   const SelectDateButton({
     super.key,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(addCostProvider);
+    final vm = ref.read(addCostProvider.notifier);
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 5),
       height: 45,
@@ -22,17 +25,15 @@ class SelectDateButton extends GetView<AddCostController> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: TextButton.icon(
-          onPressed: () async => await controller.changeDateTime(context),
+          onPressed: () async => vm.changeDateTime(context),
           icon: const Icon(
             Icons.calendar_month,
             size: 25,
             color: Colors.blueGrey,
           ),
-          label: GetBuilder<AddCostController>(
-            builder: (controller) => Text(
-              formatDateTimeWeekDayToString(controller.selectDay),
-              style: cardDateStyle,
-            ),
+          label: Text(
+            formatDateTimeWeekDayToString(state.selectDay),
+            style: cardDateStyle,
           ),
         ),
       ),

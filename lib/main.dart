@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:get/get.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
-import 'package:w0001/home_tabbar.dart';
+import 'package:w0001/router/app_router.dart';
+import 'package:w0001/util/fetch_data.dart';
+
+final GoRouter _appRouter = createAppRouter();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,9 +22,12 @@ void main() async {
   DbHelper helper = DbHelper();
   helper.initializeDB();
   debugPrint(await getDatabasesPath());
+  final container = ProviderContainer();
+  rootProviderContainer = container;
   runApp(
-    const ProviderScope(
-      child: MyApp(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const MyApp(),
     ),
   );
 }
@@ -31,7 +37,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
+    return MaterialApp.router(
+      routerConfig: _appRouter,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           textScaler: TextScaler.noScaling,
@@ -50,9 +57,9 @@ class MyApp extends StatelessWidget {
         //   ),
         // ),
         searchBarTheme: const SearchBarThemeData(
-          elevation: MaterialStatePropertyAll(0),
-          backgroundColor: MaterialStatePropertyAll(Colors.transparent),
-          shape: MaterialStatePropertyAll(
+          elevation: WidgetStatePropertyAll(0),
+          backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+          shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               side: BorderSide(
                 width: 2,
@@ -70,7 +77,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      locale: Get.deviceLocale,
+      locale: WidgetsBinding.instance.platformDispatcher.locale,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -79,10 +86,6 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('ko', 'KR'), // 한국어
       ],
-      home: MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-        child: const HomeTabBar(),
-      ),
     );
   }
 }

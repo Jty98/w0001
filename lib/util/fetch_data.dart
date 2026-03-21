@@ -1,17 +1,17 @@
-import 'package:get/get.dart';
-import 'package:w0001/presentation/controller/calendar_controller.dart';
-import 'package:w0001/presentation/controller/worker_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/presentation/viewmodel/calendar_view_model.dart';
+import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
+
+/// [main]에서 [UncontrolledProviderScope]와 동일한 컨테이너를 할당해야 함
+ProviderContainer? rootProviderContainer;
 
 class FetchData {
   static Future<void> fetchAllData() async {
-    final calendarController = Get.find<CalendarController>();
-    final workerController = Get.find<WorkerController>();
-
-    calendarController.fetchTotalCost();
-    calendarController.fetchAllEvents();
-    workerController.fetchWorkCost();
-    workerController.fetchWorkerInfo();
-    workerController.checkboxStates = {};
+    final container = rootProviderContainer;
+    if (container != null) {
+      await container.read(calendarProvider.notifier).refreshForFetchData();
+      await container.read(workerProvider.notifier).refreshFromGlobalFetch();
+    }
   }
 }
 

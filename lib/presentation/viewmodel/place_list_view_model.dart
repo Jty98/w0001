@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/datasources/local/human_local_data_source.dart';
 import 'package:w0001/data/datasources/local/place_local_data_source.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/repository/human_impl.dart';
 import 'package:w0001/data/repository/place_impl.dart';
+import 'package:w0001/domain/repository/human_abst.dart';
 import 'package:w0001/domain/repository/place_abst.dart';
+import 'package:w0001/domain/use_case/human_use_case.dart';
 import 'package:w0001/domain/use_case/place_use_case.dart';
 import 'package:w0001/enums.dart';
 
@@ -86,6 +90,10 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
   void resetTextController() {
     placeNameController.text = '';
     placeRevenueController.text = '0';
+    state = state.copyWith(updateText: '');
+  }
+
+  void clearUpdateText() {
     state = state.copyWith(updateText: '');
   }
 
@@ -186,6 +194,18 @@ final placeRepositoryProvider = Provider<PlaceRepository>(
 
 final placeUseCaseProvider = Provider<PlaceUseCase>(
   (ref) => PlaceUseCase(ref.read(placeRepositoryProvider)),
+);
+
+final humanLocalDataSourceProvider = Provider<HumanLocalDataSource>(
+  (ref) => HumanLocalDataSourceImpl(ref.read(dbHelperProvider)),
+);
+
+final humanRepositoryProvider = Provider<HumanRepository>(
+  (ref) => HumanRepositoryImpl(ref.read(humanLocalDataSourceProvider)),
+);
+
+final humanUseCaseProvider = Provider<HumanUseCase>(
+  (ref) => HumanUseCase(ref.read(humanRepositoryProvider)),
 );
 
 final placeListProvider =

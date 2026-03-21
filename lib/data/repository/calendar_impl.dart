@@ -8,13 +8,8 @@ class CalendarRepositoryImpl implements CalendarRepository {
   final CalendarLocalDataSource _localDataSource;
 
   @override
-  Future<Map<String, List<String>>> getAllEvents() async {
-    final events = await _localDataSource.getAllEvents();
-    final map = <String, List<String>>{};
-    events.forEach((date, list) {
-      map[date.toIso8601String()] = list;
-    });
-    return map;
+  Future<Map<DateTime, List<String>>> getAllEvents() {
+    return _localDataSource.getAllEvents();
   }
 
   @override

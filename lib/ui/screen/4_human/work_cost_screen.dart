@@ -1,35 +1,36 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:get/get.dart';
+import 'package:go_router/go_router.dart';
 import 'package:grouped_list/grouped_list.dart';
-import 'package:w0001/presentation/controller/human_total_controller.dart';
-import 'package:w0001/presentation/controller/worker_controller.dart';
+import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
-import 'package:w0001/ui/screen/4_human/human_screen.dart';
-import 'package:w0001/ui/screen/4_human/w_detail_screen.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/segment_widget.dart';
 
-class WorkCostScreen extends GetView<WorkerController> {
+class WorkCostScreen extends ConsumerWidget {
   const WorkCostScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(workerProvider);
+    final vm = ref.read(workerProvider.notifier);
+
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         persistentFooterButtons: [
-          workCostFooter(),
+          _workCostFooter(context, ref),
         ],
         appBar: AppBar(
           title: const Text('인건비 조회'),
           actions: [
             TextButton(
-              onPressed: () => controller.exportAndSendWorkCostToExcel(context),
+              onPressed: () => vm.exportAndSendWorkCostToExcel(context),
               child: Image.asset(
                 'assets/images/excel_logo.png',
                 height: 28,
@@ -39,12 +40,11 @@ class WorkCostScreen extends GetView<WorkerController> {
             IconButton(
               tooltip: '사람 관리',
               onPressed: () {
-                Get.to(() => const HumanScreen())?.then(
-                  (value) {
-                    controller.fetchWorkCost();
-                    controller.refreshAction();
-                  },
-                );
+                context.push('/work/human').then((_) async {
+                  if (!context.mounted) return;
+                  await vm.fetchWorkCost();
+                  vm.refreshAction();
+                });
               },
               icon: const Icon(
                 Icons.person_search,
@@ -56,37 +56,36 @@ class WorkCostScreen extends GetView<WorkerController> {
             preferredSize: Size(MediaQuery.of(context).size.width, 2),
             child: Padding(
               padding: const EdgeInsets.only(bottom: 5),
-              child: GetBuilder<WorkerController>(
-                builder: (controller) => Text(
-                  formatDateTimeRangeToString(controller.dateTimeRange),
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey),
-                ),
+              child: Text(
+                formatDateTimeRangeToString(
+                    ref.watch(workerProvider).dateTimeRange),
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey),
               ),
             ),
           ),
         ),
         body: Column(
           children: [
-            _buildSearchBar(),
+            _buildSearchBar(ref, vm),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: _buildToggleButtons(context),
+              child: _buildToggleButtons(context, ref, vm),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildCompleteSegmentControl(),
-                  _buildTaxSegmentControl(),
+                  _buildCompleteSegmentControl(ref, vm),
+                  _buildTaxSegmentControl(ref, vm),
                 ],
               ),
             ),
             Expanded(
-              child: _buildListView(),
+              child: _buildListView(context, ref, vm),
             ),
           ],
         ),
@@ -94,166 +93,154 @@ class WorkCostScreen extends GetView<WorkerController> {
     );
   }
 
-  Padding workCostFooter() {
+  Widget _workCostFooter(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(workerProvider);
+    final vm = ref.read(workerProvider.notifier);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: GetBuilder<WorkerController>(
-        builder: (controller) => Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text('인건비 총금액 :', style: TextStyle(fontSize: 15)),
-                const Text('미지급 총금액 :', style: TextStyle(fontSize: 15)),
-                Visibility(
-                  visible: controller.selectedCount != 0,
-                  child: const Text('선택된 금액 :', style: TextStyle(fontSize: 15)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text('인건비 총금액 :', style: TextStyle(fontSize: 15)),
+              const Text('미지급 총금액 :', style: TextStyle(fontSize: 15)),
+              Visibility(
+                visible: state.selectedCount != 0,
+                child: const Text('선택된 금액 :', style: TextStyle(fontSize: 15)),
+              ),
+            ],
+          ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                getPrice(
+                  price: vm.totalCost,
+                  isTaxApply: state.isTaxApply,
                 ),
-              ],
-            ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  getPrice(
-                    price: controller.totalCost,
-                    isTaxApply: controller.isTaxApply,
-                  ),
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                getPrice(
+                  price: vm.totalIncompleteCost,
+                  isTaxApply: state.isTaxApply,
                 ),
-                Text(
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red[700]),
+              ),
+              Visibility(
+                visible: state.selectedCount != 0,
+                child: Text(
                   getPrice(
-                    price: controller.totalIncompleteCost,
-                    isTaxApply: controller.isTaxApply,
+                    price: vm.selectedIncompleteCost,
+                    isTaxApply: state.isTaxApply,
                   ),
                   style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Colors.red[700]),
-                ),
-                Visibility(
-                  visible: controller.selectedCount != 0,
-                  child: Text(
-                    getPrice(
-                      price: controller.selectedIncompleteCost,
-                      isTaxApply: controller.isTaxApply,
-                    ),
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[800]),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(
-              height: 35,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: controller.selectedCount == 0
-                    ? null
-                    : () => controller.updateWorkCostsToComplete(),
-                child: const Text(
-                  '지급하기',
-                  style: size15Style,
+                      color: Colors.blue[800]),
                 ),
               ),
+            ],
+          ),
+          SizedBox(
+            height: 35,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[700],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: state.selectedCount == 0
+                  ? null
+                  : () => vm.updateWorkCostsToComplete(context),
+              child: const Text(
+                '지급하기',
+                style: size15Style,
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  GetBuilder<WorkerController> _buildCompleteSegmentControl() {
-    return GetBuilder<WorkerController>(
-      builder: (controller) => CupertinoSlidingSegmentedControl<CompleteState>(
-        groupValue: controller.completeState,
-        children: const {
-          CompleteState.whole: Text('전체', style: smallStyle),
-          CompleteState.incomplete: Text('미지급', style: smallStyle),
-        },
-        onValueChanged: (value) => controller.completeStateValueChanged(value),
-      ),
+  Widget _buildCompleteSegmentControl(WidgetRef ref, WorkerViewModel vm) {
+    final state = ref.watch(workerProvider);
+    return CupertinoSlidingSegmentedControl<CompleteState>(
+      groupValue: state.completeState,
+      children: const {
+        CompleteState.whole: Text('전체', style: smallStyle),
+        CompleteState.incomplete: Text('미지급', style: smallStyle),
+      },
+      onValueChanged: vm.completeStateValueChanged,
     );
   }
 
-  Widget _buildListView() {
+  Widget _buildListView(
+      BuildContext context, WidgetRef ref, WorkerViewModel vm) {
+    final state = ref.watch(workerProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: GetBuilder<WorkerController>(
-        builder: (controller) => controller.getUniqueHuman().isEmpty
-            ? const Center(child: Text('조회된 인건비가 없습니다.'))
-            : ListView.builder(
-                itemCount: controller.getUniqueHuman().length,
-                itemBuilder: (context, index) {
-                  final workCostData = controller
-                      .processWorkCostData(controller.getUniqueHuman()[index]);
-                  return Slidable(
-                    closeOnScroll: true,
-                    // startActionPane: ActionPane(
-                    //   motion: const DrawerMotion(),
-                    //   children: [
-                    //     SlidableAction(
-                    //       borderRadius: BorderRadius.circular(10),
-                    //       backgroundColor: Colors.green,
-                    //       icon: Icons.payment,
-                    //       label: '모두 지급',
-                    //       onPressed: (context) =>
-                    //           controller.updateWorkCostsToComplete(
-                    //               workCostData.filteredList),
-                    //     ),
-                    //   ],
-                    // ),
-                    endActionPane: ActionPane(
-                      motion: const DrawerMotion(),
-                      children: [
-                        SlidableAction(
-                          borderRadius: BorderRadius.circular(10),
-                          backgroundColor: Colors.blue,
-                          icon: Icons.search,
-                          label: '상세보기',
-                          onPressed: (context) => Get.to(
-                              () => WorkCostDetailScreen(
-                                  hname: workCostData.hname),
-                              binding: BindingsBuilder(() {
-                            Get.put(
-                              HumanTotalController(hid: workCostData.hid),
-                            );
-                          })),
-                        ),
-                      ],
-                    ),
-                    child: Builder(builder: (context) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        controller.registerSlidable(context);
-                      });
-                      return WorkerExpansionTile(
-                        isIncomplete: controller.isIncomplete,
-                        workCostData: workCostData,
-                        controller: controller,
-                        child: _buildGroupListView(
-                            workCostData.filteredList, controller),
-                      );
-                    }),
-                  );
-                },
-              ),
-      ),
+      child: vm.getUniqueHuman().isEmpty
+          ? const Center(child: Text('조회된 인건비가 없습니다.'))
+          : ListView.builder(
+              itemCount: vm.getUniqueHuman().length,
+              itemBuilder: (context, index) {
+                final workCostData =
+                    vm.processWorkCostData(vm.getUniqueHuman()[index]);
+                return Slidable(
+                  closeOnScroll: true,
+                  endActionPane: ActionPane(
+                    motion: const DrawerMotion(),
+                    children: [
+                      SlidableAction(
+                        borderRadius: BorderRadius.circular(10),
+                        backgroundColor: Colors.blue,
+                        icon: Icons.search,
+                        label: '상세보기',
+                        onPressed: (_) {
+                          context.push(
+                            '/work/detail/${workCostData.hid}'
+                            '?name=${Uri.encodeComponent(workCostData.hname)}',
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  child: Builder(builder: (ctx) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      vm.registerSlidable(ctx);
+                    });
+                    return WorkerExpansionTile(
+                      ref: ref,
+                      isIncomplete: state.isIncomplete,
+                      workCostData: workCostData,
+                      vm: vm,
+                      child: _buildGroupListView(
+                          workCostData.filteredList, ref, vm),
+                    );
+                  }),
+                );
+              },
+            ),
     );
   }
 
   GroupedListView<TotalWorkCostModel, String> _buildGroupListView(
-      List<TotalWorkCostModel> filteredList, WorkerController controller) {
+    List<TotalWorkCostModel> filteredList,
+    WidgetRef ref,
+    WorkerViewModel vm,
+  ) {
     return GroupedListView(
       order: GroupedListOrder.DESC,
       padding: const EdgeInsets.only(top: 5),
@@ -267,20 +254,25 @@ class WorkCostScreen extends GetView<WorkerController> {
           style: const TextStyle(fontSize: 15, color: Colors.black87),
         ),
       ),
-      itemBuilder: (context, element) => _buildListTile(element, controller),
+      itemBuilder: (context, element) =>
+          _buildListTile(context, ref, element, vm),
     );
   }
 
   Widget _buildListTile(
-      TotalWorkCostModel element, WorkerController controller) {
+    BuildContext context,
+    WidgetRef ref,
+    TotalWorkCostModel element,
+    WorkerViewModel vm,
+  ) {
+    final state = ref.watch(workerProvider);
     return Slidable(
-      startActionPane: controller.isIncomplete
+      startActionPane: state.isIncomplete
           ? null
           : ActionPane(
               motion: const DrawerMotion(),
               children: [
                 SlidableAction(
-                  // onPressed: null,
                   autoClose: true,
                   borderRadius: BorderRadius.circular(10),
                   backgroundColor:
@@ -289,27 +281,31 @@ class WorkCostScreen extends GetView<WorkerController> {
                       ? Icons.autorenew_outlined
                       : Icons.check_circle,
                   label: element.wcomplete == 1 ? '미지급으로 변경' : '지급 완료',
-                  onPressed: (context) => controller
-                      .updateWComplete(element.wcomplete, element.wid)
-                      .then(
-                        (value) => Get.dialog(
-                          saveDialog(
-                              text:
-                                  '${element.wcomplete == 1 ? '미지급으로' : '완료로'} 변경되었습니다.'),
-                        ),
+                  onPressed: (slidableCtx) async {
+                    await vm.updateWComplete(element.wcomplete, element.wid);
+                    if (!slidableCtx.mounted) return;
+                    await showDialog<void>(
+                      context: slidableCtx,
+                      builder: (_) => saveDialog(
+                        text:
+                            '${element.wcomplete == 1 ? '미지급으로' : '완료로'} 변경되었습니다.',
                       ),
+                    );
+                  },
                 ),
               ],
             ),
-      child: Builder(builder: (context) {
+      child: Builder(builder: (ctx) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          controller.registerSlidable(context);
+          vm.registerSlidable(ctx);
         });
         return Row(
           children: [
-            GetBuilder<WorkerController>(
-              builder: (controller) {
-                controller.initializeCheckboxState(
+            Consumer(
+              builder: (context, ref, _) {
+                final st = ref.watch(workerProvider);
+                final nvm = ref.read(workerProvider.notifier);
+                nvm.initializeCheckboxState(
                     element.wid, element.price, element.hid);
                 return Checkbox(
                   side: BorderSide(
@@ -318,19 +314,18 @@ class WorkCostScreen extends GetView<WorkerController> {
                         : Colors.blue[700]!,
                     width: 2,
                   ),
-                  value: controller.checkboxStates[element.wid]?.isSelected ??
-                      false,
+                  value: st.checkboxStates[element.wid]?.isSelected ?? false,
                   onChanged: element.wcomplete == 1
                       ? null
                       : (value) {
-                          controller.toggleCheckboxState(element.wid);
+                          nvm.toggleCheckboxState(element.wid);
                         },
                 );
               },
             ),
             Expanded(
               child: Card(
-                color: Colors.blueGrey.withOpacity(0.1),
+                color: Colors.blueGrey.withValues(alpha: 0.1),
                 elevation: 0,
                 child: ListTile(
                   dense: true,
@@ -352,7 +347,7 @@ class WorkCostScreen extends GetView<WorkerController> {
                   trailing: Text(
                     getPrice(
                         price: element.price,
-                        isTaxApply: controller.isTaxApply),
+                        isTaxApply: state.isTaxApply),
                     style: TextStyle(
                         fontSize: 14,
                         color: element.wcomplete == 0
@@ -368,90 +363,70 @@ class WorkCostScreen extends GetView<WorkerController> {
     );
   }
 
-  GetBuilder<WorkerController> _buildTaxSegmentControl() {
-    return GetBuilder<WorkerController>(
-      builder: (controller) => CupertinoSlidingSegmentedControl<TaxState>(
-        groupValue: controller.taxState,
-        thumbColor: controller.isTaxApply
-            ? const Color.fromARGB(255, 248, 213, 210)
-            : const Color.fromARGB(255, 171, 202, 251),
-        children: const {
-          TaxState.taxOff: Text(
-            '세전',
-            style: smallStyle,
-          ),
-          TaxState.taxOn: Text(
-            '세후',
-            style: smallStyle,
-          ),
-        },
-        onValueChanged: (value) => controller.taxStateValueChanged(value),
-      ),
+  Widget _buildTaxSegmentControl(WidgetRef ref, WorkerViewModel vm) {
+    final state = ref.watch(workerProvider);
+    return CupertinoSlidingSegmentedControl<TaxState>(
+      groupValue: state.taxState,
+      thumbColor: state.isTaxApply
+          ? const Color.fromARGB(255, 248, 213, 210)
+          : const Color.fromARGB(255, 171, 202, 251),
+      children: const {
+        TaxState.taxOff: Text(
+          '세전',
+          style: smallStyle,
+        ),
+        TaxState.taxOn: Text(
+          '세후',
+          style: smallStyle,
+        ),
+      },
+      onValueChanged: vm.taxStateValueChanged,
     );
   }
 
-  SizedBox _buildToggleButtons(BuildContext context) {
+  Widget _buildToggleButtons(
+      BuildContext context, WidgetRef ref, WorkerViewModel vm) {
+    final state = ref.watch(workerProvider);
     return SizedBox(
       height: 30,
-      child: GetBuilder<WorkerController>(
-        builder: (controller) => ToggleButtons(
-          borderColor: const Color.fromARGB(255, 177, 176, 176),
-          selectedBorderColor: const Color.fromARGB(255, 177, 176, 176),
-          borderWidth: 1,
-          // selectedColor: Colors.black,
-          borderRadius: BorderRadius.circular(5),
-          textStyle: bold14Style,
-          isSelected: controller.toggleState,
-          onPressed: (index) {
-            controller.selectToggleButton(index, context).then((value) {
-              controller.closeAllSliders();
-              controller.collapseAllExpansionTiles();
-            });
-          },
-          children: [
-            toggleWidget(
-              // width: 100,
-              width: (MediaQuery.of(context).size.width - 28) / 3,
-              child: const Text('기간 선택'),
-              icon: Icon(
-                Icons.calendar_month,
-                color: controller.dayState == DayTpye.range
-                    ? const Color.fromARGB(255, 5, 5, 5)
-                    : const Color.fromARGB(255, 106, 116, 149),
-              ),
+      child: ToggleButtons(
+        borderColor: const Color.fromARGB(255, 177, 176, 176),
+        selectedBorderColor: const Color.fromARGB(255, 177, 176, 176),
+        borderWidth: 1,
+        borderRadius: BorderRadius.circular(5),
+        textStyle: bold14Style,
+        isSelected: state.toggleState,
+        onPressed: (index) {
+          vm.selectToggleButton(index, context).then((_) {
+            vm.closeAllSliders();
+            vm.collapseAllExpansionTiles();
+          });
+        },
+        children: [
+          toggleWidget(
+            width: (MediaQuery.of(context).size.width - 28) / 3,
+            child: const Text('기간 선택'),
+            icon: Icon(
+              Icons.calendar_month,
+              color: state.dayState == DayTpye.range
+                  ? const Color.fromARGB(255, 5, 5, 5)
+                  : const Color.fromARGB(255, 106, 116, 149),
             ),
-            toggleWidget(
-              // width: 50,
-              width: (MediaQuery.of(context).size.width - 28) / 3,
-              child: const Text('전체 기간'),
-            ),
-            toggleWidget(
-              // width: 50,
-              width: (MediaQuery.of(context).size.width - 28) / 3,
-              child: const Text('이번 달'),
-            ),
-          ],
-        ),
+          ),
+          toggleWidget(
+            width: (MediaQuery.of(context).size.width - 28) / 3,
+            child: const Text('전체 기간'),
+          ),
+          toggleWidget(
+            width: (MediaQuery.of(context).size.width - 28) / 3,
+            child: const Text('이번 달'),
+          ),
+        ],
       ),
     );
   }
 
-  Padding buildDateTimeRangeText() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: GetBuilder<WorkerController>(
-        builder: (controller) => Text(
-          formatDateTimeRangeToString(controller.dateTimeRange),
-          style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.blueGrey),
-        ),
-      ),
-    );
-  }
-
-  Container _buildSearchBar() {
+  Widget _buildSearchBar(WidgetRef ref, WorkerViewModel vm) {
     return Container(
       height: 45,
       margin: const EdgeInsets.only(bottom: 10),
@@ -463,32 +438,33 @@ class WorkCostScreen extends GetView<WorkerController> {
         ),
         trailing: [
           IconButton(
-            onPressed: () => controller.resetSearchText(),
+            onPressed: () => vm.resetSearchText(),
             icon: const Icon(Icons.close),
           ),
         ],
         hintText: '검색할 사람의 이름을 입력하세요.',
-        controller: controller.searchWorkerTextContoller,
-        onChanged: (value) => controller.searchWoker(value),
+        controller: vm.searchWorkerTextContoller,
+        onChanged: vm.searchWoker,
       ),
     );
   }
 }
 
-// expansionTile의 Icon rotate를 위해 Stateful 사용
 class WorkerExpansionTile extends StatefulWidget {
-  final WorkCostData workCostData;
-  final WorkerController controller;
-  final Widget child;
-  final bool isIncomplete;
-
   const WorkerExpansionTile({
     super.key,
+    required this.ref,
     required this.workCostData,
-    required this.controller,
+    required this.vm,
     required this.child,
     required this.isIncomplete,
   });
+
+  final WidgetRef ref;
+  final WorkCostData workCostData;
+  final WorkerViewModel vm;
+  final Widget child;
+  final bool isIncomplete;
 
   @override
   State<WorkerExpansionTile> createState() => _WorkerExpansionTileState();
@@ -496,18 +472,22 @@ class WorkerExpansionTile extends StatefulWidget {
 
 class _WorkerExpansionTileState extends State<WorkerExpansionTile> {
   bool _isExpanded = false;
-  ExpansionTileController expansionTileController = ExpansionTileController();
+  final ExpansionTileController expansionTileController =
+      ExpansionTileController();
+
   @override
   void initState() {
     super.initState();
-    widget.controller.registerExpantionTile(
+    widget.vm.registerExpantionTile(
         widget.workCostData.hid, expansionTileController);
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.ref.watch(workerProvider);
+
     return Card(
-      color: Colors.blueGrey.withOpacity(0.1),
+      color: Colors.blueGrey.withValues(alpha: 0.1),
       child: ExpansionTile(
         controller: expansionTileController,
         onExpansionChanged: (value) {
@@ -524,12 +504,12 @@ class _WorkerExpansionTileState extends State<WorkerExpansionTile> {
         subtitle: Text(widget.workCostData.hnumber),
         dense: true,
         leading: IconButton(
-          onPressed: () => widget.controller
+          onPressed: () => widget.vm
               .updateHstar(
                   hid: widget.workCostData.hid,
                   hstar: widget.workCostData.hstar)
-              .then((value) {
-            widget.controller.fetchWorkerInfo();
+              .then((_) {
+            widget.vm.fetchWorkerInfo();
           }),
           icon: (widget.workCostData.hstar == 0)
               ? const Icon(
@@ -548,23 +528,22 @@ class _WorkerExpansionTileState extends State<WorkerExpansionTile> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // 전체 금액
                 Text(
                   '${getPrice(
                     price: widget.workCostData.totalPrice,
-                    isTaxApply: widget.controller.isTaxApply,
+                    isTaxApply: state.isTaxApply,
                   )} ',
                   style: bold14Style,
                 ),
                 Visibility(
-                  visible: widget.controller
+                  visible: widget.vm
                           .incompleteCostByHid(widget.workCostData.hid) !=
                       0,
                   child: Text(
                     '${getPrice(
-                      price: widget.controller
+                      price: widget.vm
                           .incompleteCostByHid(widget.workCostData.hid),
-                      isTaxApply: widget.controller.isTaxApply,
+                      isTaxApply: state.isTaxApply,
                     )} ',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,

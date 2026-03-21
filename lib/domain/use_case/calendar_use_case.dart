@@ -6,7 +6,7 @@ class CalendarUseCase {
 
   final CalendarRepository _repository;
 
-  Future<Map<String, List<String>>> getAllEvents() {
+  Future<Map<DateTime, List<String>>> getAllEvents() {
     return _repository.getAllEvents();
   }
 
