@@ -11,6 +11,13 @@ String formatDateTimeToStringByDot(DateTime dateTime) {
   return ('${dateTime.year}.$month.$day');
 }
 
+String formatDateTimeToStringByDotWithoutYear(DateTime dateTime) {
+  String month = dateTime.month.toString().padLeft(2, '0');
+  String day = dateTime.day.toString().padLeft(2, '0');
+
+  return ('$month.$day');
+}
+
 String formatDateTimeToStringBySlash(DateTime dateTime) {
   String month = dateTime.month.toString().padLeft(2, '0');
   String day = dateTime.day.toString().padLeft(2, '0');
@@ -26,7 +33,10 @@ String formatDateTimeWeekDayToString(DateTime dateTime) {
   return ('${dateTime.year}년 $month월 $day일 ${getWeekDay(weekDay)}요일');
 }
 
-String formatDateTimeRangeToString(DateTimeRange dateTimeRange) {
+String formatDateTimeRangeToString(
+  DateTimeRange dateTimeRange, {
+  bool showYear = true,
+} ) {
   final start = dateTimeRange.start;
   final end = dateTimeRange.end;
 
@@ -38,12 +48,18 @@ String formatDateTimeRangeToString(DateTimeRange dateTimeRange) {
 
   if (isFullMonth) {
     // "2024년 6월 전체" 형식으로 반환
-    return '${start.year}년 ${start.month}월';
+    return showYear ? '${start.year}년 ${start.month}월' : '${start.month}월';
   } else if(dateTimeRange.toString() == '2000-01-01 00:00:00.000 - 2099-12-31 00:00:00.000'){
     return '전체 기간';
   }else {
     // 범위를 "yyyy.MM.dd ~ yyyy.MM.dd" 형식으로 반환
-    return '${formatDateTimeToStringByDot(start)} ~ ${formatDateTimeToStringByDot(end)}';
+    final startText = showYear
+        ? formatDateTimeToStringByDot(start)
+        : formatDateTimeToStringByDotWithoutYear(start);
+    final endText = showYear
+        ? formatDateTimeToStringByDot(end)
+        : formatDateTimeToStringByDotWithoutYear(end);
+    return '$startText ~ $endText';
   }
 }
 

@@ -169,6 +169,8 @@ class WorkerViewModel extends Notifier<WorkerState> {
       TextEditingController();
   late final TextEditingController workerNumController =
       TextEditingController();
+  late final TextEditingController workerDailyWageController =
+      TextEditingController(text: '0');
   late final TextEditingController workerMemoController =
       TextEditingController();
   late final TextEditingController searchWorkerDetailTextContoller =
@@ -186,13 +188,14 @@ class WorkerViewModel extends Notifier<WorkerState> {
     ref.onDispose(() {
       workerNameController.dispose();
       workerNumController.dispose();
+      workerDailyWageController.dispose();
       workerMemoController.dispose();
       searchWorkerDetailTextContoller.dispose();
       searchWorkerTextContoller.dispose();
     });
     if (!_initialized) {
       _initialized = true;
-      Future.microtask(() async {
+      Future(() async {
         await fetchWorkCost();
         await fetchWorkerInfo();
       });
@@ -250,22 +253,23 @@ class WorkerViewModel extends Notifier<WorkerState> {
     }
   }
 
-  void initializeCheckboxState(int wid, int price, int hid) {
-    if (state.checkboxStates.containsKey(wid)) return;
-    final map = Map<int, CheckboxData>.from(state.checkboxStates);
-    map[wid] = CheckboxData(isSelected: false, price: price, hid: hid);
-    state = state.copyWith(checkboxStates: map);
-  }
-
   Future<void> fetchWorkCost() async {
     final r = state.dateTimeRange;
     final list = await _workCostUseCase.getWorkCostsByDateRange(
       r.start,
       r.end,
     );
+    // 각 항목별 체크박스 상태를 초기화/보존
+    final newCheckbox = <int, CheckboxData>{};
+    for (final e in list) {
+      final existing = state.checkboxStates[e.wid];
+      newCheckbox[e.wid] = existing ??
+          CheckboxData(isSelected: false, price: e.price, hid: e.hid);
+    }
     state = state.copyWith(
       totalWorkCostList: list,
       filteredTotalWorkCostList: _applySearchFilter(list),
+      checkboxStates: newCheckbox,
     );
   }
 
@@ -403,6 +407,9 @@ class WorkerViewModel extends Notifier<WorkerState> {
     final messenger = ScaffoldMessenger.of(context);
     final hname = workerNameController.text.trim();
     final hnumber = workerNumController.text.trim();
+    final wageText =
+        workerDailyWageController.text.trim().replaceAll(RegExp(r'[,원\\s]'), '');
+    final hdailyWage = int.tryParse(wageText) ?? 0;
     final hmemo = workerMemoController.text.isNotEmpty
         ? workerMemoController.text.trim()
         : null;
@@ -425,6 +432,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     final worker = HumanModel(
       hname: hname,
       hnumber: hnumber,
+      hdailyWage: hdailyWage,
       hstar: 0,
       hmemo: hmemo,
       hdelete: 0,
@@ -438,6 +446,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     }
     workerNameController.clear();
     workerNumController.clear();
+    workerDailyWageController.text = '0';
     workerMemoController.clear();
     await fetchWorkerInfo();
   }
@@ -477,6 +486,9 @@ class WorkerViewModel extends Notifier<WorkerState> {
     final messenger = ScaffoldMessenger.of(context);
     final hname = workerNameController.text.trim();
     final hnumber = workerNumController.text.trim();
+    final wageText =
+        workerDailyWageController.text.trim().replaceAll(RegExp(r'[,원\\s]'), '');
+    final hdailyWage = int.tryParse(wageText) ?? 0;
     final hmemo = workerMemoController.text.isNotEmpty
         ? workerMemoController.text.trim()
         : null;
@@ -504,6 +516,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       hid: state.filteredWorkerList[index].hid,
       hname: hname,
       hnumber: hnumber,
+      hdailyWage: hdailyWage,
       hmemo: hmemo,
       hstar: state.filteredWorkerList[index].hstar,
       hdelete: 0,
@@ -512,6 +525,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     await _humanUseCase.updateWorker(updated);
     workerNameController.clear();
     workerNumController.clear();
+    workerDailyWageController.text = '0';
     workerMemoController.clear();
     state = state.copyWith(isEditing: false);
     await fetchWorkerInfo();
@@ -521,10 +535,12 @@ class WorkerViewModel extends Notifier<WorkerState> {
     int index,
     String workerName,
     String workerNum,
+    int workerDailyWage,
     String workerMemo,
   ) {
     workerNameController.text = workerName;
     workerNumController.text = workerNum;
+    workerDailyWageController.text = workerDailyWage.toString();
     workerMemoController.text = workerMemo;
     state = state.copyWith(
       selectedIndex: index,
@@ -544,6 +560,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
   void refreshAction() {
     workerNameController.clear();
     workerNumController.clear();
+    workerDailyWageController.text = '0';
     workerMemoController.clear();
     searchWorkerDetailTextContoller.clear();
     state = state.copyWith(isEditing: false);

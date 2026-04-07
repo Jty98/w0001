@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
+import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
@@ -55,6 +56,7 @@ class HumanScreen extends ConsumerWidget {
           index,
           state.filteredWorkerList[index].hname,
           state.filteredWorkerList[index].hnumber,
+          state.filteredWorkerList[index].hdailyWage,
           state.filteredWorkerList[index].hmemo ?? '',
         ),
       ),
@@ -76,6 +78,8 @@ class HumanScreen extends ConsumerWidget {
               humanInfoTextField(vm, vm.workerNameController, '이름',
                   TextInputType.text, 1),
               humanInfoTextField(vm, vm.workerNumController, '주민등록번호',
+                  TextInputType.number, 1),
+              humanInfoTextField(vm, vm.workerDailyWageController, '일당(원)',
                   TextInputType.number, 1),
               humanInfoTextField(vm, vm.workerMemoController, '메모(선택)',
                   TextInputType.text, 4),
@@ -123,6 +127,7 @@ class HumanScreen extends ConsumerWidget {
     int index,
     String workerName,
     String workerNum,
+    int workerDailyWage,
     String workerMemo,
   ) {
     final state = ref.watch(workerProvider);
@@ -159,7 +164,7 @@ class HumanScreen extends ConsumerWidget {
       ),
       child: InkWell(
         onTap: () =>
-            vm.showWorkerInfo(index, workerName, workerNum, workerMemo),
+            vm.showWorkerInfo(index, workerName, workerNum, workerDailyWage, workerMemo),
         child: Card(
           color: Colors.blueGrey.withValues(alpha: 0.1),
           child: ListTile(
@@ -180,7 +185,7 @@ class HumanScreen extends ConsumerWidget {
                     ),
             ),
             subtitle: Text(
-              workerNum,
+              '$workerNum  ·  일당 ${getPrice(price: workerDailyWage)}',
               style: smallStyle,
             ),
           ),

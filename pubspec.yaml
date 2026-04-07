@@ -48,6 +48,10 @@ dependencies:
   # Win32 API (excel 패키지 의존성 호환성)
   win32: ^5.15.0
 
+  scrollable_calendar_package:
+    path: /Users/jeongtaeyoung/JTY/flutter/my_package/scrollable_calendar_package
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

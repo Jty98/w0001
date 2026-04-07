@@ -85,7 +85,10 @@ class WorkCostDetailScreen extends ConsumerWidget {
           dropdownSearchDecoration:
               InputDecoration(hintText: '현장을 선택해주세요.'),
         ),
-        onChanged: (value) => vm.fetchWorkCostByHid(value!.pid),
+        onChanged: (value) {
+          if (value == null) return;
+          Future(() => vm.fetchWorkCostByHid(value.pid));
+        },
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
@@ -134,63 +135,74 @@ class PlaceListScreen extends ConsumerWidget {
   }) {
     return Dialog(
       child: Builder(
-        builder: (context) => Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: const Color.fromARGB(255, 243, 243, 243),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                child: Text(
-                  isAdd ? '현장 추가' : '현장 수정',
-                  style: bigStyle,
-                ),
+        builder: (context) {
+          final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+          final calendarHeight = MediaQuery.sizeOf(context).height * 0.38;
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: const Color.fromARGB(255, 243, 243, 243),
               ),
-              AddTextField(
-                tController: nameController,
-                labelText: '현장 이름 (필수)',
-                isPrice: false,
-                readOnly: false,
-              ),
-              AddTextField(
-                tController: revenueController,
-                labelText: '선수금',
-                isPrice: true,
-                keyboardType: TextInputType.number,
-                readOnly: false,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(
-                  state.updateText,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text(
-                      '취소',
-                      style: TextStyle(color: Colors.red),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        isAdd ? '현장 추가' : '현장 수정',
+                        style: bigStyle,
+                      ),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: onPressed,
-                    child: const Text('확인'),
-                  ),
-                ],
+                    AddTextField(
+                      tController: nameController,
+                      labelText: '현장 이름 (필수)',
+                      isPrice: false,
+                      readOnly: false,
+                    ),
+                    AddTextField(
+                      tController: revenueController,
+                      labelText: '선수금',
+                      isPrice: true,
+                      keyboardType: TextInputType.number,
+                      readOnly: false,
+                    ),
+                    ScrollableCalendarWidget(height: calendarHeight),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        state.updateText,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text(
+                            '취소',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: onPressed,
+                          child: const Text('확인'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

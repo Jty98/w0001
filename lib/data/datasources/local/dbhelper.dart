@@ -12,7 +12,7 @@ import 'package:w0001/data/model/total_workcost_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
 
 class DbHelper {
-  final int curruntVersion = 3; 
+  final int curruntVersion = 4;
   Database? db;
 
   Future<Database> initializeDB() async {
@@ -26,6 +26,7 @@ class DbHelper {
           hname TEXT,
           hnumber TEXT,
           hmemo TEXT,
+          hdailyWage INTEGER DEFAULT 0,
           hstar INTEGER,
           hdelete INTEGER DEFAULT 0
         )''');
@@ -52,6 +53,20 @@ class DbHelper {
           FOREIGN KEY (wpid) REFERENCES Place(pid)
         )''');
 
+        // PlaceWorkDay 테이블 생성 (현장-날짜-사람 투입/출근 원천 데이터)
+        // - 하루 1레코드(일당 기준)
+        // - paid: 0(미지급) / 1(지급)
+        await database.execute('''CREATE TABLE IF NOT EXISTS PlaceWorkDay (
+          pwdid INTEGER PRIMARY KEY AUTOINCREMENT,
+          pid INTEGER,
+          hid INTEGER,
+          workDate TEXT,
+          dailyWage INTEGER DEFAULT 0,
+          paid INTEGER DEFAULT 0,
+          FOREIGN KEY (hid) REFERENCES Human(hid),
+          FOREIGN KEY (pid) REFERENCES Place(pid)
+        )''');
+
         // MaterialCost 테이블 생성
         await database.execute('''CREATE TABLE IF NOT EXISTS MaterialCost (
           mid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,19 +87,49 @@ class DbHelper {
         )''');
       },
       onUpgrade: (database, oldVersion, newVersion) async {
-        if (oldVersion < curruntVersion) {
-
+        if (oldVersion < 3) {
           await database.execute(
               'ALTER TABLE Place ADD COLUMN prevenue INTEGER DEFAULT 0');
 
           await database.execute('''CREATE TABLE IF NOT EXISTS PlaceRevenue (
-          rid INTEGER PRIMARY KEY AUTOINCREMENT,
-          rpid INTEGER,
-          rname TEXT,
-          rorder INTEGER,
-          rprice INTEGER,
-          FOREIGN KEY (rpid) REFERENCES Place(pid)
-        )''');
+            rid INTEGER PRIMARY KEY AUTOINCREMENT,
+            rpid INTEGER,
+            rname TEXT,
+            rorder INTEGER,
+            rprice INTEGER,
+            FOREIGN KEY (rpid) REFERENCES Place(pid)
+          )''');
+        }
+
+        if (oldVersion < 4) {
+          await database.execute(
+              'ALTER TABLE Human ADD COLUMN hdailyWage INTEGER DEFAULT 0');
+
+          await database.execute('''CREATE TABLE IF NOT EXISTS PlaceWorkDay (
+            pwdid INTEGER PRIMARY KEY AUTOINCREMENT,
+            pid INTEGER,
+            hid INTEGER,
+            workDate TEXT,
+            dailyWage INTEGER DEFAULT 0,
+            paid INTEGER DEFAULT 0,
+            FOREIGN KEY (hid) REFERENCES Human(hid),
+            FOREIGN KEY (pid) REFERENCES Place(pid)
+          )''');
+
+          // 기존 WorkCost 데이터를 PlaceWorkDay로 이관 (일당 스냅샷 + 지급여부)
+          // - WorkCost.wcomplete: 0(미지급) / 1(지급완료) → PlaceWorkDay.paid로 매핑
+          // - WorkCost.wprice → PlaceWorkDay.dailyWage로 스냅샷 저장
+          await database.execute('''
+            INSERT INTO PlaceWorkDay (pid, hid, workDate, dailyWage, paid)
+            SELECT
+              wpid AS pid,
+              whid AS hid,
+              SUBSTR(wdate, 1, 10) AS workDate,
+              wprice AS dailyWage,
+              wcomplete AS paid
+            FROM WorkCost
+            WHERE whid IS NOT NULL AND wpid IS NOT NULL
+          ''');
         }
       },
     );
@@ -157,17 +202,17 @@ LEFT JOIN (
 ) mc ON p.pid = mc.mpid
 LEFT JOIN (
     SELECT
-        wpid,
-        SUM(wprice) AS total_work_cost,
-        SUM(CASE WHEN wcomplete = 0 THEN wprice ELSE 0 END) AS total_incomplete_cost,
-        COUNT(whid) AS workerCount
+        pid,
+        SUM(dailyWage) AS total_work_cost,
+        SUM(CASE WHEN paid = 0 THEN dailyWage ELSE 0 END) AS total_incomplete_cost,
+        COUNT(pwd.hid) AS workerCount
     FROM
-        WorkCost wc
+        PlaceWorkDay pwd
     JOIN
-        Human h ON wc.whid = h.hid AND h.hdelete = 0
+        Human h ON pwd.hid = h.hid AND h.hdelete = 0
     GROUP BY
-        wpid
-) wc ON p.pid = wc.wpid
+        pid
+) wc ON p.pid = wc.pid
 LEFT JOIN (
     SELECT
         rpid,
@@ -277,10 +322,10 @@ FROM
     final Database db = await initializeDB();
     String query = '''
     SELECT p.pname AS pname,
-          SUBSTRING(w.wdate, 1, 10) AS dateString
-    FROM workcost w
-    JOIN Human h ON w.whid = h.hid
-    JOIN Place p ON w.wpid = p.pid
+          SUBSTR(pwd.workDate, 1, 10) AS dateString
+    FROM PlaceWorkDay pwd
+    JOIN Human h ON pwd.hid = h.hid
+    JOIN Place p ON pwd.pid = p.pid
     WHERE p.pcomplete != 2
     AND h.hdelete = 0
     UNION
@@ -310,29 +355,33 @@ FROM
   Future<List<WorkCost2Model>> getWorkCostsByPlaceAndDate(
       int hid, DateTimeRange dateTimeRange, int pid) async {
     String query;
-    String startDate = dateTimeRange.start.toString();
-    String endDate = dateTimeRange.end.add(const Duration(days: 1)).toString();
+    final start = dateTimeRange.start;
+    final endNext = dateTimeRange.end.add(const Duration(days: 1));
+    final startKey =
+        '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    final endNextKey =
+        '${endNext.year}-${endNext.month.toString().padLeft(2, '0')}-${endNext.day.toString().padLeft(2, '0')}';
     final Database db = await initializeDB();
     if (pid != 0) {
       query = '''
-          SELECT w.wdate, w.wprice, p.pname , w.wcomplete
-          FROM WorkCost w 
-          JOIN Place p ON p.pid = w.wpid
-          WHERE whid = $hid AND
-          wpid = $pid AND
+          SELECT pwd.workDate AS wdate, pwd.dailyWage AS wprice, p.pname , pwd.paid AS wcomplete
+          FROM PlaceWorkDay pwd
+          JOIN Place p ON p.pid = pwd.pid
+          WHERE hid = $hid AND
+          pid = $pid AND
           p.pcomplete != 2 AND
-          w.wdate BETWEEN '$startDate' AND '$endDate'
-          ORDER BY wdate DESC
+          pwd.workDate >= '$startKey' AND pwd.workDate < '$endNextKey'
+          ORDER BY pwd.workDate DESC
                 ''';
     } else {
       query = '''
-          SELECT w.wdate, w.wprice, p.pname, w.wcomplete
-          FROM WorkCost w 
-          JOIN Place p ON p.pid = w.wpid
-          WHERE whid = $hid AND
+          SELECT pwd.workDate AS wdate, pwd.dailyWage AS wprice, p.pname, pwd.paid AS wcomplete
+          FROM PlaceWorkDay pwd
+          JOIN Place p ON p.pid = pwd.pid
+          WHERE hid = $hid AND
           p.pcomplete != 2 AND
-          w.wdate BETWEEN '$startDate' AND '$endDate'
-          ORDER BY wdate DESC
+          pwd.workDate >= '$startKey' AND pwd.workDate < '$endNextKey'
+          ORDER BY pwd.workDate DESC
                 ''';
     }
     final List<Map<String, Object?>> queryResults = await db.rawQuery(query);
@@ -361,11 +410,11 @@ FROM
 
     final Database db = await initializeDB();
     String query = '''
-      SELECT p.pname, p.pid FROM WorkCost  w 
-      JOIN Place p on  w.wpid = p.pid
-      WHERE whid = $hid
+      SELECT p.pname, p.pid FROM PlaceWorkDay  pwd
+      JOIN Place p on  pwd.pid = p.pid
+      WHERE hid = $hid
       AND p.pcomplete != 2
-      group by wpid
+      group by pid
                 ''';
     final List<Map<String, Object?>> queryResults = await db.rawQuery(query);
 
@@ -375,10 +424,8 @@ FROM
 
   /// 하루의 인건비, 자재비 모두 가져오는 쿼리문 (캘린더뷰)
   Future<List<TotalCostModel>> getTotalCostsByDate(DateTime dateTime) async {
-    String startDate =
-        '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} 00:00:00';
-    String endDate =
-        '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} 23:59:59';
+    final dateKey =
+        '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
 
     // String startDate = DateTime(2020).toString();
     // String endDate = DateTime(2040).toString();
@@ -389,15 +436,15 @@ FROM
             p.pname AS pname,
             p.pcomplete AS pcomplete,
             h.hname AS name,
-            w.wdate AS date,
-            w.wprice AS price,
+            pwd.workDate AS date,
+            pwd.dailyWage AS price,
             'w' AS category,
-            w.wid AS id,
-            w.wcomplete AS wcomplete
-        FROM workcost w
-        JOIN Human h ON w.whid = h.hid
-        JOIN Place p ON w.wpid = p.pid
-        WHERE w.wdate BETWEEN '$startDate' AND '$endDate' 
+            pwd.pwdid AS id,
+            pwd.paid AS wcomplete
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid
+        JOIN Place p ON pwd.pid = p.pid
+        WHERE pwd.workDate = '$dateKey' 
         AND p.pcomplete != 2
         AND h.hdelete = 0
         UNION ALL
@@ -412,7 +459,7 @@ FROM
               -1 AS mcomplete
         FROM materialcost m
         JOIN Place p ON m.mpid = p.pid
-        WHERE m.mdate BETWEEN '$startDate' AND '$endDate'
+        WHERE SUBSTRING(m.mdate, 1, 10) = '$dateKey'
         AND p.pcomplete != 2
         ORDER BY category, name;
                 ''';
@@ -427,15 +474,15 @@ FROM
         SELECT p.pname AS pname,
               p.pcomplete AS pcomplete,
               h.hname AS name,
-              w.wdate AS date,
-              w.wprice AS price,
+              pwd.workDate AS date,
+              pwd.dailyWage AS price,
               'w' AS category,
-              w.wid AS id,
-              w.wcomplete AS wcomplete
-        FROM workcost w
-        JOIN Human h ON w.whid = h.hid
-        JOIN Place p ON w.wpid = p.pid
-        WHERE w.wpid = $pid
+              pwd.pwdid AS id,
+              pwd.paid AS wcomplete
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid
+        JOIN Place p ON pwd.pid = p.pid
+        WHERE pwd.pid = $pid
         AND h.hdelete = 0
         UNION ALL
         SELECT p.pname AS pname,
@@ -467,10 +514,12 @@ FROM
   Future<void> updateWorker(HumanModel humanModel) async {
     final Database db = await initializeDB();
     await db.rawUpdate(
-        "update Human set hname = ?, hnumber = ?, hmemo = ? where hid = ?", [
+        "update Human set hname = ?, hnumber = ?, hmemo = ?, hdailyWage = ? where hid = ?",
+        [
       humanModel.hname,
       humanModel.hnumber,
       humanModel.hmemo,
+      humanModel.hdailyWage,
       humanModel.hid,
     ]);
   }
@@ -525,11 +574,12 @@ FROM
   Future<void> addWorker(HumanModel worker) async {
     final Database db = await initializeDB();
     await db.rawInsert(
-      'INSERT INTO Human(hname, hnumber, hmemo, hstar) VALUES (?,?,?,?)',
+      'INSERT INTO Human(hname, hnumber, hmemo, hdailyWage, hstar) VALUES (?,?,?,?,?)',
       [
         worker.hname,
         worker.hnumber, // null 허용
         worker.hmemo,
+        worker.hdailyWage,
         worker.hstar,
       ],
     );
@@ -570,6 +620,19 @@ FROM
             wCost.wdate,
             wCost.wprice,
             wCost.wcomplete
+          ],
+        );
+
+        // 신규 원천 테이블(PlaceWorkDay)에도 함께 저장 (호환 유지)
+        await db.rawInsert(
+          'INSERT INTO PlaceWorkDay(pid, hid, workDate, dailyWage, paid) VALUES (?,?,?,?,?)',
+          [
+            wCost.wpid,
+            wCost.whid,
+            // wdate는 DateTime.toString() 기반이므로 앞 10자리(yyyy-MM-dd)만 저장
+            wCost.wdate.length >= 10 ? wCost.wdate.substring(0, 10) : wCost.wdate,
+            wCost.wprice,
+            wCost.wcomplete,
           ],
         );
       }
@@ -676,28 +739,32 @@ FROM
   Future<List<Map<String, dynamic>>> getWorkCostDetailsForCsv(
       DateTimeRange dateTimeRange) async {
     final Database db = await initializeDB();
-    String startDate = dateTimeRange.start.toString();
-    String endDate = dateTimeRange.end.add(const Duration(days: 1)).toString();
+    final start = dateTimeRange.start;
+    final endNext = dateTimeRange.end.add(const Duration(days: 1));
+    final startKey =
+        '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    final endNextKey =
+        '${endNext.year}-${endNext.month.toString().padLeft(2, '0')}-${endNext.day.toString().padLeft(2, '0')}';
     String query = '''
         SELECT
           h.hname as 이름,
           p.pname as 현장,
           h.hnumber as 주민등록번호,
-          substr(wc.wdate, 1, 10) as 날짜,
-          wc.wprice as 금액,
-          CAST((wc.wprice * 0.967) AS INT) AS 공제금액
+          pwd.workDate as 날짜,
+          pwd.dailyWage as 금액,
+          CAST((pwd.dailyWage * 0.967) AS INT) AS 공제금액
         FROM 
-          WorkCost wc
+          PlaceWorkDay pwd
         JOIN 
-          Human h ON wc.whid = h.hid
+          Human h ON pwd.hid = h.hid
         JOIN 
-          Place p ON wc.wpid = p.pid
+          Place p ON pwd.pid = p.pid
         WHERE 
-          wc.wdate BETWEEN '$startDate' AND '$endDate'
+          pwd.workDate >= '$startKey' AND pwd.workDate < '$endNextKey'
         AND p.pcomplete != 2
         AND h.hdelete != 1
         ORDER BY 
-          h.hname, wc.wdate;
+          h.hname, pwd.workDate;
                 ''';
     final List<Map<String, Object?>> queryResults = await db.rawQuery(query);
     return queryResults;
@@ -707,20 +774,24 @@ FROM
   Future<List<Map<String, dynamic>>> getWorkCostTotalsForCsv(
       DateTimeRange dateTimeRange) async {
     final Database db = await initializeDB();
-    String startDate = dateTimeRange.start.toString();
-    String endDate = dateTimeRange.end.add(const Duration(days: 1)).toString();
+    final start = dateTimeRange.start;
+    final endNext = dateTimeRange.end.add(const Duration(days: 1));
+    final startKey =
+        '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    final endNextKey =
+        '${endNext.year}-${endNext.month.toString().padLeft(2, '0')}-${endNext.day.toString().padLeft(2, '0')}';
     String query = '''
         SELECT
       h.hname AS 이름,
       h.hnumber AS 주민등록번호,
-      SUM(wc.wprice) AS 총금액,
-      SUM(CAST((wc.wprice * 0.967) AS INT)) AS 총공제금액
-    FROM WorkCost wc
-    JOIN Human h ON wc.whid = h.hid
+      SUM(pwd.dailyWage) AS 총금액,
+      SUM(CAST((pwd.dailyWage * 0.967) AS INT)) AS 총공제금액
+    FROM PlaceWorkDay pwd
+    JOIN Human h ON pwd.hid = h.hid
     JOIN 
-          Place p ON wc.wpid = p.pid
+          Place p ON pwd.pid = p.pid
     WHERE 
-          wc.wdate BETWEEN '$startDate' AND '$endDate'
+          pwd.workDate >= '$startKey' AND pwd.workDate < '$endNextKey'
     AND h.hdelete != 1
     AND p.pcomplete != 2
     GROUP BY h.hname, h.hnumber
@@ -778,8 +849,12 @@ UNION
   // 인건비 탭에서 조회
   Future<List<TotalWorkCostModel>> getWorkCostsByDateRange(
       DateTimeRange dateTimeRange) async {
-    String startDate = dateTimeRange.start.toString();
-    String endDate = dateTimeRange.end.add(const Duration(days: 1)).toString();
+    final start = dateTimeRange.start;
+    final endNext = dateTimeRange.end.add(const Duration(days: 1));
+    final startKey =
+        '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    final endNextKey =
+        '${endNext.year}-${endNext.month.toString().padLeft(2, '0')}-${endNext.day.toString().padLeft(2, '0')}';
     final Database db = await initializeDB();
     String query = '''
         SELECT
@@ -788,18 +863,18 @@ UNION
         h.hstar as hstar,
         p.pname as 현장,
         h.hnumber as 주민등록번호,
-        substr(wc.wdate, 1, 10) as 날짜,
+        pwd.workDate as 날짜,
         p.pcomplete as pcomplete,
-        wc.wid as wid,
-        wc.wprice as 금액,
-        wc.wcomplete as wcomplete
-        FROM WorkCost wc
-        JOIN Human h ON wc.whid = h.hid
-        JOIN Place p ON wc.wpid = p.pid
-        WHERE wc.wdate BETWEEN '$startDate' AND '$endDate'
+        pwd.pwdid as wid,
+        pwd.dailyWage as 금액,
+        pwd.paid as wcomplete
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid
+        JOIN Place p ON pwd.pid = p.pid
+        WHERE pwd.workDate >= '$startKey' AND pwd.workDate < '$endNextKey'
         AND h.hdelete = 0
         AND p.pcomplete != 2
-        ORDER BY hstar DESC, 이름, wc.wdate;
+        ORDER BY hstar DESC, 이름, pwd.workDate;
                 ''';
     final List<Map<String, Object?>> queryResults = await db.rawQuery(query);
     return queryResults.map((e) => TotalWorkCostModel.fromMap(e)).toList();

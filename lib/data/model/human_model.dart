@@ -4,6 +4,7 @@ class HumanModel {
   final String hname;
   final String hnumber;
   final String? hmemo;
+  final int hdailyWage;
   int hstar;
   int hdelete;
 
@@ -12,6 +13,7 @@ class HumanModel {
     required this.hname,
     required this.hnumber,
     this.hmemo,
+    this.hdailyWage = 0,
     required this.hstar,
     required this.hdelete,
   });
@@ -21,6 +23,7 @@ class HumanModel {
         hname = res['hname'],
         hnumber = res['hnumber'],
         hmemo = res['hmemo'],
+        hdailyWage = (res['hdailyWage'] as int?) ?? 0,
         hstar = res['hstar'],
         hdelete = res['hdelete'];
 }

@@ -304,9 +304,6 @@ class WorkCostScreen extends ConsumerWidget {
             Consumer(
               builder: (context, ref, _) {
                 final st = ref.watch(workerProvider);
-                final nvm = ref.read(workerProvider.notifier);
-                nvm.initializeCheckboxState(
-                    element.wid, element.price, element.hid);
                 return Checkbox(
                   side: BorderSide(
                     color: element.wcomplete == 1
@@ -318,7 +315,9 @@ class WorkCostScreen extends ConsumerWidget {
                   onChanged: element.wcomplete == 1
                       ? null
                       : (value) {
-                          nvm.toggleCheckboxState(element.wid);
+                          ref
+                              .read(workerProvider.notifier)
+                              .toggleCheckboxState(element.wid);
                         },
                 );
               },

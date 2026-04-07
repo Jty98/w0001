@@ -108,10 +108,9 @@ GoRouter createAppRouter() {
                     builder: (context, state) {
                       final hidStr = state.pathParameters['hid']!;
                       final hid = int.parse(hidStr);
-                      final rawName = state.uri.queryParameters['name'] ?? '';
-                      final hname = rawName.isEmpty
-                          ? ''
-                          : Uri.decodeComponent(rawName);
+                      // go_router의 queryParameters는 이미 디코딩된 값입니다.
+                      // (예: '%' 등이 포함된 이름을 decodeComponent로 다시 디코딩하면 예외가 날 수 있음)
+                      final hname = state.uri.queryParameters['name'] ?? '';
                       return WorkCostDetailScreen(hid: hid, hname: hname);
                     },
                   ),

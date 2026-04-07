@@ -80,7 +80,7 @@ class HumanWorkDetailViewModel extends Notifier<HumanWorkDetailState> {
   HumanWorkDetailState build() {
     if (!_initialized) {
       _initialized = true;
-      Future.microtask(() => fetchWorkCostByHid(0));
+      Future(() => fetchWorkCostByHid(0));
     }
     return HumanWorkDetailState.initial();
   }
