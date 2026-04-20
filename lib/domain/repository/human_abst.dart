@@ -7,4 +7,8 @@ abstract class HumanRepository {
   Future<void> updateWorker(HumanModel humanModel);
   Future<void> toggleWorkerStarStatus(int hid, bool isStarred);
   Future<void> deleteWorker(int hid);
+
+  Future<void> upsertPlaceWorkerRecent(int pid, int hid);
+  Future<List<int>> getPlaceWorkerRecentHids(int pid);
+  Future<void> deletePlaceWorkerRecent(int pid, int hid);
 }

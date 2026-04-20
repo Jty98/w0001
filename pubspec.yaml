@@ -47,9 +47,13 @@ dependencies:
   file_picker: ^5.2.10
   # Win32 API (excel 패키지 의존성 호환성)
   win32: ^5.15.0
+  # 그래프
+  fl_chart: ^1.2.0
 
   scrollable_calendar_package:
     path: /Users/jeongtaeyoung/JTY/flutter/my_package/scrollable_calendar_package
+  alarm: ^5.2.1
+  permission_handler: ^12.0.1
 
 
 dev_dependencies:

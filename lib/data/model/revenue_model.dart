@@ -4,6 +4,7 @@ class RevenueModel {
   final String rname;
   final int rprice;
   final int rorder;
+  final String rdate; // yyyy-MM-dd
 
   RevenueModel({
     required this.rid,
@@ -11,6 +12,7 @@ class RevenueModel {
     required this.rname,
     required this.rprice,
     required this.rorder,
+    required this.rdate,
   });
 
   // fromMap 메서드
@@ -21,6 +23,7 @@ class RevenueModel {
       rname: map['rname'],
       rprice: map['rprice'],
       rorder: map['rorder'],
+      rdate: map['rdate'] ?? '',
     );
   }
 }

@@ -52,8 +52,9 @@ class CalendarScreen extends ConsumerWidget {
   ) {
     ref.watch(calendarProvider);
     final vm = ref.read(calendarProvider.notifier);
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: vm.placeCount == 0
           ? const Center(child: Text('조회된 데이터가 없습니다.'))
           : ListView.builder(
@@ -63,8 +64,12 @@ class CalendarScreen extends ConsumerWidget {
                 final pname = placeInfo['pname'];
                 final pcomplete = placeInfo['pcomplete'];
                 return Card(
-                  color: Colors.blueGrey.withValues(alpha: 0.1),
                   elevation: 0,
+                  color: cs.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+                  ),
                   child: ExpansionTile(
                     initiallyExpanded: true,
                     shape: const Border(),
@@ -82,10 +87,8 @@ class CalendarScreen extends ConsumerWidget {
                     ),
                     expandedAlignment: Alignment.centerLeft,
                     children: [
-                      Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 10, horizontal: 10),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
                         child: Column(
                           children: [
                             for (var element in vm.filteredTotalCostList

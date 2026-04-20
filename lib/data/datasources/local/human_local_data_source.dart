@@ -4,10 +4,14 @@ import 'package:w0001/data/model/human_model.dart';
 /// 작업자(Human) 관련 로컬 데이터소스 (SQLite)
 abstract class HumanLocalDataSource {
   Future<List<HumanModel>> getAllWorkers();
-  Future<void> addWorker(HumanModel worker);
+  Future<int> addWorker(HumanModel worker);
   Future<void> updateWorker(HumanModel humanModel);
   Future<void> toggleWorkerStarStatus(int hid, bool isStarred);
   Future<void> deleteWorker(int hid);
+
+  Future<void> upsertPlaceWorkerRecent(int pid, int hid);
+  Future<List<int>> getPlaceWorkerRecentHids(int pid);
+  Future<void> deletePlaceWorkerRecent(int pid, int hid);
 }
 
 class HumanLocalDataSourceImpl implements HumanLocalDataSource {
@@ -21,7 +25,7 @@ class HumanLocalDataSourceImpl implements HumanLocalDataSource {
   }
 
   @override
-  Future<void> addWorker(HumanModel worker) {
+  Future<int> addWorker(HumanModel worker) {
     return _dbHelper.addWorker(worker);
   }
 
@@ -38,6 +42,21 @@ class HumanLocalDataSourceImpl implements HumanLocalDataSource {
   @override
   Future<void> deleteWorker(int hid) {
     return _dbHelper.deleteWorker(hid);
+  }
+
+  @override
+  Future<void> upsertPlaceWorkerRecent(int pid, int hid) {
+    return _dbHelper.upsertPlaceWorkerRecent(pid, hid);
+  }
+
+  @override
+  Future<List<int>> getPlaceWorkerRecentHids(int pid) {
+    return _dbHelper.getPlaceWorkerRecentHids(pid);
+  }
+
+  @override
+  Future<void> deletePlaceWorkerRecent(int pid, int hid) {
+    return _dbHelper.deletePlaceWorkerRecent(pid, hid);
   }
 }
 

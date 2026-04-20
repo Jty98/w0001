@@ -28,4 +28,9 @@ abstract class WorkCostRepository {
     DateTime endDate,
   );
   Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid);
+
+  Future<List<int>> getSavedWorkDayHidsForPlaceDate({
+    required int pid,
+    required String dateKey,
+  });
 }

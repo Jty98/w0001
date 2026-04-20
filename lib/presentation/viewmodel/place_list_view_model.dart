@@ -57,8 +57,14 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
   late final PlaceUseCase _useCase;
   bool _initialized = false;
 
+  /// 현장 추가 다이얼로그에서 캘린더로 고른 기간 (날짜만, 시간 제거).
+  DateTime? _placeDialogRangeStart;
+  DateTime? _placeDialogRangeEnd;
+
   final TextEditingController placeNameController = TextEditingController();
   final TextEditingController placeRevenueController =
+      TextEditingController(text: '0');
+  final TextEditingController placeContractTotalController =
       TextEditingController(text: '0');
 
   @override
@@ -67,6 +73,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     ref.onDispose(() {
       placeNameController.dispose();
       placeRevenueController.dispose();
+      placeContractTotalController.dispose();
     });
     if (!_initialized) {
       _initialized = true;
@@ -78,18 +85,31 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
 
   Future<void> fetchAllPlace() async {
     state = state.copyWith(isLoading: true);
-    final list = await _useCase.getAllPlaces();
-    final filtered = _filterByState(list, state.placeState);
-    state = state.copyWith(
-      placeList: list,
-      filteredPlaceList: filtered,
-      isLoading: false,
-    );
+    try {
+      final list = await _useCase.getAllPlaces();
+      final filtered = _filterByState(list, state.placeState);
+      state = state.copyWith(
+        placeList: list,
+        filteredPlaceList: filtered,
+      );
+    } catch (e, st) {
+      debugPrint('Place list fetch failed: $e\n$st');
+    } finally {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  void setPlaceDialogDateRange(DateTime? start, DateTime? end) {
+    _placeDialogRangeStart = start;
+    _placeDialogRangeEnd = end;
   }
 
   void resetTextController() {
     placeNameController.text = '';
     placeRevenueController.text = '0';
+    placeContractTotalController.text = '0';
+    _placeDialogRangeStart = null;
+    _placeDialogRangeEnd = null;
     state = state.copyWith(updateText: '');
   }
 
@@ -131,21 +151,37 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     await fetchAllPlace();
   }
 
-  Future<bool> updatePlace(int pid, String pname, int prevenue) async {
+  Future<bool> updatePlace(
+    int pid,
+    String pname,
+    int prevenue,
+    int pcontractTotal,
+    DateTime? rangeStart,
+    DateTime? rangeEnd,
+  ) async {
     if (pname.isEmpty) {
       state = state.copyWith(updateText: '현장 이름을 입력해주세요.');
       return false;
     } else if (prevenue == -1) {
       state = state.copyWith(updateText: '선수금을 입력해주세요.');
       return false;
+    } else if (pcontractTotal < 0) {
+      state = state.copyWith(updateText: '공사 총액이 올바르지 않습니다.');
+      return false;
+    } else if (rangeStart == null) {
+      state = state.copyWith(updateText: '기간을 선택해주세요.');
+      return false;
     } else {
+      final end = rangeEnd ?? rangeStart;
       final model = PlaceModel(
         pid: pid,
         pname: pname,
         prevenue: prevenue,
+        pcontractTotal: pcontractTotal,
         pcomplete: 0,
-        pstart: '',
-        pend: '',
+        pstart: rangeStart.toIso8601String(),
+        pend: end.toIso8601String(),
+        pcontractDate: '',
       );
       await _useCase.updatePlace(model);
       await fetchAllPlace();
@@ -159,6 +195,10 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     revenueString = revenueString.replaceAll(RegExp(r'[,원]'), '');
     final revenue = int.tryParse(revenueString);
 
+    String contractString = placeContractTotalController.text.trim();
+    contractString = contractString.replaceAll(RegExp(r'[,원]'), '');
+    final contractTotal = int.tryParse(contractString);
+
     if (placeNameController.text.isEmpty) {
       state = state.copyWith(updateText: '현장 이름을 입력해주세요.');
       return;
@@ -168,14 +208,28 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     } else if (revenue == null) {
       state = state.copyWith(updateText: '선수금이 올바르지 않습니다.');
       return;
+    } else if (contractTotal == null || contractTotal < 0) {
+      state = state.copyWith(updateText: '공사 총액이 올바르지 않습니다.');
+      return;
     }
+
+    final rangeStart = _placeDialogRangeStart;
+    if (rangeStart == null) {
+      state = state.copyWith(updateText: '기간을 선택해주세요.');
+      return;
+    }
+    final rangeEnd = _placeDialogRangeEnd ?? rangeStart;
+    final pstart = rangeStart.toIso8601String();
+    final pend = rangeEnd.toIso8601String();
 
     final place = PlaceModel(
       prevenue: revenue,
+      pcontractTotal: contractTotal,
       pname: placeNameController.text,
-      pstart: DateTime.now().toString(),
-      pend: '0',
+      pstart: pstart,
+      pend: pend,
       pcomplete: 0,
+      pcontractDate: '',
     );
     await _useCase.insertPlace(place);
     await fetchAllPlace();

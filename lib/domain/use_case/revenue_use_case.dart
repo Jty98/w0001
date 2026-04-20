@@ -14,11 +14,13 @@ class RevenueUseCase {
     required int pid,
     required int rprice,
     required String rname,
+    required String rdate,
   }) {
     return _repository.insertRevenue(
       pid: pid,
       rprice: rprice,
       rname: rname,
+      rdate: rdate,
     );
   }
 

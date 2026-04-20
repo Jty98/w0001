@@ -18,6 +18,7 @@ import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
     show workCostUseCaseProvider;
 import 'package:w0001/util/fetch_data.dart' show FetchData;
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 
@@ -52,6 +53,8 @@ class WorkCostData {
     required this.totalPrice,
     required this.incompletePrice,
     required this.filteredList,
+    this.hdailyWage = 0,
+    this.hdefaultRole = '',
   });
 
   final String hname;
@@ -62,6 +65,10 @@ class WorkCostData {
   final int pcomplete;
   final int incompletePrice;
   final List<TotalWorkCostModel> filteredList;
+  /// `workerInfoList`에서 병합한 일당(사람 관리와 동일 출처).
+  final int hdailyWage;
+  /// `workerInfoList`에서 병합한 기본 역할.
+  final String hdefaultRole;
 }
 
 class WorkerState {
@@ -72,6 +79,7 @@ class WorkerState {
     required this.workerInfoList,
     required this.filteredWorkerList,
     required this.isEditing,
+    required this.humanFormWorkRole,
     required this.taxState,
     required this.dayState,
     required this.completeState,
@@ -87,6 +95,8 @@ class WorkerState {
   final List<HumanModel> workerInfoList;
   final List<HumanModel> filteredWorkerList;
   final bool isEditing;
+  /// 사람 관리 폼: 역할 칩 선택(`직접입력` 포함). null이면 아직 선택 없음.
+  final String? humanFormWorkRole;
   final TaxState taxState;
   final DayTpye dayState;
   final CompleteState completeState;
@@ -114,6 +124,7 @@ class WorkerState {
       workerInfoList: const [],
       filteredWorkerList: const [],
       isEditing: false,
+      humanFormWorkRole: null,
       taxState: TaxState.taxOff,
       dayState: DayTpye.whole,
       completeState: CompleteState.whole,
@@ -131,6 +142,8 @@ class WorkerState {
     List<HumanModel>? workerInfoList,
     List<HumanModel>? filteredWorkerList,
     bool? isEditing,
+    String? humanFormWorkRole,
+    bool clearHumanFormWorkRole = false,
     TaxState? taxState,
     DayTpye? dayState,
     CompleteState? completeState,
@@ -146,6 +159,9 @@ class WorkerState {
       workerInfoList: workerInfoList ?? this.workerInfoList,
       filteredWorkerList: filteredWorkerList ?? this.filteredWorkerList,
       isEditing: isEditing ?? this.isEditing,
+      humanFormWorkRole: clearHumanFormWorkRole
+          ? null
+          : (humanFormWorkRole ?? this.humanFormWorkRole),
       taxState: taxState ?? this.taxState,
       dayState: dayState ?? this.dayState,
       completeState: completeState ?? this.completeState,
@@ -170,12 +186,14 @@ class WorkerViewModel extends Notifier<WorkerState> {
   late final TextEditingController workerNumController =
       TextEditingController();
   late final TextEditingController workerDailyWageController =
-      TextEditingController(text: '0');
+      TextEditingController(text: formatIntegerWithComma(0));
   late final TextEditingController workerMemoController =
       TextEditingController();
   late final TextEditingController searchWorkerDetailTextContoller =
       TextEditingController();
   late final TextEditingController searchWorkerTextContoller =
+      TextEditingController();
+  late final TextEditingController workerRoleCustomController =
       TextEditingController();
 
   final List<BuildContext> slidableContexts = [];
@@ -192,6 +210,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       workerMemoController.dispose();
       searchWorkerDetailTextContoller.dispose();
       searchWorkerTextContoller.dispose();
+      workerRoleCustomController.dispose();
     });
     if (!_initialized) {
       _initialized = true;
@@ -379,7 +398,6 @@ class WorkerViewModel extends Notifier<WorkerState> {
   }
 
   void completeStateValueChanged(CompleteState? value) {
-    collapseAllExpansionTiles();
     if (value != null) {
       state = state.copyWith(completeState: value);
     }
@@ -403,12 +421,48 @@ class WorkerViewModel extends Notifier<WorkerState> {
     );
   }
 
+  void humanFormSelectWorkRole(String role) {
+    state = state.copyWith(humanFormWorkRole: role);
+    if (role != '직접입력') {
+      workerRoleCustomController.clear();
+    }
+  }
+
+  void _clearHumanRoleForm() {
+    workerRoleCustomController.clear();
+    state = state.copyWith(clearHumanFormWorkRole: true);
+  }
+
+  /// 사람 관리 폼 → DB `hdefaultRole` 문자열.
+  String humanFormPersistedDefaultRole() {
+    final r = state.humanFormWorkRole;
+    if (r == null) return '';
+    if (r == '직접입력') return workerRoleCustomController.text.trim();
+    return r;
+  }
+
+  void applyHumanFormRoleFromPersisted(String persisted) {
+    final resolved = persisted.trim();
+    if (resolved.isEmpty) {
+      _clearHumanRoleForm();
+      return;
+    }
+    final fixed = kWorkRolePresets.where((e) => e != '직접입력').toSet();
+    if (fixed.contains(resolved)) {
+      state = state.copyWith(humanFormWorkRole: resolved);
+      workerRoleCustomController.clear();
+      return;
+    }
+    state = state.copyWith(humanFormWorkRole: '직접입력');
+    workerRoleCustomController.text = resolved;
+  }
+
   Future<void> insertWorker(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final hname = workerNameController.text.trim();
     final hnumber = workerNumController.text.trim();
     final wageText =
-        workerDailyWageController.text.trim().replaceAll(RegExp(r'[,원\\s]'), '');
+        workerDailyWageController.text.replaceAll(RegExp(r'\D'), '');
     final hdailyWage = int.tryParse(wageText) ?? 0;
     final hmemo = workerMemoController.text.isNotEmpty
         ? workerMemoController.text.trim()
@@ -433,6 +487,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       hname: hname,
       hnumber: hnumber,
       hdailyWage: hdailyWage,
+      hdefaultRole: humanFormPersistedDefaultRole(),
       hstar: 0,
       hmemo: hmemo,
       hdelete: 0,
@@ -446,8 +501,9 @@ class WorkerViewModel extends Notifier<WorkerState> {
     }
     workerNameController.clear();
     workerNumController.clear();
-    workerDailyWageController.text = '0';
+    workerDailyWageController.text = formatIntegerWithComma(0);
     workerMemoController.clear();
+    _clearHumanRoleForm();
     await fetchWorkerInfo();
   }
 
@@ -487,7 +543,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     final hname = workerNameController.text.trim();
     final hnumber = workerNumController.text.trim();
     final wageText =
-        workerDailyWageController.text.trim().replaceAll(RegExp(r'[,원\\s]'), '');
+        workerDailyWageController.text.replaceAll(RegExp(r'\D'), '');
     final hdailyWage = int.tryParse(wageText) ?? 0;
     final hmemo = workerMemoController.text.isNotEmpty
         ? workerMemoController.text.trim()
@@ -517,6 +573,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       hname: hname,
       hnumber: hnumber,
       hdailyWage: hdailyWage,
+      hdefaultRole: humanFormPersistedDefaultRole(),
       hmemo: hmemo,
       hstar: state.filteredWorkerList[index].hstar,
       hdelete: 0,
@@ -525,8 +582,9 @@ class WorkerViewModel extends Notifier<WorkerState> {
     await _humanUseCase.updateWorker(updated);
     workerNameController.clear();
     workerNumController.clear();
-    workerDailyWageController.text = '0';
+    workerDailyWageController.text = formatIntegerWithComma(0);
     workerMemoController.clear();
+    _clearHumanRoleForm();
     state = state.copyWith(isEditing: false);
     await fetchWorkerInfo();
   }
@@ -537,11 +595,13 @@ class WorkerViewModel extends Notifier<WorkerState> {
     String workerNum,
     int workerDailyWage,
     String workerMemo,
+    String hdefaultRole,
   ) {
     workerNameController.text = workerName;
     workerNumController.text = workerNum;
-    workerDailyWageController.text = workerDailyWage.toString();
+    workerDailyWageController.text = formatIntegerWithComma(workerDailyWage);
     workerMemoController.text = workerMemo;
+    applyHumanFormRoleFromPersisted(hdefaultRole);
     state = state.copyWith(
       selectedIndex: index,
       isEditing: true,
@@ -560,9 +620,10 @@ class WorkerViewModel extends Notifier<WorkerState> {
   void refreshAction() {
     workerNameController.clear();
     workerNumController.clear();
-    workerDailyWageController.text = '0';
+    workerDailyWageController.text = formatIntegerWithComma(0);
     workerMemoController.clear();
     searchWorkerDetailTextContoller.clear();
+    _clearHumanRoleForm();
     state = state.copyWith(isEditing: false);
     fetchWorkerInfo();
   }
@@ -571,7 +632,9 @@ class WorkerViewModel extends Notifier<WorkerState> {
     final hid = state.filteredWorkerList[index].hid!;
     workerNameController.clear();
     workerNumController.clear();
+    workerDailyWageController.text = formatIntegerWithComma(0);
     workerMemoController.clear();
+    _clearHumanRoleForm();
     state = state.copyWith(isEditing: false);
     await _humanUseCase.deleteWorker(hid);
     await fetchWorkerInfo();
@@ -689,6 +752,18 @@ class WorkerViewModel extends Notifier<WorkerState> {
     final hname = splitHuman[0].split(':')[1];
     final hnumber = splitHuman[1].split(':')[1];
 
+    HumanModel? humanFromList(int hid) {
+      if (hid != 0) {
+        for (final h in state.workerInfoList) {
+          if (h.hid == hid) return h;
+        }
+      }
+      for (final h in state.workerInfoList) {
+        if (h.hname == hname && h.hnumber == hnumber) return h;
+      }
+      return null;
+    }
+
     final tempList = state.isIncomplete
         ? state.totalWorkCostList.where((e) => e.wcomplete == 0).toList()
         : state.totalWorkCostList;
@@ -700,6 +775,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
         .toList();
 
     if (filteredList.isEmpty) {
+      final human = humanFromList(0);
       return WorkCostData(
         pcomplete: 1,
         hname: hname,
@@ -709,6 +785,8 @@ class WorkerViewModel extends Notifier<WorkerState> {
         totalPrice: 0,
         incompletePrice: 0,
         filteredList: [],
+        hdailyWage: human?.hdailyWage ?? 0,
+        hdefaultRole: human?.hdefaultRole ?? '',
       );
     }
 
@@ -719,6 +797,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       0,
       (s, i) => i.wcomplete == 0 ? s + i.price : s,
     );
+    final human = humanFromList(hid);
     return WorkCostData(
       pcomplete: 1,
       hname: hname,
@@ -728,6 +807,8 @@ class WorkerViewModel extends Notifier<WorkerState> {
       totalPrice: totalPrice,
       incompletePrice: incompletePrice,
       filteredList: filteredList,
+      hdailyWage: human?.hdailyWage ?? 0,
+      hdefaultRole: human?.hdefaultRole ?? '',
     );
   }
 

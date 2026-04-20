@@ -1,14 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:scrollable_calendar_package/calendar.dart';
+import 'package:scrollable_calendar_package/calendar_widget.dart';
 import 'package:w0001/util/funtions.dart';
 
 class ScrollableCalendarWidget extends StatefulWidget {
   const ScrollableCalendarWidget({
     super.key,
     this.height = 320,
+    this.onRangeChanged,
+    this.onDayPicked,
+    this.initialRangeStart,
+    this.initialRangeEnd,
+    this.initialSelectedDay,
+    this.calendarKey,
+    this.useSingleDaySelection = false,
+    this.initialCalendarViewMode,
+    this.showViewModeToggle = true,
+    this.onMonthChanged,
+    this.onCalendarPageAnchorChanged,
+    this.onViewModeChanged,
   });
 
   final double height;
+
+  /// Inclusive date range (time stripped). Used by place add/edit dialog.
+  final void Function(DateTime? start, DateTime? end)? onRangeChanged;
+
+  /// 단일 날짜 선택 콜백(금액추가 등). range는 "표시용 고정"으로 유지한다.
+  final void Function(DateTime pickedDay)? onDayPicked;
+
+  /// 기존 현장 기간 등 미리 표시할 때 사용. 둘 다 null이면 선택 없음.
+  final DateTime? initialRangeStart;
+  final DateTime? initialRangeEnd;
+
+  /// 다이얼로그 최초 진입 시 포커스/선택 기준일. 기본은 오늘.
+  final DateTime? initialSelectedDay;
+
+  /// [ScrollableCalendar] 상태에 접근할 때(모드 전환 등).
+  final GlobalKey<ScrollableCalendarState>? calendarKey;
+
+  /// true면 기간 선택·기간 칩을 쓰지 않고 단일 선택만 사용합니다.
+  final bool useSingleDaySelection;
+
+  /// 최초 1주/2주/월 모드.
+  final CalendarViewMode? initialCalendarViewMode;
+
+  /// false면 헤더의 1주/2주/월 전환 칩을 숨깁니다.
+  final bool showViewModeToggle;
+
+  /// 월 페이지가 바뀔 때(월 보기에서).
+  final void Function(DateTime monthFirst)? onMonthChanged;
+
+  /// 주/월 페이지 앵커가 바뀔 때.
+  final void Function(DateTime anchor)? onCalendarPageAnchorChanged;
+
+  /// 패키지 내부에서 1주/2주/월이 바뀔 때
+  final void Function(CalendarViewMode mode)? onViewModeChanged;
 
   @override
   State<ScrollableCalendarWidget> createState() =>
@@ -16,14 +63,53 @@ class ScrollableCalendarWidget extends StatefulWidget {
 }
 
 class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
-  DateTime? _start;
-  DateTime? _end;
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+  late DateTime _selectedDay;
+  int _rebuildNonce = 0;
+
+  bool get _isFixedRangeSinglePickMode =>
+      widget.onDayPicked != null && !widget.useSingleDaySelection;
+
+  bool get _showRangeSummary =>
+      widget.onRangeChanged != null && !widget.useSingleDaySelection;
+
+  @override
+  void initState() {
+    super.initState();
+    _rangeStart = widget.initialRangeStart;
+    _rangeEnd = widget.initialRangeEnd ?? widget.initialRangeStart;
+    final base = widget.initialSelectedDay ?? DateTime.now();
+    _selectedDay = DateTime(base.year, base.month, base.day);
+  }
+
+  @override
+  void didUpdateWidget(covariant ScrollableCalendarWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialRangeStart != widget.initialRangeStart ||
+        oldWidget.initialRangeEnd != widget.initialRangeEnd) {
+      setState(() {
+        _rangeStart = widget.initialRangeStart;
+        _rangeEnd = widget.initialRangeEnd ?? widget.initialRangeStart;
+      });
+    }
+    if (oldWidget.initialSelectedDay != widget.initialSelectedDay &&
+        widget.initialSelectedDay != null) {
+      final d = widget.initialSelectedDay!;
+      setState(() {
+        _selectedDay = DateTime(d.year, d.month, d.day);
+        if (_isFixedRangeSinglePickMode) {
+          _rebuildNonce++;
+        }
+      });
+    }
+  }
 
   String _rangeLabel() {
-    final start = _start;
+    final start = _rangeStart;
     if (start == null) return '기간을 선택해주세요.';
 
-    final end = _end ?? start;
+    final end = _rangeEnd ?? start;
     final normalizedStart = start.isBefore(end) ? start : end;
     final normalizedEnd = start.isBefore(end) ? end : start;
     final days = normalizedEnd.difference(normalizedStart).inDays + 1;
@@ -31,45 +117,145 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
     return '${formatDateTimeRangeToString(DateTimeRange(start: normalizedStart, end: normalizedEnd), showYear: true)} ($days일)';
   }
 
+  String _rangeDaysLabel() {
+    final start = _rangeStart;
+    if (start == null) return '';
+    final end = _rangeEnd ?? start;
+    final normalizedStart = start.isBefore(end) ? start : end;
+    final normalizedEnd = start.isBefore(end) ? end : start;
+    final days = normalizedEnd.difference(normalizedStart).inDays + 1;
+    return '$days일';
+  }
+
   @override
   Widget build(BuildContext context) {
-    const style = CalendarStyle(
-      // 포커스 배경만 제거 (테두리는 패키지에서 그리지 않도록 수정)
-      focusedMonthBackgroundColor: Colors.transparent,
-      // 버튼/아이콘 색상으로도 쓰이므로 투명으로 만들면 텍스트가 안 보임
-      focusedMonthBorderColor: Colors.blueAccent,
-    );
+    const style = CalendarStyle();
+
+    final initialStart = widget.initialRangeStart;
+    final initialEnd = widget.initialRangeEnd ?? initialStart;
+    final focusDate = _selectedDay;
+
+    final useRangeMode =
+        widget.onRangeChanged != null && !widget.useSingleDaySelection;
 
     return SizedBox(
       height: widget.height,
       width: double.infinity,
       child: ScrollableCalendar(
+        key: widget.calendarKey ??
+            (_isFixedRangeSinglePickMode
+                ? ValueKey(
+                    'addcost-calendar-$_rebuildNonce-${_selectedDay.toIso8601String()}',
+                  )
+                : widget.useSingleDaySelection
+                    ? const ValueKey('scroll-cal-schedule-single')
+                    : const ValueKey('place-range-calendar')),
         config: CalendarConfig(
-          initialDate: DateTime.now(),
+          initialDate: focusDate,
           pageScrollDirection: CalendarPageScrollDirection.horizontal,
-          selectionMode: CalendarSelectionMode.range,
+          selectionMode: useRangeMode
+              ? CalendarSelectionMode.range
+              : CalendarSelectionMode.single,
           showMonthArrowButtons: true,
           calendarHeightFactor: 1,
+          initialEventStartDate: useRangeMode ? initialStart : null,
+          initialEventEndDate: useRangeMode ? initialEnd : null,
         ),
         style: style,
-        onEventRangeChanged: (start, end) {
-          if (!mounted) return;
-          setState(() {
-            _start = start;
-            _end = end;
-          });
-        },
+        initialCalendarViewMode: widget.initialCalendarViewMode,
+        showViewModeToggle: widget.showViewModeToggle,
+        onMonthChanged: widget.onMonthChanged,
+        onCalendarPageAnchorChanged: widget.onCalendarPageAnchorChanged,
+        onViewModeChanged: widget.onViewModeChanged,
+        onDaySelected: widget.onDayPicked == null
+            ? null
+            : (date) {
+                if (!mounted) return;
+                final d = DateTime(date.year, date.month, date.day);
+                if (widget.useSingleDaySelection) {
+                  setState(() => _selectedDay = d);
+                  widget.onDayPicked?.call(d);
+                  return;
+                }
+                setState(() {
+                  _selectedDay = d;
+                  _rebuildNonce++;
+                });
+                widget.onDayPicked?.call(d);
+              },
+        onEventRangeChanged: widget.onRangeChanged == null
+            ? null
+            : (start, end) {
+                if (!mounted) return;
+                setState(() {
+                  _rangeStart = start;
+                  _rangeEnd = end;
+                });
+                widget.onRangeChanged?.call(start, end);
+              },
         builder: (context, selectedDate, calendar) {
+          final cs = Theme.of(context).colorScheme;
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  _rangeLabel(),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
+              if (_showRangeSummary)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.date_range_outlined,
+                          size: 18,
+                          color: cs.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _rangeLabel(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            _rangeDaysLabel(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
               Expanded(child: calendar),
             ],
           );
@@ -78,4 +264,3 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
     );
   }
 }
-

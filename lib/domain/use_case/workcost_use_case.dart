@@ -66,5 +66,12 @@ class WorkCostUseCase {
   Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid) {
     return _repository.getPlacesForWorkCost(hid);
   }
+
+  Future<List<int>> getSavedWorkDayHidsForPlaceDate({
+    required int pid,
+    required String dateKey,
+  }) {
+    return _repository.getSavedWorkDayHidsForPlaceDate(pid: pid, dateKey: dateKey);
+  }
 }
 

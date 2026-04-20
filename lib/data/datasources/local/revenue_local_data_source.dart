@@ -4,10 +4,11 @@ import 'package:w0001/data/model/revenue_model.dart';
 /// 수익(Revenue) 관련 로컬 데이터소스 (SQLite)
 abstract class RevenueLocalDataSource {
   Future<List<RevenueModel>> getAllRevenues(int placeId);
-  Future<void> insertRevenue({
+  Future<int> insertRevenue({
     required int pid,
     required int rprice,
     required String rname,
+    required String rdate,
   });
   Future<void> updateRevenue({
     required RevenueModel revenue,
@@ -27,12 +28,18 @@ class RevenueLocalDataSourceImpl implements RevenueLocalDataSource {
   }
 
   @override
-  Future<void> insertRevenue({
+  Future<int> insertRevenue({
     required int pid,
     required int rprice,
     required String rname,
+    required String rdate,
   }) {
-    return _dbHelper.insertRevenue(pid: pid, rprice: rprice, rname: rname);
+    return _dbHelper.insertRevenue(
+      pid: pid,
+      rprice: rprice,
+      rname: rname,
+      rdate: rdate,
+    );
   }
 
   @override

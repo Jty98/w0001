@@ -92,6 +92,24 @@ String getWeekDay(int index) {
   }
 }
 
+/// 편집 필드용: 천 단위 콤마만 (`원` 없음).
+String formatIntegerWithComma(int value) {
+  final isNegative = value < 0;
+  final numberString = value.abs().toString();
+  final length = numberString.length;
+  var formattedString = '';
+  for (var i = length - 1; i >= 0; i--) {
+    formattedString = numberString[i] + formattedString;
+    if ((length - i) % 3 == 0 && i != 0) {
+      formattedString = ',$formattedString';
+    }
+  }
+  if (isNegative) {
+    formattedString = '-$formattedString';
+  }
+  return formattedString;
+}
+
 String getPrice({required int price, bool? isTaxApply, bool? isContainWon}) {
   // 세금 적용 여부에 따라 가격 계산
   int price2 = (isTaxApply == null || isTaxApply == false)

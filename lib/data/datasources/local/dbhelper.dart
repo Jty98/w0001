@@ -10,9 +10,12 @@ import 'package:w0001/data/model/revenue_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
+import 'package:w0001/data/model/monthly_summary_model.dart';
+import 'package:w0001/data/model/dashboard_models.dart';
+import 'package:w0001/data/model/schedule_memo_model.dart';
 
 class DbHelper {
-  final int curruntVersion = 4;
+  final int curruntVersion = 12;
   Database? db;
 
   Future<Database> initializeDB() async {
@@ -27,6 +30,7 @@ class DbHelper {
           hnumber TEXT,
           hmemo TEXT,
           hdailyWage INTEGER DEFAULT 0,
+          hdefaultRole TEXT DEFAULT '',
           hstar INTEGER,
           hdelete INTEGER DEFAULT 0
         )''');
@@ -38,7 +42,9 @@ class DbHelper {
           pstart TEXT,
           pend TEXT,
           pcomplete INTEGER DEFAULT 0,
-          prevenue INTEGER DEFAULT 0
+          prevenue INTEGER DEFAULT 0,
+          pcontractTotal INTEGER DEFAULT 0,
+          pcontractDate TEXT DEFAULT ''
         )''');
 
         // WorkCost 테이블 생성
@@ -49,6 +55,7 @@ class DbHelper {
           wprice INTEGER,
           wpid INTEGER,
           wcomplete INTEGER DEFAULT 0,
+          wrole TEXT DEFAULT '',
           FOREIGN KEY (whid) REFERENCES Human(hid),
           FOREIGN KEY (wpid) REFERENCES Place(pid)
         )''');
@@ -63,6 +70,7 @@ class DbHelper {
           workDate TEXT,
           dailyWage INTEGER DEFAULT 0,
           paid INTEGER DEFAULT 0,
+          workRole TEXT DEFAULT '',
           FOREIGN KEY (hid) REFERENCES Human(hid),
           FOREIGN KEY (pid) REFERENCES Place(pid)
         )''');
@@ -83,8 +91,49 @@ class DbHelper {
           rname TEXT,
           rorder INTEGER,
           rprice INTEGER,
+          rdate TEXT DEFAULT '',
           FOREIGN KEY (rpid) REFERENCES Place(pid)
         )''');
+
+        await database.execute('''CREATE TABLE IF NOT EXISTS PlaceCollection (
+          cid INTEGER PRIMARY KEY AUTOINCREMENT,
+          pid INTEGER NOT NULL,
+          cdate TEXT NOT NULL,
+          ckind TEXT NOT NULL,
+          camount INTEGER NOT NULL DEFAULT 0,
+          cnote TEXT DEFAULT '',
+          revenueId INTEGER,
+          FOREIGN KEY (pid) REFERENCES Place(pid),
+          FOREIGN KEY (revenueId) REFERENCES PlaceRevenue(rid)
+        )''');
+        await database.execute(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_placecollection_revenueId ON PlaceCollection(revenueId) WHERE revenueId IS NOT NULL',
+        );
+
+        await database.execute('''CREATE TABLE IF NOT EXISTS PlaceWorkerRecent (
+          pid INTEGER NOT NULL,
+          hid INTEGER NOT NULL,
+          lastUsedMs INTEGER NOT NULL,
+          PRIMARY KEY (pid, hid),
+          FOREIGN KEY (hid) REFERENCES Human(hid),
+          FOREIGN KEY (pid) REFERENCES Place(pid)
+        )''');
+
+        await database.execute('''CREATE TABLE IF NOT EXISTS ScheduleMemo (
+          sid INTEGER PRIMARY KEY AUTOINCREMENT,
+          taskDate TEXT NOT NULL,
+          taskTime TEXT NOT NULL DEFAULT '',
+          title TEXT NOT NULL,
+          memo TEXT NOT NULL DEFAULT '',
+          done INTEGER NOT NULL DEFAULT 0,
+          alarmEnabled INTEGER NOT NULL DEFAULT 0,
+          alarmOffsetMinutes INTEGER NOT NULL DEFAULT 0,
+          sortOrder INTEGER NOT NULL DEFAULT 0,
+          createdAtMs INTEGER NOT NULL DEFAULT 0
+        )''');
+        await database.execute(
+          'CREATE INDEX IF NOT EXISTS idx_schedulememo_taskDate ON ScheduleMemo(taskDate)',
+        );
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 3) {
@@ -97,6 +146,7 @@ class DbHelper {
             rname TEXT,
             rorder INTEGER,
             rprice INTEGER,
+            rdate TEXT DEFAULT '',
             FOREIGN KEY (rpid) REFERENCES Place(pid)
           )''');
         }
@@ -130,6 +180,154 @@ class DbHelper {
             FROM WorkCost
             WHERE whid IS NOT NULL AND wpid IS NOT NULL
           ''');
+        }
+
+        if (oldVersion < 5) {
+          await database.execute(
+              "ALTER TABLE WorkCost ADD COLUMN wrole TEXT DEFAULT ''");
+          await database.execute(
+              "ALTER TABLE PlaceWorkDay ADD COLUMN workRole TEXT DEFAULT ''");
+        }
+
+        if (oldVersion < 6) {
+          await database.execute(
+              "ALTER TABLE Human ADD COLUMN hdefaultRole TEXT DEFAULT ''");
+        }
+
+        if (oldVersion < 7) {
+          await database.execute('''CREATE TABLE IF NOT EXISTS PlaceWorkerRecent (
+            pid INTEGER NOT NULL,
+            hid INTEGER NOT NULL,
+            lastUsedMs INTEGER NOT NULL,
+            PRIMARY KEY (pid, hid),
+            FOREIGN KEY (hid) REFERENCES Human(hid),
+            FOREIGN KEY (pid) REFERENCES Place(pid)
+          )''');
+          await database.execute('''
+            INSERT OR IGNORE INTO PlaceWorkerRecent (pid, hid, lastUsedMs)
+            SELECT DISTINCT wpid, whid, CAST(strftime('%s', 'now') AS INTEGER) * 1000
+            FROM WorkCost
+            WHERE whid IS NOT NULL AND wpid IS NOT NULL
+          ''');
+        }
+
+        if (oldVersion < 8) {
+          await database.execute(
+            'ALTER TABLE Place ADD COLUMN pcontractTotal INTEGER DEFAULT 0',
+          );
+        }
+
+        if (oldVersion < 9) {
+          await database.execute(
+            "ALTER TABLE PlaceRevenue ADD COLUMN rdate TEXT DEFAULT ''",
+          );
+          // 추가수익에 날짜가 없던 기존 데이터는 현장 시작일(없으면 오늘)로 귀속시킨다.
+          await database.execute('''
+            UPDATE PlaceRevenue
+            SET rdate = COALESCE(
+              (SELECT SUBSTR(pstart, 1, 10) FROM Place WHERE Place.pid = PlaceRevenue.rpid),
+              SUBSTR(strftime('%Y-%m-%d', 'now'), 1, 10)
+            )
+            WHERE (rdate IS NULL OR rdate = '')
+          ''');
+        }
+
+        if (oldVersion < 10) {
+          await database.execute(
+            "ALTER TABLE Place ADD COLUMN pcontractDate TEXT DEFAULT ''",
+          );
+          await database.execute('''
+            UPDATE Place
+            SET pcontractDate = SUBSTR(pstart, 1, 10)
+            WHERE (pcontractDate IS NULL OR TRIM(pcontractDate) = '')
+              AND LENGTH(pstart) >= 10
+          ''');
+
+          await database.execute('''CREATE TABLE IF NOT EXISTS PlaceCollection (
+            cid INTEGER PRIMARY KEY AUTOINCREMENT,
+            pid INTEGER NOT NULL,
+            cdate TEXT NOT NULL,
+            ckind TEXT NOT NULL,
+            camount INTEGER NOT NULL DEFAULT 0,
+            cnote TEXT DEFAULT '',
+            revenueId INTEGER,
+            FOREIGN KEY (pid) REFERENCES Place(pid),
+            FOREIGN KEY (revenueId) REFERENCES PlaceRevenue(rid)
+          )''');
+          await database.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_placecollection_revenueId ON PlaceCollection(revenueId) WHERE revenueId IS NOT NULL',
+          );
+
+          await database.execute('''
+            INSERT INTO PlaceCollection (pid, cdate, ckind, camount, cnote, revenueId)
+            SELECT
+              r.rpid,
+              CASE
+                WHEN LENGTH(TRIM(COALESCE(r.rdate, ''))) >= 10 THEN SUBSTR(r.rdate, 1, 10)
+                ELSE COALESCE(
+                  (SELECT SUBSTR(pstart, 1, 10) FROM Place p WHERE p.pid = r.rpid),
+                  SUBSTR(strftime('%Y-%m-%d', 'now'), 1, 10)
+                )
+              END,
+              CASE WHEN LENGTH(TRIM(COALESCE(r.rname, ''))) > 0 THEN TRIM(r.rname) ELSE '추가수익' END,
+              r.rprice,
+              '',
+              r.rid
+            FROM PlaceRevenue r
+          ''');
+
+          await database.execute('''
+            INSERT INTO PlaceCollection (pid, cdate, ckind, camount, cnote, revenueId)
+            SELECT
+              p.pid,
+              CASE
+                WHEN LENGTH(p.pstart) >= 10 THEN SUBSTR(p.pstart, 1, 10)
+                ELSE SUBSTR(strftime('%Y-%m-%d', 'now'), 1, 10)
+              END,
+              '선수금',
+              p.prevenue,
+              '이관',
+              NULL
+            FROM Place p
+            WHERE p.prevenue > 0 AND p.pcomplete != 2
+          ''');
+        }
+
+        if (oldVersion < 11) {
+          await database.execute('''CREATE TABLE IF NOT EXISTS ScheduleMemo (
+            sid INTEGER PRIMARY KEY AUTOINCREMENT,
+            taskDate TEXT NOT NULL,
+            taskTime TEXT NOT NULL DEFAULT '',
+            title TEXT NOT NULL,
+            memo TEXT NOT NULL DEFAULT '',
+            done INTEGER NOT NULL DEFAULT 0,
+            alarmEnabled INTEGER NOT NULL DEFAULT 0,
+            alarmOffsetMinutes INTEGER NOT NULL DEFAULT 0,
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            createdAtMs INTEGER NOT NULL DEFAULT 0
+          )''');
+          await database.execute(
+            'CREATE INDEX IF NOT EXISTS idx_schedulememo_taskDate ON ScheduleMemo(taskDate)',
+          );
+        }
+
+        if (oldVersion < 12) {
+          if (!await _tableHasColumn(database, 'ScheduleMemo', 'taskTime')) {
+            await database.execute(
+              "ALTER TABLE ScheduleMemo ADD COLUMN taskTime TEXT NOT NULL DEFAULT ''",
+            );
+          }
+          if (!await _tableHasColumn(database, 'ScheduleMemo', 'alarmEnabled')) {
+            await database.execute(
+              'ALTER TABLE ScheduleMemo ADD COLUMN alarmEnabled INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (!await _tableHasColumn(
+              database, 'ScheduleMemo', 'alarmOffsetMinutes')) {
+            await database.execute(
+              'ALTER TABLE ScheduleMemo ADD COLUMN alarmOffsetMinutes INTEGER NOT NULL DEFAULT 0',
+            );
+          }
         }
       },
     );
@@ -322,13 +520,13 @@ FROM
     final Database db = await initializeDB();
     String query = '''
     SELECT p.pname AS pname,
-          SUBSTR(pwd.workDate, 1, 10) AS dateString
-    FROM PlaceWorkDay pwd
-    JOIN Human h ON pwd.hid = h.hid
-    JOIN Place p ON pwd.pid = p.pid
+          SUBSTR(w.wdate, 1, 10) AS dateString
+    FROM WorkCost w
+    LEFT JOIN Human h ON w.whid = h.hid
+    JOIN Place p ON w.wpid = p.pid
     WHERE p.pcomplete != 2
-    AND h.hdelete = 0
-    UNION
+    AND (w.whid IS NULL OR h.hdelete = 0)
+    UNION ALL
     SELECT p.pname AS pname,
           SUBSTRING(m.mdate, 1, 10) AS dateString
     FROM materialcost m
@@ -345,7 +543,13 @@ FROM
       final dateTime = DateTime.parse(dateString);
       final placeName = row['pname'] as String;
 
-      events.putIfAbsent(dateTime, () => []).add(placeName);
+      final list = events.putIfAbsent(dateTime, () => []);
+      // 캘린더의 점(마커)은 "해당 날짜에 등장하는 현장 수"로 보는 게 UX상 자연스러움.
+      // 같은 현장에서 그날 지출이 여러 건이어도 점이 여러 개 찍히면 혼란스러우므로,
+      // events(마커용)는 날짜별 현장명을 unique로 유지한다.
+      if (!list.contains(placeName)) {
+        list.add(placeName);
+      }
     }
 
     return events;
@@ -436,15 +640,15 @@ FROM
             p.pname AS pname,
             p.pcomplete AS pcomplete,
             h.hname AS name,
-            pwd.workDate AS date,
-            pwd.dailyWage AS price,
+            w.wdate AS date,
+            w.wprice AS price,
             'w' AS category,
-            pwd.pwdid AS id,
-            pwd.paid AS wcomplete
-        FROM PlaceWorkDay pwd
-        JOIN Human h ON pwd.hid = h.hid
-        JOIN Place p ON pwd.pid = p.pid
-        WHERE pwd.workDate = '$dateKey' 
+            w.wid AS id,
+            w.wcomplete AS wcomplete
+        FROM WorkCost w
+        JOIN Human h ON w.whid = h.hid
+        JOIN Place p ON w.wpid = p.pid
+        WHERE SUBSTR(w.wdate, 1, 10) = '$dateKey' 
         AND p.pcomplete != 2
         AND h.hdelete = 0
         UNION ALL
@@ -456,7 +660,7 @@ FROM
               m.mprice AS price,
               m.mcategory AS category,
               m.mid AS id,
-              -1 AS mcomplete
+              -1 AS wcomplete
         FROM materialcost m
         JOIN Place p ON m.mpid = p.pid
         WHERE SUBSTRING(m.mdate, 1, 10) = '$dateKey'
@@ -474,15 +678,15 @@ FROM
         SELECT p.pname AS pname,
               p.pcomplete AS pcomplete,
               h.hname AS name,
-              pwd.workDate AS date,
-              pwd.dailyWage AS price,
+              w.wdate AS date,
+              w.wprice AS price,
               'w' AS category,
-              pwd.pwdid AS id,
-              pwd.paid AS wcomplete
-        FROM PlaceWorkDay pwd
-        JOIN Human h ON pwd.hid = h.hid
-        JOIN Place p ON pwd.pid = p.pid
-        WHERE pwd.pid = $pid
+              w.wid AS id,
+              w.wcomplete AS wcomplete
+        FROM WorkCost w
+        JOIN Human h ON w.whid = h.hid
+        JOIN Place p ON w.wpid = p.pid
+        WHERE w.wpid = $pid
         AND h.hdelete = 0
         UNION ALL
         SELECT p.pname AS pname,
@@ -492,7 +696,7 @@ FROM
               m.mprice AS price,
               m.mcategory AS category,
               m.mid AS id,
-              -1 AS mcomplete
+              -1 AS wcomplete
         FROM materialcost m
         JOIN Place p ON m.mpid = p.pid
         WHERE m.mpid = $pid
@@ -511,15 +715,64 @@ FROM
     return queryResults.map((e) => HumanModel.fromMap(e)).toList();
   }
 
+  /// 현장별로 투입했던 작업자(hid)를 기록한다.
+  /// UX상 "칩 순서가 추가할 때마다 바뀌는 것"을 막기 위해,
+  /// 이미 존재하는 (pid, hid)는 갱신하지 않는다.
+  Future<void> upsertPlaceWorkerRecent(int pid, int hid) async {
+    final Database db = await initializeDB();
+    final ms = DateTime.now().millisecondsSinceEpoch;
+    await db.rawInsert(
+      '''INSERT OR IGNORE INTO PlaceWorkerRecent(pid, hid, lastUsedMs) VALUES (?, ?, ?)''',
+      [pid, hid, ms],
+    );
+  }
+
+  /// 해당 현장에서 일했던 인원을 "고정 순서(이름순)"로 반환한다.
+  Future<List<int>> getPlaceWorkerRecentHids(int pid) async {
+    final Database db = await initializeDB();
+    final rows = await db.rawQuery(
+      '''
+      SELECT r.hid
+      FROM PlaceWorkerRecent r
+      JOIN Human h ON r.hid = h.hid
+      WHERE r.pid = ? AND h.hdelete = 0
+      ORDER BY h.hname
+      ''',
+      [pid],
+    );
+    return rows.map((e) => e['hid'] as int).toList();
+  }
+
+  Future<void> deletePlaceWorkerRecent(int pid, int hid) async {
+    final Database db = await initializeDB();
+    await db.rawDelete(
+      'DELETE FROM PlaceWorkerRecent WHERE pid = ? AND hid = ?',
+      [pid, hid],
+    );
+  }
+
+  Future<List<int>> getSavedWorkDayHidsForPlaceDate({
+    required int pid,
+    required String dateKey, // yyyy-MM-dd
+  }) async {
+    final Database db = await initializeDB();
+    final rows = await db.rawQuery(
+      'SELECT hid FROM PlaceWorkDay WHERE pid = ? AND workDate = ?',
+      [pid, dateKey],
+    );
+    return rows.map((e) => e['hid'] as int).toList();
+  }
+
   Future<void> updateWorker(HumanModel humanModel) async {
     final Database db = await initializeDB();
     await db.rawUpdate(
-        "update Human set hname = ?, hnumber = ?, hmemo = ?, hdailyWage = ? where hid = ?",
+        "update Human set hname = ?, hnumber = ?, hmemo = ?, hdailyWage = ?, hdefaultRole = ? where hid = ?",
         [
       humanModel.hname,
       humanModel.hnumber,
       humanModel.hmemo,
       humanModel.hdailyWage,
+      humanModel.hdefaultRole,
       humanModel.hid,
     ]);
   }
@@ -547,16 +800,24 @@ FROM
       newName = '${place.pname}(${count++})';
     }
 
-    // 새로운 이름으로 Place 추가 한양아파트(1)
-    await db.rawInsert(
-      'INSERT INTO Place(pname, pstart, pend, pcomplete, prevenue) VALUES (?,?,?,?,?)',
-      [
-        newName,
-        place.pstart,
-        place.pend,
-        place.pcomplete,
-        place.prevenue,
-      ],
+    final contractDate = _contractDateKey(place.pcontractDate, place.pstart);
+    final pid = await db.insert(
+      'Place',
+      {
+        'pname': newName,
+        'pstart': place.pstart,
+        'pend': place.pend,
+        'pcomplete': place.pcomplete,
+        'prevenue': place.prevenue,
+        'pcontractTotal': place.pcontractTotal,
+        'pcontractDate': contractDate,
+      },
+    );
+    await syncAdvancePaymentCollection(
+      pid: pid,
+      prevenue: place.prevenue,
+      pstart: place.pstart,
+      pcontractDate: contractDate,
     );
   }
 
@@ -570,16 +831,17 @@ FROM
     );
   }
 
-  // 사람 추가
-  Future<void> addWorker(HumanModel worker) async {
+  // 사람 추가 (삽입된 hid 반환)
+  Future<int> addWorker(HumanModel worker) async {
     final Database db = await initializeDB();
-    await db.rawInsert(
-      'INSERT INTO Human(hname, hnumber, hmemo, hdailyWage, hstar) VALUES (?,?,?,?,?)',
+    return db.rawInsert(
+      'INSERT INTO Human(hname, hnumber, hmemo, hdailyWage, hdefaultRole, hstar) VALUES (?,?,?,?,?,?)',
       [
         worker.hname,
         worker.hnumber, // null 허용
         worker.hmemo,
         worker.hdailyWage,
+        worker.hdefaultRole,
         worker.hstar,
       ],
     );
@@ -613,19 +875,20 @@ FROM
     try {
       for (var wCost in wCostList) {
         await db.rawInsert(
-          'INSERT INTO WorkCost(wpid, whid, wdate, wprice, wcomplete) VALUES (?,?,?,?,?)',
+          'INSERT INTO WorkCost(wpid, whid, wdate, wprice, wcomplete, wrole) VALUES (?,?,?,?,?,?)',
           [
             wCost.wpid,
             wCost.whid, // null 허용
             wCost.wdate,
             wCost.wprice,
-            wCost.wcomplete
+            wCost.wcomplete,
+            wCost.wrole,
           ],
         );
 
         // 신규 원천 테이블(PlaceWorkDay)에도 함께 저장 (호환 유지)
         await db.rawInsert(
-          'INSERT INTO PlaceWorkDay(pid, hid, workDate, dailyWage, paid) VALUES (?,?,?,?,?)',
+          'INSERT INTO PlaceWorkDay(pid, hid, workDate, dailyWage, paid, workRole) VALUES (?,?,?,?,?,?)',
           [
             wCost.wpid,
             wCost.whid,
@@ -633,6 +896,7 @@ FROM
             wCost.wdate.length >= 10 ? wCost.wdate.substring(0, 10) : wCost.wdate,
             wCost.wprice,
             wCost.wcomplete,
+            wCost.wrole,
           ],
         );
       }
@@ -654,14 +918,28 @@ FROM
   // 현장 이름 변경
   Future<void> updatePlace(PlaceModel placeModel) async {
     final Database db = await initializeDB();
+    final contractDate =
+        _contractDateKey(placeModel.pcontractDate, placeModel.pstart);
     await db.rawUpdate(
-      "UPDATE Place SET pname = ?, prevenue = ? WHERE pid = ?",
+      "UPDATE Place SET pname = ?, prevenue = ?, pcontractTotal = ?, pstart = ?, pend = ?, pcontractDate = ? WHERE pid = ?",
       [
         placeModel.pname,
         placeModel.prevenue,
+        placeModel.pcontractTotal,
+        placeModel.pstart,
+        placeModel.pend,
+        contractDate,
         placeModel.pid,
       ],
     );
+    if (placeModel.pid != null) {
+      await syncAdvancePaymentCollection(
+        pid: placeModel.pid!,
+        prevenue: placeModel.prevenue,
+        pstart: placeModel.pstart,
+        pcontractDate: contractDate,
+      );
+    }
   }
 
   // 인건비 탭에서 wid를 List로 받아와 wcomplete를 모두 1로 업데이트
@@ -863,18 +1141,19 @@ UNION
         h.hstar as hstar,
         p.pname as 현장,
         h.hnumber as 주민등록번호,
-        pwd.workDate as 날짜,
+        w.wdate as 날짜,
         p.pcomplete as pcomplete,
-        pwd.pwdid as wid,
-        pwd.dailyWage as 금액,
-        pwd.paid as wcomplete
-        FROM PlaceWorkDay pwd
-        JOIN Human h ON pwd.hid = h.hid
-        JOIN Place p ON pwd.pid = p.pid
-        WHERE pwd.workDate >= '$startKey' AND pwd.workDate < '$endNextKey'
+        w.wid as wid,
+        w.wprice as 금액,
+        w.wcomplete as wcomplete
+        FROM WorkCost w
+        JOIN Human h ON w.whid = h.hid
+        JOIN Place p ON w.wpid = p.pid
+        WHERE SUBSTR(w.wdate, 1, 10) >= '$startKey'
+          AND SUBSTR(w.wdate, 1, 10) < '$endNextKey'
         AND h.hdelete = 0
         AND p.pcomplete != 2
-        ORDER BY hstar DESC, 이름, pwd.workDate;
+        ORDER BY hstar DESC, 이름, SUBSTR(w.wdate, 1, 10);
                 ''';
     final List<Map<String, Object?>> queryResults = await db.rawQuery(query);
     return queryResults.map((e) => TotalWorkCostModel.fromMap(e)).toList();
@@ -883,7 +1162,7 @@ UNION
   Future<List<RevenueModel>> getAllRevenues(int placeId) async {
     final Database db = await initializeDB();
     final List<Map<String, Object?>> queryResults = await db.rawQuery(
-      'SELECT * FROM PlaceRevenue WHERE rpid = ? ORDER BY rorder',
+      'SELECT * FROM PlaceRevenue WHERE rpid = ? ORDER BY rdate, rorder',
       [placeId],
     );
     return queryResults.map((e) => RevenueModel.fromMap(e)).toList();
@@ -891,6 +1170,11 @@ UNION
 
   Future<void> deleteRevenue(int revenueId, int placeId) async {
     final db = await initializeDB();
+    await db.delete(
+      'PlaceCollection',
+      where: 'revenueId = ?',
+      whereArgs: [revenueId],
+    );
     await db.delete(
       'PlaceRevenue',
       where: 'rid = ?',
@@ -918,26 +1202,694 @@ UNION
     }
   }
 
-  Future<void> insertRevenue(
-      {required int pid, required int rprice, required String rname}) async {
+  Future<int> insertRevenue({
+    required int pid,
+    required int rprice,
+    required String rname,
+    required String rdate,
+  }) async {
     final db = await initializeDB();
-    await db.insert(
+    final rid = await db.insert(
       'PlaceRevenue',
-      {'rpid': pid, 'rprice': rprice, 'rname': rname},
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      {'rpid': pid, 'rprice': rprice, 'rname': rname, 'rdate': rdate},
     );
+    final dateKey = rdate.length >= 10 ? rdate.substring(0, 10) : rdate;
+    final kind = rname.trim().isEmpty ? '추가수익' : rname.trim();
+    await db.insert('PlaceCollection', {
+      'pid': pid,
+      'cdate': dateKey,
+      'ckind': kind,
+      'camount': rprice,
+      'cnote': '',
+      'revenueId': rid,
+    });
     await _updateRevenueOrder(pid);
+    return rid;
   }
 
-  Future<void> updateRevenue(
-      {required RevenueModel revenue, required int placeId}) async {
+  Future<void> updateRevenue({
+    required RevenueModel revenue,
+    required int placeId,
+  }) async {
     final db = await initializeDB();
     await db.update(
       'PlaceRevenue',
-      {'rprice': revenue.rprice, 'rname': revenue.rname},
+      {'rprice': revenue.rprice, 'rname': revenue.rname, 'rdate': revenue.rdate},
       where: 'rid = ?',
       whereArgs: [revenue.rid],
     );
+    final dateKey = revenue.rdate.length >= 10
+        ? revenue.rdate.substring(0, 10)
+        : revenue.rdate;
+    final kind =
+        revenue.rname.trim().isEmpty ? '추가수익' : revenue.rname.trim();
+    await db.update(
+      'PlaceCollection',
+      {
+        'camount': revenue.rprice,
+        'cdate': dateKey,
+        'ckind': kind,
+      },
+      where: 'revenueId = ?',
+      whereArgs: [revenue.rid],
+    );
     await _updateRevenueOrder(placeId);
+  }
+
+  String _contractDateKey(String pcontractDate, String pstart) {
+    final t = pcontractDate.trim();
+    if (t.length >= 10) return t.substring(0, 10);
+    if (pstart.length >= 10) return pstart.substring(0, 10);
+    return DateTime.now().toIso8601String().substring(0, 10);
+  }
+
+  /// 선수금(Place.prevenue) ↔ `PlaceCollection` 동기화. 추가수익(rid) 행은 건드리지 않습니다.
+  Future<void> syncAdvancePaymentCollection({
+    required int pid,
+    required int prevenue,
+    required String pstart,
+    required String pcontractDate,
+  }) async {
+    final db = await initializeDB();
+    await db.delete(
+      'PlaceCollection',
+      where: 'pid = ? AND revenueId IS NULL AND ckind = ?',
+      whereArgs: [pid, '선수금'],
+    );
+    if (prevenue <= 0) return;
+    final dk = _contractDateKey(pcontractDate, pstart);
+    await db.insert('PlaceCollection', {
+      'pid': pid,
+      'cdate': dk,
+      'ckind': '선수금',
+      'camount': prevenue,
+      'cnote': '',
+      'revenueId': null,
+    });
+  }
+
+  /// KPI: 특정 연·월 (기본적으로 **이번 달**에 사용).
+  Future<DashboardKpiSnapshot> getDashboardKpiForMonth(int year, int month) async {
+    final Database db = await initializeDB();
+    final ym =
+        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}';
+
+    final contractRow = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(p.pcontractTotal), 0) AS s
+      FROM Place p
+      WHERE p.pcomplete != 2
+        AND LENGTH(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart)) >= 7
+        AND SUBSTR(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart), 1, 7) = ?
+      ''',
+      [ym],
+    );
+    final colRow = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(c.camount), 0) AS s
+      FROM PlaceCollection c
+      JOIN Place p ON p.pid = c.pid AND p.pcomplete != 2
+      WHERE LENGTH(c.cdate) >= 7 AND SUBSTR(c.cdate, 1, 7) = ?
+      ''',
+      [ym],
+    );
+    final costRow = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(price), 0) AS s FROM (
+        SELECT pwd.dailyWage AS price
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        JOIN Place pl ON pl.pid = pwd.pid AND pl.pcomplete != 2
+        WHERE SUBSTR(pwd.workDate, 1, 7) = ?
+        UNION ALL
+        SELECT m.mprice AS price
+        FROM MaterialCost m
+        JOIN Place pl ON pl.pid = m.mpid AND pl.pcomplete != 2
+        WHERE SUBSTR(m.mdate, 1, 7) = ?
+      )
+      ''',
+      [ym, ym],
+    );
+
+    final inProg = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM Place WHERE pcomplete = 0',
+    );
+    final done = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM Place WHERE pcomplete = 1',
+    );
+    final outRow = await db.rawQuery('''
+      SELECT COALESCE(SUM(
+        CASE
+          WHEN (p.pcontractTotal - COALESCE(t.coll, 0)) > 0
+          THEN (p.pcontractTotal - COALESCE(t.coll, 0))
+          ELSE 0
+        END
+      ), 0) AS s
+      FROM Place p
+      LEFT JOIN (
+        SELECT pid, SUM(camount) AS coll
+        FROM PlaceCollection
+        GROUP BY pid
+      ) t ON t.pid = p.pid
+      WHERE p.pcomplete != 2
+    ''');
+
+    final doneMarginRow = await db.rawQuery(
+      '''
+      SELECT
+        COUNT(*) AS cnt,
+        COALESCE(SUM(p.pcontractTotal), 0) AS sum_c,
+        COALESCE(SUM(
+          p.pcontractTotal - (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
+        ), 0) AS sum_p
+      FROM Place p
+      LEFT JOIN (
+        SELECT pwd.pid AS pid, SUM(pwd.dailyWage) AS wcst
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        GROUP BY pwd.pid
+      ) wc ON wc.pid = p.pid
+      LEFT JOIN (
+        SELECT mpid AS pid, SUM(mprice) AS mct
+        FROM MaterialCost
+        GROUP BY mpid
+      ) mc ON mc.pid = p.pid
+      WHERE p.pcomplete = 1
+        AND p.pcontractTotal > 0
+        AND p.pend IS NOT NULL
+        AND p.pend != '0'
+        AND LENGTH(p.pend) >= 7
+        AND SUBSTR(p.pend, 1, 7) = ?
+      ''',
+      [ym],
+    );
+    final doneCnt = (doneMarginRow.first['cnt'] as int?) ?? 0;
+    final sumC = (doneMarginRow.first['sum_c'] as int?) ?? 0;
+    final sumP = (doneMarginRow.first['sum_p'] as int?) ?? 0;
+    final doneMarginPct =
+        doneCnt > 0 && sumC > 0 ? (sumP / sumC) * 100.0 : 0.0;
+
+    return DashboardKpiSnapshot(
+      year: year,
+      month: month,
+      monthlyContract: (contractRow.first['s'] as int?) ?? 0,
+      monthlyCollection: (colRow.first['s'] as int?) ?? 0,
+      monthlyCost: (costRow.first['s'] as int?) ?? 0,
+      inProgressPlaces: (inProg.first['c'] as int?) ?? 0,
+      completedPlaces: (done.first['c'] as int?) ?? 0,
+      outstandingReceivable: (outRow.first['s'] as int?) ?? 0,
+      completedSitesInKpiMonth: doneCnt,
+      completedContractMarginPct: doneMarginPct,
+      completedContractProfitTotal: sumP,
+    );
+  }
+
+  /// 연도별 공사금액·수금·원가·현장 건수 (`fromYear`~`toYear` 포함).
+  Future<List<YearlyDashboardPoint>> getYearlyDashboardPoints({
+    required int fromYear,
+    required int toYear,
+  }) async {
+    final Database db = await initializeDB();
+    final fromKey = fromYear.toString().padLeft(4, '0');
+    final toKey = toYear.toString().padLeft(4, '0');
+
+    Future<Map<String, int>> qMap(String sql) async {
+      final rows = await db.rawQuery(sql, [fromKey, toKey]);
+      final m = <String, int>{};
+      for (final r in rows) {
+        final y = r['y'] as String?;
+        if (y == null) continue;
+        m[y] = (r['t'] as int?) ?? 0;
+      }
+      return m;
+    }
+
+    final contractBy = await qMap('''
+      SELECT SUBSTR(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart), 1, 4) AS y,
+             SUM(p.pcontractTotal) AS t
+      FROM Place p
+      WHERE p.pcomplete != 2
+        AND LENGTH(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart)) >= 4
+      GROUP BY y
+      HAVING y >= ? AND y <= ?
+    ''');
+
+    final collBy = await qMap('''
+      SELECT SUBSTR(c.cdate, 1, 4) AS y, SUM(c.camount) AS t
+      FROM PlaceCollection c
+      JOIN Place p ON p.pid = c.pid AND p.pcomplete != 2
+      WHERE LENGTH(c.cdate) >= 4
+      GROUP BY y
+      HAVING y >= ? AND y <= ?
+    ''');
+
+    final costRows = await db.rawQuery(
+      '''
+      SELECT y, SUM(price) AS t
+      FROM (
+        SELECT SUBSTR(pwd.workDate, 1, 4) AS y, pwd.dailyWage AS price
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        JOIN Place pl ON pl.pid = pwd.pid AND pl.pcomplete != 2
+        WHERE LENGTH(pwd.workDate) >= 4
+        UNION ALL
+        SELECT SUBSTR(m.mdate, 1, 4) AS y, m.mprice AS price
+        FROM MaterialCost m
+        JOIN Place pl ON pl.pid = m.mpid AND pl.pcomplete != 2
+        WHERE LENGTH(m.mdate) >= 4
+      )
+      GROUP BY y
+      HAVING y >= ? AND y <= ?
+      ''',
+      [fromKey, toKey],
+    );
+    final costBy = <String, int>{};
+    for (final r in costRows) {
+      final y = r['y'] as String?;
+      if (y == null) continue;
+      costBy[y] = (r['t'] as int?) ?? 0;
+    }
+
+    final newRows = await db.rawQuery(
+      '''
+      SELECT SUBSTR(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart), 1, 4) AS y,
+             COUNT(*) AS t
+      FROM Place p
+      WHERE p.pcomplete != 2
+        AND LENGTH(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart)) >= 4
+      GROUP BY y
+      HAVING y >= ? AND y <= ?
+      ''',
+      [fromKey, toKey],
+    );
+    final newBy = <String, int>{};
+    for (final r in newRows) {
+      final y = r['y'] as String?;
+      if (y == null) continue;
+      newBy[y] = (r['t'] as int?) ?? 0;
+    }
+
+    final doneRows = await db.rawQuery(
+      '''
+      SELECT SUBSTR(p.pend, 1, 4) AS y, COUNT(*) AS t
+      FROM Place p
+      WHERE p.pcomplete = 1
+        AND p.pend IS NOT NULL
+        AND p.pend != '0'
+        AND LENGTH(p.pend) >= 4
+      GROUP BY y
+      HAVING y >= ? AND y <= ?
+      ''',
+      [fromKey, toKey],
+    );
+    final doneBy = <String, int>{};
+    for (final r in doneRows) {
+      final y = r['y'] as String?;
+      if (y == null) continue;
+      doneBy[y] = (r['t'] as int?) ?? 0;
+    }
+
+    final marginRows = await db.rawQuery(
+      '''
+      SELECT
+        SUBSTR(p.pend, 1, 4) AS y,
+        SUM(p.pcontractTotal) AS sum_c,
+        SUM(
+          p.pcontractTotal - (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
+        ) AS sum_p
+      FROM Place p
+      LEFT JOIN (
+        SELECT pwd.pid AS pid, SUM(pwd.dailyWage) AS wcst
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        GROUP BY pwd.pid
+      ) wc ON wc.pid = p.pid
+      LEFT JOIN (
+        SELECT mpid AS pid, SUM(mprice) AS mct
+        FROM MaterialCost
+        GROUP BY mpid
+      ) mc ON mc.pid = p.pid
+      WHERE p.pcomplete = 1
+        AND p.pcontractTotal > 0
+        AND p.pend IS NOT NULL
+        AND p.pend != '0'
+        AND LENGTH(p.pend) >= 4
+      GROUP BY SUBSTR(p.pend, 1, 4)
+      HAVING y >= ? AND y <= ?
+      ''',
+      [fromKey, toKey],
+    );
+    final marginPctByYear = <String, double>{};
+    final completedProfitByYear = <String, int>{};
+    for (final r in marginRows) {
+      final y = r['y'] as String?;
+      if (y == null) continue;
+      final sc = (r['sum_c'] as int?) ?? 0;
+      final sp = (r['sum_p'] as int?) ?? 0;
+      completedProfitByYear[y] = sp;
+      marginPctByYear[y] = sc > 0 ? (sp / sc) * 100.0 : 0.0;
+    }
+
+    final out = <YearlyDashboardPoint>[];
+    for (int y = fromYear; y <= toYear; y++) {
+      final key = y.toString().padLeft(4, '0');
+      out.add(
+        YearlyDashboardPoint(
+          year: y,
+          contractTotal: contractBy[key] ?? 0,
+          collectionTotal: collBy[key] ?? 0,
+          costTotal: costBy[key] ?? 0,
+          newProjectCount: newBy[key] ?? 0,
+          completedProjectCount: doneBy[key] ?? 0,
+          completedContractMarginPct: marginPctByYear[key] ?? 0.0,
+          completedProfitTotal: completedProfitByYear[key] ?? 0,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// 현장별 공사금액·수금·원가·미수금 (진행/완료 현장, 삭제 제외).
+  Future<List<DashboardPlaceRow>> getDashboardPlaceRows() async {
+    final Database db = await initializeDB();
+    final rows = await db.rawQuery('''
+      SELECT
+        p.pid AS pid,
+        p.pname AS pname,
+        p.pcontractTotal AS contractTotal,
+        COALESCE(col.coll, 0) AS collected,
+        COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0) AS costTotal,
+        CASE
+          WHEN (p.pcontractTotal - COALESCE(col.coll, 0)) > 0
+          THEN (p.pcontractTotal - COALESCE(col.coll, 0))
+          ELSE 0
+        END AS outstanding
+      FROM Place p
+      LEFT JOIN (
+        SELECT pid, SUM(camount) AS coll
+        FROM PlaceCollection
+        GROUP BY pid
+      ) col ON col.pid = p.pid
+      LEFT JOIN (
+        SELECT pwd.pid AS pid, SUM(pwd.dailyWage) AS wcst
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        GROUP BY pwd.pid
+      ) wc ON wc.pid = p.pid
+      LEFT JOIN (
+        SELECT mpid AS pid, SUM(mprice) AS mct
+        FROM MaterialCost
+        GROUP BY mpid
+      ) mc ON mc.pid = p.pid
+      WHERE p.pcomplete != 2
+      ORDER BY outstanding DESC, p.pname
+    ''');
+
+    return rows
+        .map(
+          (e) => DashboardPlaceRow(
+            pid: e['pid'] as int,
+            pname: (e['pname'] as String?) ?? '',
+            contractTotal: (e['contractTotal'] as int?) ?? 0,
+            collected: (e['collected'] as int?) ?? 0,
+            costTotal: (e['costTotal'] as int?) ?? 0,
+            outstanding: (e['outstanding'] as int?) ?? 0,
+          ),
+        )
+        .toList();
+  }
+
+  Future<DashboardDataBundle> loadDashboardDataBundle({
+    required int selectedYear,
+    int? kpiYear,
+    int? kpiMonth,
+  }) async {
+    final now = DateTime.now();
+    final kpi = await getDashboardKpiForMonth(
+      kpiYear ?? now.year,
+      kpiMonth ?? now.month,
+    );
+    final monthly = await getMonthlyDashboardSummary(selectedYear);
+    final fromY = selectedYear - 5;
+    final yearly = await getYearlyDashboardPoints(
+      fromYear: fromY,
+      toYear: selectedYear,
+    );
+    final places = await getDashboardPlaceRows();
+    return DashboardDataBundle(
+      kpi: kpi,
+      monthly: monthly,
+      yearly: yearly,
+      places: places,
+    );
+  }
+
+  /// 대시보드용 월별 집계 (연도 기준).
+  ///
+  /// - **공사금액**: `pcontractDate`(없으면 `pstart`)가 속한 월에 `pcontractTotal` 합산
+  /// - **수금**: `PlaceCollection.cdate` 월별 합산
+  /// - **원가**: `PlaceWorkDay` + `MaterialCost` 발생 월 합산
+  Future<List<MonthlySummaryModel>> getMonthlyDashboardSummary(int year) async {
+    final Database db = await initializeDB();
+    final yearKey = year.toString().padLeft(4, '0');
+
+    final costRows = await db.rawQuery(
+      '''
+      SELECT ym, SUM(price) AS totalCost
+      FROM (
+        SELECT SUBSTR(pwd.workDate, 1, 7) AS ym, pwd.dailyWage AS price
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        JOIN Place pl ON pl.pid = pwd.pid AND pl.pcomplete != 2
+        WHERE SUBSTR(pwd.workDate, 1, 4) = ?
+        UNION ALL
+        SELECT SUBSTR(m.mdate, 1, 7) AS ym, m.mprice AS price
+        FROM MaterialCost m
+        JOIN Place pl ON pl.pid = m.mpid AND pl.pcomplete != 2
+        WHERE SUBSTR(m.mdate, 1, 4) = ?
+      )
+      GROUP BY ym
+      ''',
+      [yearKey, yearKey],
+    );
+
+    final costByYm = <String, int>{};
+    for (final r in costRows) {
+      final ym = (r['ym'] as String?) ?? '';
+      if (ym.isEmpty) continue;
+      costByYm[ym] = (r['totalCost'] as int?) ?? 0;
+    }
+
+    final contractRows = await db.rawQuery(
+      '''
+      SELECT SUBSTR(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart), 1, 7) AS ym,
+             SUM(p.pcontractTotal) AS t,
+             COUNT(*) AS cnt
+      FROM Place p
+      WHERE p.pcomplete != 2
+        AND LENGTH(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart)) >= 7
+        AND SUBSTR(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart), 1, 4) = ?
+      GROUP BY SUBSTR(COALESCE(NULLIF(TRIM(p.pcontractDate), ''), p.pstart), 1, 7)
+      ''',
+      [yearKey],
+    );
+
+    final contractByYm = <String, int>{};
+    final newCountByYm = <String, int>{};
+    for (final r in contractRows) {
+      final ym = (r['ym'] as String?) ?? '';
+      if (ym.isEmpty) continue;
+      contractByYm[ym] = (r['t'] as int?) ?? 0;
+      newCountByYm[ym] = (r['cnt'] as int?) ?? 0;
+    }
+
+    final collectionRows = await db.rawQuery(
+      '''
+      SELECT SUBSTR(c.cdate, 1, 7) AS ym, SUM(c.camount) AS t
+      FROM PlaceCollection c
+      JOIN Place p ON p.pid = c.pid AND p.pcomplete != 2
+      WHERE SUBSTR(c.cdate, 1, 4) = ?
+      GROUP BY ym
+      ''',
+      [yearKey],
+    );
+
+    final collectionByYm = <String, int>{};
+    for (final r in collectionRows) {
+      final ym = (r['ym'] as String?) ?? '';
+      if (ym.isEmpty) continue;
+      collectionByYm[ym] = (r['t'] as int?) ?? 0;
+    }
+
+    final completedRows = await db.rawQuery(
+      '''
+      SELECT SUBSTR(p.pend, 1, 7) AS ym, COUNT(*) AS cnt
+      FROM Place p
+      WHERE p.pcomplete = 1
+        AND p.pend IS NOT NULL
+        AND p.pend != '0'
+        AND LENGTH(p.pend) >= 7
+        AND SUBSTR(p.pend, 1, 4) = ?
+      GROUP BY ym
+      ''',
+      [yearKey],
+    );
+
+    final completedByYm = <String, int>{};
+    for (final r in completedRows) {
+      final ym = (r['ym'] as String?) ?? '';
+      if (ym.isEmpty) continue;
+      completedByYm[ym] = (r['cnt'] as int?) ?? 0;
+    }
+
+    final marginRows = await db.rawQuery(
+      '''
+      SELECT
+        SUBSTR(p.pend, 1, 7) AS ym,
+        SUM(p.pcontractTotal) AS sum_c,
+        SUM(
+          p.pcontractTotal - (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
+        ) AS sum_p
+      FROM Place p
+      LEFT JOIN (
+        SELECT pwd.pid AS pid, SUM(pwd.dailyWage) AS wcst
+        FROM PlaceWorkDay pwd
+        JOIN Human h ON pwd.hid = h.hid AND h.hdelete = 0
+        GROUP BY pwd.pid
+      ) wc ON wc.pid = p.pid
+      LEFT JOIN (
+        SELECT mpid AS pid, SUM(mprice) AS mct
+        FROM MaterialCost
+        GROUP BY mpid
+      ) mc ON mc.pid = p.pid
+      WHERE p.pcomplete = 1
+        AND p.pcontractTotal > 0
+        AND p.pend IS NOT NULL
+        AND p.pend != '0'
+        AND LENGTH(p.pend) >= 7
+        AND SUBSTR(p.pend, 1, 4) = ?
+      GROUP BY SUBSTR(p.pend, 1, 7)
+      ''',
+      [yearKey],
+    );
+
+    final marginPctByYm = <String, double>{};
+    final completedProfitByYm = <String, int>{};
+    for (final r in marginRows) {
+      final ym = (r['ym'] as String?) ?? '';
+      if (ym.isEmpty) continue;
+      final sc = (r['sum_c'] as int?) ?? 0;
+      final sp = (r['sum_p'] as int?) ?? 0;
+      completedProfitByYm[ym] = sp;
+      marginPctByYm[ym] =
+          sc > 0 ? (sp / sc) * 100.0 : 0.0;
+    }
+
+    final out = <MonthlySummaryModel>[];
+    for (int m = 1; m <= 12; m++) {
+      final ym = '$yearKey-${m.toString().padLeft(2, '0')}';
+      out.add(
+        MonthlySummaryModel(
+          year: year,
+          month: m,
+          contractAmount: contractByYm[ym] ?? 0,
+          collectionAmount: collectionByYm[ym] ?? 0,
+          costAmount: costByYm[ym] ?? 0,
+          newProjectCount: newCountByYm[ym] ?? 0,
+          completedProjectCount: completedByYm[ym] ?? 0,
+          completedContractMarginPct: marginPctByYm[ym] ?? 0.0,
+          completedProfitAmount: completedProfitByYm[ym] ?? 0,
+        ),
+      );
+    }
+    return out;
+  }
+
+  // --- ScheduleMemo (상황판 일정·메모) ---
+
+  Future<int> _nextScheduleSortOrder(String taskDate) async {
+    final Database db = await initializeDB();
+    final rows = await db.rawQuery(
+      '''
+      SELECT COALESCE(MAX(sortOrder), -1) + 1 AS n
+      FROM ScheduleMemo WHERE taskDate = ?
+      ''',
+      [taskDate],
+    );
+    return (rows.first['n'] as int?) ?? 0;
+  }
+
+  Future<List<ScheduleMemoModel>> getScheduleMemosBetween(
+    String dateFrom,
+    String dateTo,
+  ) async {
+    final Database db = await initializeDB();
+    final rows = await db.query(
+      'ScheduleMemo',
+      where: 'taskDate >= ? AND taskDate <= ?',
+      whereArgs: [dateFrom, dateTo],
+      orderBy: 'taskDate ASC, sortOrder ASC, sid ASC',
+    );
+    return rows.map((e) => ScheduleMemoModel.fromMap(e)).toList();
+  }
+
+  Future<int> insertScheduleMemo(ScheduleMemoModel m) async {
+    final Database db = await initializeDB();
+    final sort = await _nextScheduleSortOrder(m.taskDate);
+    final ms = DateTime.now().millisecondsSinceEpoch;
+    return db.insert('ScheduleMemo', {
+      'taskDate': m.taskDate,
+      'taskTime': m.taskTime,
+      'title': m.title,
+      'memo': m.memo,
+      'done': m.done ? 1 : 0,
+      'alarmEnabled': m.alarmEnabled ? 1 : 0,
+      'alarmOffsetMinutes': m.alarmOffsetMinutes,
+      'sortOrder': sort,
+      'createdAtMs': ms,
+    });
+  }
+
+  Future<void> updateScheduleMemo(ScheduleMemoModel m) async {
+    if (m.sid == null) return;
+    final Database db = await initializeDB();
+    await db.update(
+      'ScheduleMemo',
+      {
+        'taskDate': m.taskDate,
+        'taskTime': m.taskTime,
+        'title': m.title,
+        'memo': m.memo,
+        'done': m.done ? 1 : 0,
+        'alarmEnabled': m.alarmEnabled ? 1 : 0,
+        'alarmOffsetMinutes': m.alarmOffsetMinutes,
+        'sortOrder': m.sortOrder,
+      },
+      where: 'sid = ?',
+      whereArgs: [m.sid],
+    );
+  }
+
+  Future<void> deleteScheduleMemo(int sid) async {
+    final Database db = await initializeDB();
+    await db.delete(
+      'ScheduleMemo',
+      where: 'sid = ?',
+      whereArgs: [sid],
+    );
+  }
+
+  Future<bool> _tableHasColumn(
+    Database database,
+    String tableName,
+    String columnName,
+  ) async {
+    final rows = await database.rawQuery('PRAGMA table_info($tableName)');
+    for (final row in rows) {
+      if ((row['name'] as String?) == columnName) {
+        return true;
+      }
+    }
+    return false;
   }
 }

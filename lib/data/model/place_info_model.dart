@@ -5,6 +5,7 @@ class PlaceInfoModel {
   final String pend;
   final int pcomplete;
   final int pfirstrevenue;
+  final int pcontractTotal;
   final int workerCount;
   final int totalAdditionalRevenue;
   final int mTotal;
@@ -40,6 +41,7 @@ class PlaceInfoModel {
     required this.pstart,
     required this.pend,
     required this.pfirstrevenue,
+    required this.pcontractTotal,
     required this.workerCount,
     required this.totalAdditionalRevenue,
     required this.mTotal,
@@ -74,6 +76,7 @@ class PlaceInfoModel {
         pname = res['pname'] ?? '', // null 대신 빈 문자열 할당
         pcomplete = res['pcomplete'] ?? 0,
         pfirstrevenue = res['prevenue'] ?? 0,
+        pcontractTotal = res['pcontractTotal'] ?? 0,
         pstart = res['pstart'] ?? '',
         pend = res['pend'] ?? '',
         workerCount = res['workerCount'] ?? 0,

@@ -17,18 +17,21 @@ class RevenueRepositoryImpl implements RevenueRepository {
     required int pid,
     required int rprice,
     required String rname,
+    required String rdate,
   }) async {
-    await _localDataSource.insertRevenue(
+    final rid = await _localDataSource.insertRevenue(
       pid: pid,
       rprice: rprice,
       rname: rname,
+      rdate: rdate,
     );
     return RevenueModel(
-      rid: 0,
+      rid: rid,
       rpid: pid,
       rname: rname,
       rorder: 0,
       rprice: rprice,
+      rdate: rdate,
     );
   }
 

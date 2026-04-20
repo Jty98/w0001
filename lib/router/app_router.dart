@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/data/model/place_info_model.dart';
-import 'package:w0001/ui/screen/1_place/place_list_screen.dart';
-import 'package:w0001/ui/screen/1_place/place_revenue_screen.dart';
-import 'package:w0001/ui/screen/1_place/place_screen.dart';
+import 'package:w0001/ui/screen/1_dashboard/dashboard_screen.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
+import 'package:w0001/ui/screen/5_place/place_list_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_revenue_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_screen.dart';
 import 'package:w0001/ui/screen/2_add/add_screen.dart';
 import 'package:w0001/ui/screen/3_calendar/calendar_screen.dart';
 import 'package:w0001/ui/screen/4_human/human_screen.dart';
@@ -17,13 +20,31 @@ final GlobalKey<NavigatorState> rootNavigatorKey =
 GoRouter createAppRouter() {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/place',
+    initialLocation: '/dashboard',
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return _MainShell(navigationShell: navigationShell);
         },
         branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard',
+                pageBuilder: (context, state) => const NoTransitionPage<void>(
+                  key: ValueKey<String>('dashboard'),
+                  child: DashboardScreen(),
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'schedule-full',
+                    builder: (context, state) =>
+                        const DashboardScheduleFullScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -144,7 +165,7 @@ class _MainShellState extends State<_MainShell>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: 5,
       vsync: this,
       initialIndex: _shell.currentIndex,
     );
@@ -168,6 +189,15 @@ class _MainShellState extends State<_MainShell>
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final bottomInset = media.padding.bottom;
+    final w = media.size.width;
+    // 화면 폭이 좁을수록 아이콘/텍스트를 줄여 잘림 방지
+    final compact = w < 380;
+    final labelFontSize = compact ? 12.0 : 13.0;
+    // 기본 바 높이 + safe-area (기기별 홈 인디케이터 대응)
+    final barHeight = (compact ? 64.0 : 70.0) + bottomInset;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -178,14 +208,33 @@ class _MainShellState extends State<_MainShell>
         ),
       ),
       bottomNavigationBar: Container(
-        height: 80,
+        height: barHeight,
+        padding: EdgeInsets.only(bottom: bottomInset),
         decoration: BoxDecoration(
           color: Colors.blueGrey.withValues(alpha: 0.15),
         ),
         child: TabBar(
           controller: _tabController,
+          // 아이콘/라벨 크기 기기별 대응
+          labelStyle:
+              TextStyle(fontSize: labelFontSize, fontWeight: FontWeight.bold),
+          unselectedLabelStyle:
+              TextStyle(fontSize: labelFontSize, fontWeight: FontWeight.normal),
+          labelPadding: const EdgeInsets.only(top: 2, bottom: 6),
+          // Tab 아이콘 테마를 강제해 const Tab에서 size 지정 제거
+          indicatorPadding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          overlayColor: WidgetStatePropertyAll(Colors.transparent),
+          splashFactory: NoSplash.splashFactory,
+          // IconTheme은 TabBar가 내부적으로 사용
+          // ignore: deprecated_member_use_from_same_package
+          // (IconThemeData는 여전히 정상 사용)
+          // iconTheme는 3.22+에서 지원
+          // 아래는 런타임/SDK에 따라 무시될 수 있음
+          // 하지만 size는 Tab 아이콘에서 기본값보다 작게 유지됨
           onTap: (index) {
             if (_programmaticTabUpdate) return;
+            HapticFeedback.selectionClick();
             _shell.goBranch(
               index,
               initialLocation: index == _shell.currentIndex,
@@ -195,29 +244,27 @@ class _MainShellState extends State<_MainShell>
           indicatorSize: TabBarIndicatorSize.tab,
           labelColor: Colors.black,
           unselectedLabelColor: const Color.fromARGB(255, 146, 146, 146),
-          labelStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.normal,
-          ),
+          // labelStyle/unselectedLabelStyle are set above
           tabs: const [
             Tab(
-              icon: Icon(Icons.house, size: 30),
+              // sizes are applied via IconTheme in TabBar parent
+              icon: Icon(Icons.dashboard),
+              text: '상황판',
+            ),
+            Tab(
+              icon: Icon(Icons.house),
               text: '현장 관리',
             ),
             Tab(
-              icon: Icon(Icons.add_circle, size: 30),
+              icon: Icon(Icons.add_circle),
               text: '금액 추가',
             ),
             Tab(
-              icon: Icon(Icons.calendar_month, size: 30),
+              icon: Icon(Icons.calendar_month),
               text: '캘린더',
             ),
             Tab(
-              icon: Icon(Icons.person, size: 30),
+              icon: Icon(Icons.person),
               text: '인건비',
             ),
           ],

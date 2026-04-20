@@ -6,6 +6,9 @@ class PlaceModel {
   final String pend;
   int pcomplete;
   final int prevenue;
+  final int pcontractTotal;
+  /// 공사금액 확정일 yyyy-MM-dd. 비어 있으면 대시보드·집계에서 `pstart` 앞 10자를 사용합니다.
+  final String pcontractDate;
 
   PlaceModel({
     this.pid,
@@ -13,7 +16,9 @@ class PlaceModel {
     required this.pcomplete,
     required this.pstart,
     required this.pend,
-    required this.prevenue
+    required this.prevenue,
+    this.pcontractTotal = 0,
+    this.pcontractDate = '',
   });
 
   PlaceModel.fromMap(Map<String, dynamic> res)
@@ -22,6 +27,8 @@ class PlaceModel {
         pcomplete = res['pcomplete'] ?? 0,
         pstart = res['pstart'],
         pend = res['pend'],
-        prevenue = res['prevenue'];
+        prevenue = res['prevenue'],
+        pcontractTotal = res['pcontractTotal'] ?? 0,
+        pcontractDate = res['pcontractDate'] ?? '';
 }
 

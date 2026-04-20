@@ -12,11 +12,66 @@ import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/segment_widget.dart';
 
-class WorkCostScreen extends ConsumerWidget {
+Widget _metaChip({
+  required BuildContext context,
+  required String label,
+  IconData? icon,
+}) {
+  final cs = Theme.of(context).colorScheme;
+  return DecoratedBox(
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
+              height: 1.0,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class WorkCostScreen extends ConsumerStatefulWidget {
   const WorkCostScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WorkCostScreen> createState() => _WorkCostScreenState();
+}
+
+class _WorkCostScreenState extends ConsumerState<WorkCostScreen> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.watch(workerProvider);
     final vm = ref.read(workerProvider.notifier);
 
@@ -194,6 +249,7 @@ class WorkCostScreen extends ConsumerWidget {
       child: vm.getUniqueHuman().isEmpty
           ? const Center(child: Text('조회된 인건비가 없습니다.'))
           : ListView.builder(
+              controller: _scrollController,
               itemCount: vm.getUniqueHuman().length,
               itemBuilder: (context, index) {
                 final workCostData =
@@ -484,9 +540,12 @@ class _WorkerExpansionTileState extends State<WorkerExpansionTile> {
   @override
   Widget build(BuildContext context) {
     final state = widget.ref.watch(workerProvider);
+    final cs = Theme.of(context).colorScheme;
+    final role = widget.workCostData.hdefaultRole.trim();
+    final wage = getPrice(price: widget.workCostData.hdailyWage);
 
     return Card(
-      color: Colors.blueGrey.withValues(alpha: 0.1),
+      color: cs.surfaceContainerLow,
       child: ExpansionTile(
         controller: expansionTileController,
         onExpansionChanged: (value) {
@@ -500,7 +559,32 @@ class _WorkerExpansionTileState extends State<WorkerExpansionTile> {
           widget.workCostData.hname,
           style: bigStyle,
         ),
-        subtitle: Text(widget.workCostData.hnumber),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _metaChip(
+                context: context,
+                icon: Icons.payments_outlined,
+                label: '일당 $wage',
+              ),
+              if (role.isNotEmpty)
+                _metaChip(
+                  context: context,
+                  icon: Icons.badge_outlined,
+                  label: role,
+                ),
+              if (widget.workCostData.hnumber.trim().isNotEmpty)
+                _metaChip(
+                  context: context,
+                  icon: Icons.perm_identity_outlined,
+                  label: widget.workCostData.hnumber.trim(),
+                ),
+            ],
+          ),
+        ),
         dense: true,
         leading: IconButton(
           onPressed: () => widget.vm
@@ -546,7 +630,7 @@ class _WorkerExpansionTileState extends State<WorkerExpansionTile> {
                     )} ',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue[800],
+                      color: cs.primary,
                       fontSize: 14,
                     ),
                   ),

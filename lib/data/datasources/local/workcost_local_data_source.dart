@@ -30,6 +30,11 @@ abstract class WorkCostLocalDataSource {
     DateTime endDate,
   );
   Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid);
+
+  Future<List<int>> getSavedWorkDayHidsForPlaceDate({
+    required int pid,
+    required String dateKey,
+  });
 }
 
 class WorkCostLocalDataSourceImpl implements WorkCostLocalDataSource {
@@ -111,6 +116,14 @@ class WorkCostLocalDataSourceImpl implements WorkCostLocalDataSource {
   @override
   Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid) {
     return _dbHelper.getPlacesForWorkCost(hid);
+  }
+
+  @override
+  Future<List<int>> getSavedWorkDayHidsForPlaceDate({
+    required int pid,
+    required String dateKey,
+  }) {
+    return _dbHelper.getSavedWorkDayHidsForPlaceDate(pid: pid, dateKey: dateKey);
   }
 }
 

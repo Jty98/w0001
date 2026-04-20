@@ -25,5 +25,17 @@ class HumanUseCase {
   Future<void> deleteWorker(int hid) {
     return _repository.deleteWorker(hid);
   }
+
+  Future<void> rememberPlaceWorker(int pid, int hid) {
+    return _repository.upsertPlaceWorkerRecent(pid, hid);
+  }
+
+  Future<List<int>> getPlaceWorkerRecentHids(int pid) {
+    return _repository.getPlaceWorkerRecentHids(pid);
+  }
+
+  Future<void> deletePlaceWorkerRecent(int pid, int hid) {
+    return _repository.deletePlaceWorkerRecent(pid, hid);
+  }
 }
 

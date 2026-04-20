@@ -13,27 +13,33 @@ class SelectDateButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
+    final cs = Theme.of(context).colorScheme;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 5),
-      height: 45,
-      width: 236,
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(
-          side: BorderSide.none,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: TextButton.icon(
-          onPressed: () async => vm.changeDateTime(context),
-          icon: const Icon(
-            Icons.calendar_month,
-            size: 25,
-            color: Colors.blueGrey,
-          ),
-          label: Text(
-            formatDateTimeWeekDayToString(state.selectDay),
-            style: cardDateStyle,
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => vm.changeDateTime(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_month, size: 20, color: cs.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  formatDateTimeWeekDayToString(state.selectDay),
+                  style: cardDateStyle,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 20, color: cs.onSurfaceVariant),
+            ],
           ),
         ),
       ),

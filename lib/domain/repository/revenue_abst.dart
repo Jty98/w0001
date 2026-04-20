@@ -7,6 +7,7 @@ abstract class RevenueRepository {
     required int pid,
     required int rprice,
     required String rname,
+    required String rdate,
   });
   Future<void> updateRevenue({
     required RevenueModel revenue,

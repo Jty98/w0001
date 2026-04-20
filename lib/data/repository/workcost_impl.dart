@@ -77,5 +77,16 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
   Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid) {
     return _localDataSource.getPlacesForWorkCost(hid);
   }
+
+  @override
+  Future<List<int>> getSavedWorkDayHidsForPlaceDate({
+    required int pid,
+    required String dateKey,
+  }) {
+    return _localDataSource.getSavedWorkDayHidsForPlaceDate(
+      pid: pid,
+      dateKey: dateKey,
+    );
+  }
 }
 

@@ -17,6 +17,7 @@ class PlaceRevenueScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(placeDetailProvider(placeInfo.pid!));
     final vm = ref.read(placeDetailProvider(placeInfo.pid!).notifier);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: Text(placeInfo.pname),
@@ -28,10 +29,27 @@ class PlaceRevenueScreen extends ConsumerWidget {
           child: Column(
             children: [
               buildSummaryItem(
+                title: '공사 총액',
+                price: getPrice(price: placeInfo.pcontractTotal),
+                textColor: Colors.black,
+              ),
+              buildSummaryItem(
                 title: '총 수익금',
                 price:
                     getPrice(price: placeInfo.pfirstrevenue + vm.totalRevenue),
                 textColor: Colors.green,
+              ),
+              buildSummaryItem(
+                title: '잔금',
+                price: getPrice(
+                  price: (placeInfo.pcontractTotal -
+                              (placeInfo.pfirstrevenue + vm.totalRevenue)) <
+                          0
+                      ? 0
+                      : (placeInfo.pcontractTotal -
+                          (placeInfo.pfirstrevenue + vm.totalRevenue)),
+                ),
+                textColor: Colors.deepPurple,
               ),
               buildSummaryItem(
                 title:
@@ -49,6 +67,14 @@ class PlaceRevenueScreen extends ConsumerWidget {
                 ),
                 textColor: Colors.blue,
               ),
+              if (placeInfo.pcontractTotal > 0) ...[
+                buildSummaryItem(
+                  title: '이익률',
+                  price:
+                      '${(((placeInfo.pfirstrevenue + vm.totalRevenue) - vm.totalPrice) / placeInfo.pcontractTotal * 100).toStringAsFixed(1)}%',
+                  textColor: Colors.blueGrey,
+                ),
+              ],
             ],
           ),
         ),
@@ -124,6 +150,11 @@ class PlaceRevenueScreen extends ConsumerWidget {
                             price: revenue.rprice,
                             isContainWon: false,
                           );
+                          vm.setDialogRevenuePickedDay(
+                            revenue.rdate.isEmpty
+                                ? DateTime.now()
+                                : DateTime.parse(revenue.rdate),
+                          );
                           showDialog<void>(
                             context: context,
                             builder: (dialogCtx) => Dialog(
@@ -141,6 +172,42 @@ class PlaceRevenueScreen extends ConsumerWidget {
                                     const Padding(
                                       padding: EdgeInsets.only(top: 15),
                                       child: Text('수정', style: bigStyle),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: 10,
+                                        left: 20,
+                                        right: 20,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton.icon(
+                                              onPressed: () async {
+                                                final picked =
+                                                    await showDatePicker(
+                                                  context: dialogCtx,
+                                                  initialDate:
+                                                      state.dialogRevenuePickedDay,
+                                                  firstDate: DateTime(2000),
+                                                  lastDate: DateTime(2100),
+                                                );
+                                                if (picked != null) {
+                                                  vm.setDialogRevenuePickedDay(
+                                                    picked,
+                                                  );
+                                                }
+                                              },
+                                              icon: const Icon(Icons.event),
+                                              label: Text(
+                                                formatDateTimeWeekDayToString(
+                                                  state.dialogRevenuePickedDay,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.only(
@@ -208,6 +275,13 @@ class PlaceRevenueScreen extends ConsumerWidget {
                           child: ListTile(
                             leading: Text('${index + 1}차'),
                             title: Text(revenue.rname),
+                            subtitle: Text(
+                              revenue.rdate.isEmpty ? '-' : revenue.rdate,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
                             trailing: Text(
                               getPrice(price: revenue.rprice),
                               style: normalStyle,
@@ -228,6 +302,35 @@ class PlaceRevenueScreen extends ConsumerWidget {
                           ),
                           child: Column(
                             children: [
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 6, bottom: 6),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate: state.revenuePickedDay,
+                                            firstDate: DateTime(2000),
+                                            lastDate: DateTime(2100),
+                                          );
+                                          if (picked != null) {
+                                            vm.setRevenuePickedDay(picked);
+                                          }
+                                        },
+                                        icon: const Icon(Icons.event),
+                                        label: Text(
+                                          formatDateTimeWeekDayToString(
+                                            state.revenuePickedDay,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               AddTextField(
                                 border: const UnderlineInputBorder(),
                                 height: 63,

@@ -1,17 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:alarm/alarm.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/router/app_router.dart';
+import 'package:w0001/ui/widget/alarm_ringing_overlay.dart';
+import 'package:w0001/util/alarm_permission_helper.dart';
 import 'package:w0001/util/fetch_data.dart';
 
 final GoRouter _appRouter = createAppRouter();
 
+Future<void> _initAlarmServicesSafely() async {
+  try {
+    await Alarm.init().timeout(const Duration(seconds: 4));
+    await AlarmPermissionHelper.ensurePermissions()
+        .timeout(const Duration(seconds: 4));
+  } catch (e) {
+    // 알람 초기화/권한 단계에서 실패하더라도 앱 본 기능은 계속 동작해야 한다.
+    debugPrint('Alarm init skipped: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(_initAlarmServicesSafely());
   // landscpae 막기
   SystemChrome.setPreferredOrientations(
     [
@@ -32,8 +49,30 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final AlarmRingingOverlayController _alarmOverlayController;
+
+  @override
+  void initState() {
+    super.initState();
+    _alarmOverlayController = AlarmRingingOverlayController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _alarmOverlayController.start();
+    });
+  }
+
+  @override
+  void dispose() {
+    _alarmOverlayController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

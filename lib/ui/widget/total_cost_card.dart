@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
 
 class TotalCostCard extends StatelessWidget {
   final String category;
@@ -15,42 +14,99 @@ class TotalCostCard extends StatelessWidget {
     this.wcomplete,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.blueGrey.withOpacity(0.07),
-      child: ListTile(
-        leading: Text(
-          category == 'w' ? '인건비' : '자재비',
+  Widget _pill(
+    BuildContext context, {
+    required String text,
+    required Color color,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          text,
           style: TextStyle(
-            color: category == 'w' ? Colors.blue[700] : Colors.green[700],
             fontSize: 11,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w700,
+            color: color,
+            height: 1.0,
           ),
         ),
-        title: Row(
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isWork = category == 'w';
+    final accent = isWork ? (Colors.blue[700] ?? cs.primary) : (Colors.green[700] ?? cs.tertiary);
+    final showNotPaid = isWork && wcomplete == 0;
+
+    final prefix = isWork
+        ? (showNotPaid ? '[미지급] ' : '')
+        : '[$category] ';
+
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
           children: [
-            Text(
-              category != 'w'
-                  ? '[$category] '
-                  : (wcomplete == 0)
-                      ? '[X] '
-                      : '',
-              style: category == 'w'
-                  ? notPayStyle
-                  : categoryStyle,
+            _pill(
+              context,
+              text: isWork ? '인건비' : '자재비',
+              color: accent,
             ),
+            const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                name,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$prefix$name',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (isWork && (wcomplete != null))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        wcomplete == 1 ? '지급완료' : '미지급',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: wcomplete == 1 ? cs.onSurfaceVariant : Colors.red[700],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              getPrice(price: price),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: showNotPaid ? Colors.red[700] : cs.onSurface,
               ),
             ),
           ],
-        ),
-        trailing: Text(
-          getPrice(price: price),
-          style: TextStyle(
-              fontSize: 16, color: (wcomplete == 0) ? Colors.red : null),
         ),
       ),
     );

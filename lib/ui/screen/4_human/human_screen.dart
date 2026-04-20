@@ -1,3 +1,4 @@
+import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +8,19 @@ import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/text_style.dart';
+import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
+
+String _humanListSubtitle(
+  String workerNum,
+  int workerDailyWage,
+  String hdefaultRole,
+) {
+  final base = '$workerNum  ·  일당 ${getPrice(price: workerDailyWage)}';
+  final role = hdefaultRole.trim();
+  if (role.isEmpty) return base;
+  return '$base  ·  $role';
+}
 
 class HumanScreen extends ConsumerWidget {
   const HumanScreen({super.key});
@@ -31,7 +44,7 @@ class HumanScreen extends ConsumerWidget {
         body: Column(
           children: [
             _buildSearchBar(vm),
-            _buildHumanInfoBox(vm),
+            _buildHumanInfoBox(ref, vm),
             _buildEditButton(context, ref, vm),
             const Divider(height: 0, color: Colors.black),
             Expanded(
@@ -58,12 +71,19 @@ class HumanScreen extends ConsumerWidget {
           state.filteredWorkerList[index].hnumber,
           state.filteredWorkerList[index].hdailyWage,
           state.filteredWorkerList[index].hmemo ?? '',
+          state.filteredWorkerList[index].hdefaultRole,
         ),
       ),
     );
   }
 
-  Widget _buildHumanInfoBox(WorkerViewModel vm) {
+  Widget _buildHumanInfoBox(WidgetRef ref, WorkerViewModel vm) {
+    final formRole =
+        ref.watch(workerProvider.select((s) => s.humanFormWorkRole));
+    final r = formRole;
+    final showCustomRoleField = r == '직접입력' ||
+        (r != null && !isWorkRoleInPresetList(r));
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
       child: Card(
@@ -74,13 +94,61 @@ class HumanScreen extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               humanInfoTextField(vm, vm.workerNameController, '이름',
                   TextInputType.text, 1),
               humanInfoTextField(vm, vm.workerNumController, '주민등록번호',
                   TextInputType.number, 1),
-              humanInfoTextField(vm, vm.workerDailyWageController, '일당(원)',
-                  TextInputType.number, 1),
+              humanInfoTextField(
+                vm,
+                vm.workerDailyWageController,
+                '일당(원)',
+                TextInputType.number,
+                1,
+                useWonCommaFormat: true,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '역할 (인건비 기본값)',
+                style: mediumStyle,
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < kWorkRolePresets.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: Text(
+                          kWorkRolePresets[i],
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        selected: kWorkRolePresets[i] == '직접입력'
+                            ? (r == '직접입력' ||
+                                (r != null && !isWorkRoleInPresetList(r)))
+                            : formRole == kWorkRolePresets[i],
+                        onSelected: (_) =>
+                            vm.humanFormSelectWorkRole(kWorkRolePresets[i]),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (showCustomRoleField) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: vm.workerRoleCustomController,
+                  decoration: InputDecoration(
+                    hintText: '역할 직접 입력',
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
               humanInfoTextField(vm, vm.workerMemoController, '메모(선택)',
                   TextInputType.text, 4),
             ],
@@ -129,6 +197,7 @@ class HumanScreen extends ConsumerWidget {
     String workerNum,
     int workerDailyWage,
     String workerMemo,
+    String hdefaultRole,
   ) {
     final state = ref.watch(workerProvider);
     return Slidable(
@@ -163,8 +232,14 @@ class HumanScreen extends ConsumerWidget {
         ],
       ),
       child: InkWell(
-        onTap: () =>
-            vm.showWorkerInfo(index, workerName, workerNum, workerDailyWage, workerMemo),
+        onTap: () => vm.showWorkerInfo(
+              index,
+              workerName,
+              workerNum,
+              workerDailyWage,
+              workerMemo,
+              hdefaultRole,
+            ),
         child: Card(
           color: Colors.blueGrey.withValues(alpha: 0.1),
           child: ListTile(
@@ -185,7 +260,7 @@ class HumanScreen extends ConsumerWidget {
                     ),
             ),
             subtitle: Text(
-              '$workerNum  ·  일당 ${getPrice(price: workerDailyWage)}',
+              _humanListSubtitle(workerNum, workerDailyWage, hdefaultRole),
               style: smallStyle,
             ),
           ),
@@ -199,8 +274,9 @@ class HumanScreen extends ConsumerWidget {
     TextEditingController tController,
     String hintText,
     TextInputType keyboardType,
-    int maxline,
-  ) {
+    int maxline, {
+    bool useWonCommaFormat = false,
+  }) {
     return TextField(
       maxLines: maxline,
       controller: tController,
@@ -210,14 +286,25 @@ class HumanScreen extends ConsumerWidget {
         labelStyle: mediumStyle,
         isDense: true,
         constraints: const BoxConstraints(maxHeight: 105),
+        suffixText: useWonCommaFormat ? '원' : null,
       ),
       keyboardType: keyboardType,
+      textAlign: TextAlign.start,
       inputFormatters: keyboardType == TextInputType.number
-          ? [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(13),
-              NumberFormatter(),
-            ]
+          ? (useWonCommaFormat
+              ? [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyTextInputFormatter.currency(
+                    decimalDigits: 0,
+                    symbol: '',
+                  ),
+                  LengthLimitingTextInputFormatter(22),
+                ]
+              : [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(13),
+                  NumberFormatter(),
+                ])
           : [],
     );
   }

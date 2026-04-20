@@ -45,7 +45,9 @@ class PlaceScreen extends ConsumerWidget {
           IconButton(
             // visualDensity: VisualDensity.comfortable,
             onPressed: () async {
-              await context.push('revenue', extra: placeInfo);
+              // Always push absolute nested route to avoid "page not found"
+              // when current location isn't exactly `/place/detail`.
+              await context.push('/place/detail/revenue', extra: placeInfo);
               if (!context.mounted) return;
               vm.resetRevenueTextController();
             },
@@ -149,8 +151,9 @@ class PlaceScreen extends ConsumerWidget {
   }
 
   Widget expenseList(context, PlaceDetailState state, PlaceDetailViewModel vm) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: vm.filteredTotalCostList.isEmpty
           ? const Center(child: Text('지출 내역이 없습니다.'))
           : GroupedListView(
@@ -162,8 +165,15 @@ class PlaceScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-                    child: Text(value, style: const TextStyle(fontSize: 16)),
+                    padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -179,6 +189,7 @@ class PlaceScreen extends ConsumerWidget {
     PlaceDetailState state,
     PlaceDetailViewModel vm,
   ) {
+    final cs = Theme.of(context).colorScheme;
     return Slidable(
       closeOnScroll: true,
       startActionPane: element.category == 'w'
@@ -188,8 +199,9 @@ class PlaceScreen extends ConsumerWidget {
                 SlidableAction(
                   autoClose: true,
                   borderRadius: BorderRadius.circular(10),
-                  backgroundColor:
-                      element.wcomplete == 1 ? Colors.blue : Colors.green,
+                  backgroundColor: element.wcomplete == 1
+                      ? (cs.primaryContainer)
+                      : (Colors.green[600] ?? Colors.green),
                   icon: element.wcomplete == 1
                       ? Icons.autorenew_outlined
                       : Icons.check_circle,
@@ -249,11 +261,14 @@ class PlaceScreen extends ConsumerWidget {
                     editCostDialog(element, dialogCtx, state, vm),
               );
             },
-            child: TotalCostCard(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TotalCostCard(
               category: element.category,
               name: element.name,
               price: element.price,
               wcomplete: element.wcomplete,
+              ),
             ),
           );
         },

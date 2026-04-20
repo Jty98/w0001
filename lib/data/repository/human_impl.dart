@@ -14,8 +14,17 @@ class HumanRepositoryImpl implements HumanRepository {
 
   @override
   Future<HumanModel> addWorker(HumanModel worker) async {
-    await _localDataSource.addWorker(worker);
-    return worker;
+    final hid = await _localDataSource.addWorker(worker);
+    return HumanModel(
+      hid: hid,
+      hname: worker.hname,
+      hnumber: worker.hnumber,
+      hmemo: worker.hmemo,
+      hdailyWage: worker.hdailyWage,
+      hdefaultRole: worker.hdefaultRole,
+      hstar: worker.hstar,
+      hdelete: worker.hdelete,
+    );
   }
 
   @override
@@ -31,6 +40,21 @@ class HumanRepositoryImpl implements HumanRepository {
   @override
   Future<void> deleteWorker(int hid) {
     return _localDataSource.deleteWorker(hid);
+  }
+
+  @override
+  Future<void> upsertPlaceWorkerRecent(int pid, int hid) {
+    return _localDataSource.upsertPlaceWorkerRecent(pid, hid);
+  }
+
+  @override
+  Future<List<int>> getPlaceWorkerRecentHids(int pid) {
+    return _localDataSource.getPlaceWorkerRecentHids(pid);
+  }
+
+  @override
+  Future<void> deletePlaceWorkerRecent(int pid, int hid) {
+    return _localDataSource.deletePlaceWorkerRecent(pid, hid);
   }
 }
 

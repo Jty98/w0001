@@ -36,6 +36,8 @@ class PlaceDetailState {
     required this.selectedFilterType,
     required this.selectedDropdownCategory,
     required this.dialogDateTime,
+    required this.revenuePickedDay,
+    required this.dialogRevenuePickedDay,
     required this.totalCostList,
     required this.revenueList,
     required this.alertText,
@@ -49,6 +51,8 @@ class PlaceDetailState {
   final FilterType selectedFilterType;
   final String? selectedDropdownCategory;
   final DateTime dialogDateTime;
+  final DateTime revenuePickedDay;
+  final DateTime dialogRevenuePickedDay;
   final List<TotalCostModel> totalCostList;
   final List<RevenueModel> revenueList;
   final String alertText;
@@ -62,6 +66,8 @@ class PlaceDetailState {
         selectedFilterType: FilterType.all,
         selectedDropdownCategory: null,
         dialogDateTime: DateTime.now(),
+        revenuePickedDay: DateTime.now(),
+        dialogRevenuePickedDay: DateTime.now(),
         totalCostList: const [],
         revenueList: const [],
         alertText: '',
@@ -75,6 +81,8 @@ class PlaceDetailState {
     FilterType? selectedFilterType,
     String? selectedDropdownCategory,
     DateTime? dialogDateTime,
+    DateTime? revenuePickedDay,
+    DateTime? dialogRevenuePickedDay,
     List<TotalCostModel>? totalCostList,
     List<RevenueModel>? revenueList,
     String? alertText,
@@ -89,6 +97,9 @@ class PlaceDetailState {
       selectedDropdownCategory:
           selectedDropdownCategory ?? this.selectedDropdownCategory,
       dialogDateTime: dialogDateTime ?? this.dialogDateTime,
+      revenuePickedDay: revenuePickedDay ?? this.revenuePickedDay,
+      dialogRevenuePickedDay:
+          dialogRevenuePickedDay ?? this.dialogRevenuePickedDay,
       totalCostList: totalCostList ?? this.totalCostList,
       revenueList: revenueList ?? this.revenueList,
       alertText: alertText ?? this.alertText,
@@ -175,6 +186,16 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   void setDialogDateTime(DateTime value) {
     state = state.copyWith(dialogDateTime: value);
+  }
+
+  void setRevenuePickedDay(DateTime value) {
+    final d = DateTime(value.year, value.month, value.day);
+    state = state.copyWith(revenuePickedDay: d);
+  }
+
+  void setDialogRevenuePickedDay(DateTime value) {
+    final d = DateTime(value.year, value.month, value.day);
+    state = state.copyWith(dialogRevenuePickedDay: d);
   }
 
   void clearAlertText() {
@@ -271,6 +292,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       rname: rname,
       rprice: rprice,
       rorder: -1,
+      rdate: formatDateTimeWeekDayToString(state.dialogRevenuePickedDay),
     );
     await _revenueUseCase.updateRevenue(revenue: model, placeId: state.pid);
     await fetchAllRevenueFromPlace();
@@ -288,7 +310,12 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       return;
     }
 
-    await _revenueUseCase.insertRevenue(pid: pid, rprice: rprice, rname: rname);
+    await _revenueUseCase.insertRevenue(
+      pid: pid,
+      rprice: rprice,
+      rname: rname,
+      rdate: formatDateTimeWeekDayToString(state.revenuePickedDay),
+    );
     await fetchAllRevenueFromPlace();
     resetRevenueTextController();
   }

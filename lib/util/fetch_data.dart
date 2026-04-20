@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/presentation/viewmodel/calendar_view_model.dart';
+import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 
 /// [main]에서 [UncontrolledProviderScope]와 동일한 컨테이너를 할당해야 함
@@ -11,6 +12,8 @@ class FetchData {
     if (container != null) {
       await container.read(calendarProvider.notifier).refreshForFetchData();
       await container.read(workerProvider.notifier).refreshFromGlobalFetch();
+      // 현장관리 탭 리스트도 즉시 갱신 (탭 전환 시 build가 다시 돌지 않는 케이스 대응).
+      await container.read(placeListProvider.notifier).fetchAllPlace();
     }
   }
 }
