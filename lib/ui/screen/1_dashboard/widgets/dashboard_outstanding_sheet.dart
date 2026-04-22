@@ -58,7 +58,7 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
           Text(
             rows.isEmpty
                 ? '미수금이 없습니다.'
-                : '총 ${rows.length}곳 · 탭하면 현장 상세로 이동합니다.',
+                : '총 ${rows.length}곳 · 탭하면 수금 관리로 이동합니다.',
             style: TextStyle(
               fontSize: 12,
               color: cs.onSurfaceVariant,
@@ -86,71 +86,151 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                     ),
                     itemBuilder: (ctx, i) {
                       final r = rows[i];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        leading: Icon(
-                          Icons.request_quote_outlined,
-                          color: Colors.deepPurple[700],
-                        ),
-                        title: Text(
-                          r.pname,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
+                      return Material(
+                        color: cs.surface.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            final info = _placeForPid(ref, r.pid);
+                            Navigator.of(context).pop();
+                            if (info != null) {
+                              context.push('/place/detail/revenue', extra: info);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('현장 목록을 불러온 뒤 다시 시도해 주세요.'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              r.pname,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(left: 8),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: cs.primaryContainer,
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                              child: Text(
+                                                getPrice(price: r.outstanding),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: cs.onPrimaryContainer,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: cs.surfaceContainerHighest
+                                              .withValues(alpha: 0.45),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: cs.outlineVariant
+                                                .withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            _infoRow(
+                                              cs,
+                                              text:
+                                                  '공사 ${getPrice(price: r.contractTotal)}',
+                                            ),
+                                            const SizedBox(height: 6),
+                                            _infoRow(
+                                              cs,
+                                              text:
+                                                  '수금 ${getPrice(price: r.collected)}',
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              '미수금 ${getPrice(price: r.outstanding)}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: cs.primary,
-                              ),
-                            ),
-                            Text(
-                              '공사 ${getPrice(price: r.contractTotal)} · 수금 ${getPrice(price: r.collected)}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        isThreeLine: true,
-                        trailing: Icon(
-                          Icons.chevron_right,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        onTap: () {
-                          final info = _placeForPid(ref, r.pid);
-                          Navigator.of(context).pop();
-                          if (info != null) {
-                            context.push('/place/detail', extra: info);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('현장 목록을 불러온 뒤 다시 시도해 주세요.'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        },
                       );
                     },
                   ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _infoRow(ColorScheme cs, {required String text}) {
+    return Row(
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: cs.primary,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

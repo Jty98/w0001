@@ -8,16 +8,126 @@ import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 
-class PlaceRevenueScreen extends ConsumerWidget {
+class PlaceRevenueScreen extends ConsumerStatefulWidget {
   final PlaceInfoModel placeInfo;
   const PlaceRevenueScreen({super.key, required this.placeInfo});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PlaceRevenueScreen> createState() => _PlaceRevenueScreenState();
+}
+
+class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
+  bool _latestFirst = true;
+
+  Future<DateTime?> _pickDateWithScrollableCalendar(
+    BuildContext context, {
+    required DateTime initialDay,
+  }) async {
+    DateTime? pickedDay = DateTime(
+      initialDay.year,
+      initialDay.month,
+      initialDay.day,
+    );
+
+    final screenH = MediaQuery.sizeOf(context).height;
+    final maxHeight = (screenH * 0.60).clamp(400.0, 520.0).toDouble();
+    final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
+
+    return showDialog<DateTime>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return Dialog(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Text(
+                          '날짜 선택',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      ScrollableCalendarWidget(
+                        height: calHeight,
+                        initialSelectedDay: pickedDay,
+                        useSingleDaySelection: true,
+                        showViewModeToggle: false,
+                        disableDateSelectionHighlight: true,
+                        onDayPicked: (d) {
+                          setDialogState(() => pickedDay = d);
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(),
+                            child: const Text(
+                              '취소',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.of(dialogCtx).pop(pickedDay),
+                            child: const Text('확인'),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final placeInfo = widget.placeInfo;
     final state = ref.watch(placeDetailProvider(placeInfo.pid!));
     final vm = ref.read(placeDetailProvider(placeInfo.pid!).notifier);
     final cs = Theme.of(context).colorScheme;
+    final displayedRevenues = [...state.revenueList]
+      ..sort((a, b) {
+        final da = parseFlexibleDateString(a.rdate);
+        final db = parseFlexibleDateString(b.rdate);
+        final cmp = _latestFirst ? db.compareTo(da) : da.compareTo(db);
+        if (cmp != 0) return cmp;
+        return _latestFirst ? b.rid.compareTo(a.rid) : a.rid.compareTo(b.rid);
+      });
+
+    final cumulativeByRid = <int, int>{};
+    var additionalRunning = 0;
+    final forCumulative = [...state.revenueList]
+      ..sort((a, b) {
+        final da = parseFlexibleDateString(a.rdate);
+        final db = parseFlexibleDateString(b.rdate);
+        final cmp = da.compareTo(db);
+        if (cmp != 0) return cmp;
+        return a.rid.compareTo(b.rid);
+      });
+    for (final r in forCumulative) {
+      additionalRunning += r.rprice;
+      cumulativeByRid[r.rid] = additionalRunning;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(placeInfo.pname),
@@ -103,19 +213,56 @@ class PlaceRevenueScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-              child: Text(
-                '추가 수익금',
-                style: normalStyle,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '추가 수익금',
+                      style: normalStyle,
+                    ),
+                  ),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment<bool>(
+                        value: true,
+                        label: Text('최신순'),
+                        icon: Icon(Icons.north_rounded, size: 16),
+                      ),
+                      ButtonSegment<bool>(
+                        value: false,
+                        label: Text('오래된순'),
+                        icon: Icon(Icons.south_rounded, size: 16),
+                      ),
+                    ],
+                    selected: {_latestFirst},
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onSelectionChanged: (next) {
+                      if (next.isEmpty) return;
+                      setState(() => _latestFirst = next.first);
+                    },
+                  ),
+                ],
               ),
             ),
             Expanded(
               child: ListView.builder(
-                itemCount: state.revenueList.length + 1,
+                itemCount: displayedRevenues.length + 1,
                 itemBuilder: (context, index) {
-                  if (index < state.revenueList.length) {
-                    final revenue = state.revenueList[index];
+                  if (index < displayedRevenues.length) {
+                    final revenue = displayedRevenues[index];
+                    final additionalCumulative = cumulativeByRid[revenue.rid] ?? revenue.rprice;
+                    final totalCumulative = placeInfo.pfirstrevenue + additionalCumulative;
+                    final dateText = revenue.rdate.isEmpty
+                        ? '-'
+                        : formatDateTimeWeekDayToString(
+                            parseFlexibleDateString(revenue.rdate),
+                          );
                     return Slidable(
                       endActionPane: ActionPane(
                         motion: const DrawerMotion(),
@@ -153,7 +300,7 @@ class PlaceRevenueScreen extends ConsumerWidget {
                           vm.setDialogRevenuePickedDay(
                             revenue.rdate.isEmpty
                                 ? DateTime.now()
-                                : DateTime.parse(revenue.rdate),
+                                : parseFlexibleDateString(revenue.rdate),
                           );
                           showDialog<void>(
                             context: context,
@@ -185,12 +332,10 @@ class PlaceRevenueScreen extends ConsumerWidget {
                                             child: OutlinedButton.icon(
                                               onPressed: () async {
                                                 final picked =
-                                                    await showDatePicker(
-                                                  context: dialogCtx,
-                                                  initialDate:
+                                                    await _pickDateWithScrollableCalendar(
+                                                  dialogCtx,
+                                                  initialDay:
                                                       state.dialogRevenuePickedDay,
-                                                  firstDate: DateTime(2000),
-                                                  lastDate: DateTime(2100),
                                                 );
                                                 if (picked != null) {
                                                   vm.setDialogRevenuePickedDay(
@@ -273,14 +418,47 @@ class PlaceRevenueScreen extends ConsumerWidget {
                         },
                         child: Card(
                           child: ListTile(
-                            leading: Text('${index + 1}차'),
-                            title: Text(revenue.rname),
-                            subtitle: Text(
-                              revenue.rdate.isEmpty ? '-' : revenue.rdate,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: cs.onSurfaceVariant,
+                            leading: CircleAvatar(
+                              radius: 15,
+                              backgroundColor: cs.primaryContainer,
+                              child: Text(
+                                '${index + 1}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: cs.onPrimaryContainer,
+                                ),
                               ),
+                            ),
+                            title: Text(revenue.rname),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  dateText,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                    ),
+                                ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    _smallInfoChip(
+                                      context,
+                                      label:
+                                          '추가 누적 ${getPrice(price: additionalCumulative)}',
+                                    ),
+                                    _smallInfoChip(
+                                      context,
+                                      label:
+                                          '총 수익 ${getPrice(price: totalCumulative)}',
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                             trailing: Text(
                               getPrice(price: revenue.rprice),
@@ -310,11 +488,10 @@ class PlaceRevenueScreen extends ConsumerWidget {
                                     Expanded(
                                       child: OutlinedButton.icon(
                                         onPressed: () async {
-                                          final picked = await showDatePicker(
-                                            context: context,
-                                            initialDate: state.revenuePickedDay,
-                                            firstDate: DateTime(2000),
-                                            lastDate: DateTime(2100),
+                                          final picked =
+                                              await _pickDateWithScrollableCalendar(
+                                            context,
+                                            initialDay: state.revenuePickedDay,
                                           );
                                           if (picked != null) {
                                             vm.setRevenuePickedDay(picked);
@@ -405,6 +582,28 @@ class PlaceRevenueScreen extends ConsumerWidget {
                 ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _smallInfoChip(
+    BuildContext context, {
+    required String label,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: cs.secondaryContainer.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: cs.onSecondaryContainer,
+        ),
       ),
     );
   }

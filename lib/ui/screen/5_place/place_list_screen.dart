@@ -160,9 +160,8 @@ class PlaceListScreen extends ConsumerWidget {
       child: Builder(
         builder: (context) {
           final screenH = MediaQuery.sizeOf(context).height;
-          final maxHeight = screenH * 0.9;
-          // range 헤더 UI가 추가된 만큼 캘린더 영역을 조금 더 확보해 잘림을 방지한다.
-          final calendarHeight = screenH * 0.46;
+          final maxHeight = (screenH * 0.82).clamp(560.0, 760.0).toDouble();
+          final calendarHeight = (screenH * 0.34).clamp(250.0, 320.0).toDouble();
           DateTime? rangeStart = initialCalendarStart;
           DateTime? rangeEnd = initialCalendarEnd ?? initialCalendarStart;
 
@@ -199,7 +198,7 @@ class PlaceListScreen extends ConsumerWidget {
                             ),
                             AddTextField(
                               tController: contractTotalController,
-                              labelText: '공사 총액',
+                              labelText: '공사금액',
                               isPrice: true,
                               keyboardType: TextInputType.number,
                               readOnly: false,
@@ -216,6 +215,9 @@ class PlaceListScreen extends ConsumerWidget {
                               initialRangeStart: initialCalendarStart,
                               initialRangeEnd:
                                   initialCalendarEnd ?? initialCalendarStart,
+                              showViewModeToggle: false,
+                              showRangeSummarySection: false,
+                              disableDateSelectionHighlight: true,
                               onRangeChanged: (s, e) {
                                 rangeStart = s;
                                 rangeEnd = e;
@@ -465,7 +467,7 @@ class PlaceListScreen extends ConsumerWidget {
                         children: [
                           Expanded(
                             child: _PlaceMetric(
-                              label: '공사 총액',
+                              label: '공사금액',
                               value: getPrice(price: element.pcontractTotal),
                               icon: Icons.request_quote_outlined,
                             ),
@@ -473,7 +475,7 @@ class PlaceListScreen extends ConsumerWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: _PlaceMetric(
-                              label: '총수익',
+                              label: '수금액',
                               value: getPrice(price: totalRevenue),
                               icon: Icons.trending_up_rounded,
                             ),

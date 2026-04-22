@@ -75,6 +75,8 @@ class DashboardPlaceRow {
   final int collected;
   final int costTotal;
   final int outstanding;
+  final int advanceCollected;
+  final String balanceBreakdown;
 
   const DashboardPlaceRow({
     required this.pid,
@@ -83,9 +85,11 @@ class DashboardPlaceRow {
     required this.collected,
     required this.costTotal,
     required this.outstanding,
+    this.advanceCollected = 0,
+    this.balanceBreakdown = '',
   });
 
-  int get profitOnContract => contractTotal - costTotal;
+  int get profitOnContract => contractTotal - outstanding - costTotal;
   int get profitOnCash => collected - costTotal;
 
   double get marginOnContractPct =>

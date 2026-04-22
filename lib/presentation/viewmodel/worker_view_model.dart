@@ -19,6 +19,7 @@ import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
 import 'package:w0001/util/fetch_data.dart' show FetchData;
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
+import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 
@@ -312,13 +313,89 @@ class WorkerViewModel extends Notifier<WorkerState> {
         .toList();
   }
 
-  Future<void> showDateTimeRangePicker(BuildContext context) async {
-    final picked = await showRangePickerDialog(
+  Future<DateTimeRange?> _pickRangeWithScrollableCalendar(
+    BuildContext context,
+  ) async {
+    // 다이얼로그는 항상 초기화된 상태(미선택)로 시작.
+    DateTime? rangeStart;
+    DateTime? rangeEnd;
+    return showDialog<DateTimeRange>(
       context: context,
-      minDate: DateTime(2000),
-      maxDate: DateTime(2099),
-      highlightColor: Colors.green,
+      builder: (ctx) {
+        final screenH = MediaQuery.sizeOf(ctx).height;
+        final maxHeight = (screenH * 0.66).clamp(420.0, 560.0).toDouble();
+        final calHeight = (screenH * 0.36).clamp(250.0, 320.0).toDouble();
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Dialog(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          '기간 선택',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      ScrollableCalendarWidget(
+                        height: calHeight,
+                        initialRangeStart: rangeStart,
+                        initialRangeEnd: rangeEnd,
+                        showViewModeToggle: false,
+                        showRangeSummarySection: false,
+                        disableDateSelectionHighlight: true,
+                        onRangeChanged: (s, e) {
+                          rangeStart = s;
+                          rangeEnd = e;
+                          setModalState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              final s = rangeStart;
+                              if (s == null) {
+                                Navigator.of(ctx).pop();
+                                return;
+                              }
+                              final e = rangeEnd ?? s;
+                              final normalized = s.isBefore(e)
+                                  ? DateTimeRange(start: s, end: e)
+                                  : DateTimeRange(start: e, end: s);
+                              Navigator.of(ctx).pop(normalized);
+                            },
+                            child: const Text('확인'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
+  }
+
+  Future<void> showDateTimeRangePicker(BuildContext context) async {
+    final picked = await _pickRangeWithScrollableCalendar(context);
     if (picked != null) {
       state = state.copyWith(dateTimeRange: picked);
       await fetchWorkCost();
@@ -365,12 +442,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
 
     if (index == 0) {
       nextToggle = [true, false, false];
-      final picked = await showRangePickerDialog(
-        context: context,
-        minDate: DateTime(2000),
-        maxDate: DateTime(2099),
-        highlightColor: Colors.green,
-      );
+      final picked = await _pickRangeWithScrollableCalendar(context);
       nextRange = picked ?? nextRange;
     } else if (index == 1) {
       nextToggle = [false, true, false];

@@ -64,12 +64,134 @@ class _DashboardScheduleFullScreenState
     DashboardScheduleViewModel vm,
   ) {
     final vx = details.primaryVelocity ?? 0;
-    if (vx.abs() < 140) return;
+    if (vx.abs() < 420) return;
     if (_spanIndex == 2) {
       _goAdjacentMonth(vx < 0 ? 1 : -1);
       return;
     }
     _moveWeek(vm, vx < 0 ? 1 : -1);
+  }
+
+  Future<void> _sharePickedDay(BuildContext context) async {
+    final state = ref.read(dashboardScheduleProvider);
+    final weekStart = scheduleDateOnly(state.weekStart);
+    final selected = scheduleDateOnly(state.selectedDay);
+    final picked = await showModalBottomSheet<DateTime>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '공유할 날짜 선택',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              ...List.generate(7, (i) {
+                final day = weekStart.add(Duration(days: i));
+                final key = scheduleDateKey(day);
+                final count =
+                    (state.fullMemos ?? const <ScheduleMemoModel>[])
+                        .where((m) => m.taskDate == key)
+                        .length;
+                final isSelected = _scheduleIsSameDay(day, selected);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => Navigator.pop(ctx, day),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: isSelected
+                            ? cs.primaryContainer
+                            : cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                        border: Border.all(
+                          color: isSelected
+                              ? cs.primary
+                              : cs.outlineVariant.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _dayTitleLine(day),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: isSelected
+                                    ? cs.onPrimaryContainer
+                                    : cs.onSurface,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            count == 0 ? '일정 없음' : '$count개',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected
+                                  ? cs.onPrimaryContainer
+                                  : cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (picked == null || !context.mounted) return;
+    final day = scheduleDateOnly(picked);
+    final key = scheduleDateKey(day);
+    final memos = (state.fullMemos ?? const <ScheduleMemoModel>[])
+        .where((m) => m.taskDate == key)
+        .toList()
+      ..sort((a, b) {
+        final aTime = a.taskTime.trim();
+        final bTime = b.taskTime.trim();
+        final aHasTime = aTime.isNotEmpty;
+        final bHasTime = bTime.isNotEmpty;
+        if (aHasTime != bHasTime) return aHasTime ? -1 : 1;
+        if (aTime != bTime) return aTime.compareTo(bTime);
+        return a.title.compareTo(b.title);
+      });
+    final header =
+        '## 일정표\n### ${day.year}년 ${day.month}월 ${day.day}일 (${_weekdayKo[day.weekday - 1]})';
+    final text = memos.isEmpty
+        ? '$header\n---\n- 등록된 일정이 없습니다.'
+        : '$header\n---\n${memos.asMap().entries.map((entry) {
+            final i = entry.key + 1;
+            final m = entry.value;
+            final time =
+                m.taskTime.trim().isEmpty ? '--:--' : m.taskTime.trim();
+            final memo = m.memo.trim().isEmpty ? '-' : m.memo.trim();
+            return '### $i\n$time [${m.title.trim()}]\n$memo';
+          }).join('\n\n')}';
+
+    final box = context.findRenderObject() as RenderBox?;
+    await Share.share(
+      text,
+      sharePositionOrigin:
+          box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+    );
   }
 
   void _moveWeek(DashboardScheduleViewModel vm, int delta) {
@@ -215,6 +337,13 @@ class _DashboardScheduleFullScreenState
     return Scaffold(
       appBar: AppBar(
         title: const Text('전체 일정'),
+        actions: [
+          IconButton(
+            tooltip: '일정 공유',
+            onPressed: () => _sharePickedDay(context),
+            icon: const Icon(Icons.share_outlined),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'dashboard_schedule_full_fab',
@@ -335,7 +464,7 @@ class _DashboardScheduleFullScreenState
                             });
                           }
                         },
-                        child: const Text('오늘'),
+                        child: const Text('이번주'),
                       ),
                     ],
                   ),
@@ -348,12 +477,9 @@ class _DashboardScheduleFullScreenState
             color: cs.outlineVariant.withValues(alpha: 0.45),
           ),
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragEnd: (d) => _onHorizontalSwipe(d, vm),
-              child: _spanIndex == 2
-                  ? _buildScrollBody(context, ref, state, cs)
-                  : AnimatedSwitcher(
+            child: _spanIndex == 2
+                ? _buildScrollBody(context, ref, state, cs)
+                : AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
@@ -391,7 +517,6 @@ class _DashboardScheduleFullScreenState
                         child: _buildScrollBody(context, ref, state, cs),
                       ),
                     ),
-            ),
           ),
         ],
       ),

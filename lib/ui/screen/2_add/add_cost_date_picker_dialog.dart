@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
-import 'package:w0001/util/funtions.dart';
 
 class AddCostDatePickerDialog extends StatefulWidget {
   const AddCostDatePickerDialog({
@@ -41,8 +40,9 @@ class _AddCostDatePickerDialogState extends State<AddCostDatePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.62;
-    final calHeight = MediaQuery.sizeOf(context).height * 0.45;
+    final screenH = MediaQuery.sizeOf(context).height;
+    final maxHeight = (screenH * 0.60).clamp(400.0, 520.0).toDouble();
+    final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
 
     return Dialog(
       child: ConstrainedBox(
@@ -64,19 +64,14 @@ class _AddCostDatePickerDialogState extends State<AddCostDatePickerDialog> {
                 initialRangeStart: widget.initialRangeStart,
                 initialRangeEnd: widget.initialRangeEnd ?? widget.initialRangeStart,
                 initialSelectedDay: _pickedDay,
+                useSingleDaySelection: true,
+                showViewModeToggle: false,
+                disableDateSelectionHighlight: true,
                 onDayPicked: (d) {
                   if (!_readyForUserInput) return;
                   setState(() => _pickedDay = d);
                 },
               ),
-              if (_pickedDay != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    '선택: ${formatDateTimeWeekDayToString(_pickedDay!)}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,

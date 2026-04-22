@@ -33,6 +33,31 @@ String formatDateTimeWeekDayToString(DateTime dateTime) {
   return ('${dateTime.year}년 $month월 $day일 ${getWeekDay(weekDay)}요일');
 }
 
+String formatDateTimeToIsoDate(DateTime dateTime) {
+  final m = dateTime.month.toString().padLeft(2, '0');
+  final d = dateTime.day.toString().padLeft(2, '0');
+  return '${dateTime.year}-$m-$d';
+}
+
+DateTime parseFlexibleDateString(String value, {DateTime? fallback}) {
+  final v = value.trim();
+  if (v.isEmpty) return fallback ?? DateTime.now();
+  try {
+    return DateTime.parse(v);
+  } catch (_) {
+    final m = RegExp(r'^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일').firstMatch(v);
+    if (m != null) {
+      final y = int.tryParse(m.group(1) ?? '');
+      final mo = int.tryParse(m.group(2) ?? '');
+      final d = int.tryParse(m.group(3) ?? '');
+      if (y != null && mo != null && d != null) {
+        return DateTime(y, mo, d);
+      }
+    }
+    return fallback ?? DateTime.now();
+  }
+}
+
 String formatDateTimeRangeToString(
   DateTimeRange dateTimeRange, {
   bool showYear = true,

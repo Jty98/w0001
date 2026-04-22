@@ -1340,27 +1340,36 @@ UNION
     final outRow = await db.rawQuery('''
       SELECT COALESCE(SUM(
         CASE
-          WHEN (p.pcontractTotal - COALESCE(t.coll, 0)) > 0
-          THEN (p.pcontractTotal - COALESCE(t.coll, 0))
+          WHEN (
+            p.pcontractTotal -
+            COALESCE(t.coll, 0)
+          ) > 0
+          THEN (
+            p.pcontractTotal -
+            COALESCE(t.coll, 0)
+          )
           ELSE 0
         END
       ), 0) AS s
       FROM Place p
       LEFT JOIN (
-        SELECT pid, SUM(camount) AS coll
+        SELECT
+          pid,
+          SUM(camount) AS coll,
+          SUM(CASE WHEN ckind = '선수금' THEN camount ELSE 0 END) AS adv
         FROM PlaceCollection
         GROUP BY pid
       ) t ON t.pid = p.pid
       WHERE p.pcomplete != 2
     ''');
 
-    final doneMarginRow = await db.rawQuery(
-      '''
+    final doneMarginRow = await db.rawQuery('''
       SELECT
         COUNT(*) AS cnt,
         COALESCE(SUM(p.pcontractTotal), 0) AS sum_c,
         COALESCE(SUM(
-          p.pcontractTotal - (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
+          COALESCE(col.coll, 0) -
+          (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
         ), 0) AS sum_p
       FROM Place p
       LEFT JOIN (
@@ -1374,15 +1383,17 @@ UNION
         FROM MaterialCost
         GROUP BY mpid
       ) mc ON mc.pid = p.pid
+      LEFT JOIN (
+        SELECT
+          pid,
+          SUM(camount) AS coll,
+          SUM(CASE WHEN ckind = '선수금' THEN camount ELSE 0 END) AS adv
+        FROM PlaceCollection
+        GROUP BY pid
+      ) col ON col.pid = p.pid
       WHERE p.pcomplete = 1
         AND p.pcontractTotal > 0
-        AND p.pend IS NOT NULL
-        AND p.pend != '0'
-        AND LENGTH(p.pend) >= 7
-        AND SUBSTR(p.pend, 1, 7) = ?
-      ''',
-      [ym],
-    );
+    ''');
     final doneCnt = (doneMarginRow.first['cnt'] as int?) ?? 0;
     final sumC = (doneMarginRow.first['sum_c'] as int?) ?? 0;
     final sumP = (doneMarginRow.first['sum_p'] as int?) ?? 0;
@@ -1515,7 +1526,8 @@ UNION
         SUBSTR(p.pend, 1, 4) AS y,
         SUM(p.pcontractTotal) AS sum_c,
         SUM(
-          p.pcontractTotal - (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
+          COALESCE(col.coll, 0) -
+          (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
         ) AS sum_p
       FROM Place p
       LEFT JOIN (
@@ -1529,6 +1541,14 @@ UNION
         FROM MaterialCost
         GROUP BY mpid
       ) mc ON mc.pid = p.pid
+      LEFT JOIN (
+        SELECT
+          pid,
+          SUM(camount) AS coll,
+          SUM(CASE WHEN ckind = '선수금' THEN camount ELSE 0 END) AS adv
+        FROM PlaceCollection
+        GROUP BY pid
+      ) col ON col.pid = p.pid
       WHERE p.pcomplete = 1
         AND p.pcontractTotal > 0
         AND p.pend IS NOT NULL
@@ -1579,14 +1599,40 @@ UNION
         p.pcontractTotal AS contractTotal,
         COALESCE(col.coll, 0) AS collected,
         COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0) AS costTotal,
+        COALESCE((
+          SELECT SUM(pc.camount)
+          FROM PlaceCollection pc
+          WHERE pc.pid = p.pid AND pc.ckind = '선수금'
+        ), 0) AS advanceCollected,
+        COALESCE((
+          SELECT GROUP_CONCAT(entry, '\n')
+          FROM (
+            SELECT
+              SUBSTR(pc.cdate, 1, 10) || '|' ||
+              COALESCE(NULLIF(TRIM(pc.ckind), ''), '잔금') || '|' ||
+              CAST(pc.camount AS TEXT) AS entry
+            FROM PlaceCollection pc
+            WHERE pc.pid = p.pid AND pc.ckind != '선수금'
+            ORDER BY pc.cdate ASC, pc.cid ASC
+          )
+        ), '') AS balanceBreakdown,
         CASE
-          WHEN (p.pcontractTotal - COALESCE(col.coll, 0)) > 0
-          THEN (p.pcontractTotal - COALESCE(col.coll, 0))
+          WHEN (
+            p.pcontractTotal -
+            COALESCE(col.coll, 0)
+          ) > 0
+          THEN (
+            p.pcontractTotal -
+            COALESCE(col.coll, 0)
+          )
           ELSE 0
         END AS outstanding
       FROM Place p
       LEFT JOIN (
-        SELECT pid, SUM(camount) AS coll
+        SELECT
+          pid,
+          SUM(camount) AS coll,
+          SUM(CASE WHEN ckind = '선수금' THEN camount ELSE 0 END) AS adv
         FROM PlaceCollection
         GROUP BY pid
       ) col ON col.pid = p.pid
@@ -1614,6 +1660,8 @@ UNION
             collected: (e['collected'] as int?) ?? 0,
             costTotal: (e['costTotal'] as int?) ?? 0,
             outstanding: (e['outstanding'] as int?) ?? 0,
+            advanceCollected: (e['advanceCollected'] as int?) ?? 0,
+            balanceBreakdown: (e['balanceBreakdown'] as String?) ?? '',
           ),
         )
         .toList();
@@ -1748,7 +1796,8 @@ UNION
         SUBSTR(p.pend, 1, 7) AS ym,
         SUM(p.pcontractTotal) AS sum_c,
         SUM(
-          p.pcontractTotal - (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
+          COALESCE(col.coll, 0) -
+          (COALESCE(wc.wcst, 0) + COALESCE(mc.mct, 0))
         ) AS sum_p
       FROM Place p
       LEFT JOIN (
@@ -1762,6 +1811,14 @@ UNION
         FROM MaterialCost
         GROUP BY mpid
       ) mc ON mc.pid = p.pid
+      LEFT JOIN (
+        SELECT
+          pid,
+          SUM(camount) AS coll,
+          SUM(CASE WHEN ckind = '선수금' THEN camount ELSE 0 END) AS adv
+        FROM PlaceCollection
+        GROUP BY pid
+      ) col ON col.pid = p.pid
       WHERE p.pcomplete = 1
         AND p.pcontractTotal > 0
         AND p.pend IS NOT NULL
@@ -1831,6 +1888,18 @@ UNION
       orderBy: 'taskDate ASC, sortOrder ASC, sid ASC',
     );
     return rows.map((e) => ScheduleMemoModel.fromMap(e)).toList();
+  }
+
+  Future<ScheduleMemoModel?> getScheduleMemoBySid(int sid) async {
+    final Database db = await initializeDB();
+    final rows = await db.query(
+      'ScheduleMemo',
+      where: 'sid = ?',
+      whereArgs: [sid],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return ScheduleMemoModel.fromMap(rows.first);
   }
 
   Future<int> insertScheduleMemo(ScheduleMemoModel m) async {

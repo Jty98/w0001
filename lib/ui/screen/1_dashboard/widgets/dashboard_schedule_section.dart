@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
+import 'package:w0001/presentation/viewmodel/place_list_view_model.dart' show dbHelperProvider;
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_editor_sheet.dart';
+import 'package:share_plus/share_plus.dart';
 
 part 'dashboard_schedule_full_screen.part.dart';
 
@@ -465,6 +467,167 @@ class _DashboardScheduleCompactCardState
   var _pageControllerReady = false;
   var _syncingPageFromVm = false;
 
+  Future<void> _shareSelectedDay(
+    BuildContext context,
+    DashboardScheduleState state,
+    DateTime day,
+  ) async {
+    final selected = scheduleDateOnly(day);
+    final selectedKey = scheduleDateKey(selected);
+    final dayMemos = state.weekMemos
+        .where((m) => m.taskDate == selectedKey)
+        .toList()
+      ..sort((a, b) {
+        final aTime = a.taskTime.trim();
+        final bTime = b.taskTime.trim();
+        final aHasTime = aTime.isNotEmpty;
+        final bHasTime = bTime.isNotEmpty;
+        if (aHasTime != bHasTime) return aHasTime ? -1 : 1; // 시간이 없는 항목은 아래로
+        if (aTime != bTime) return aTime.compareTo(bTime);
+        return a.title.compareTo(b.title);
+      });
+
+    final text = _buildDailyShareText(selected, dayMemos);
+
+    if (!context.mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    await Share.share(
+      text,
+      sharePositionOrigin:
+          box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+    );
+  }
+
+  String _buildDailyShareText(DateTime day, List<ScheduleMemoModel> memos) {
+    final dateLabel =
+        '${day.year}년 ${day.month}월 ${day.day}일 (${_weekdayKo[day.weekday - 1]})';
+    final header = '''
+## 📅 일정표
+### $dateLabel
+''';
+    if (memos.isEmpty) {
+      return '''
+$header
+---
+- 등록된 일정이 없습니다.
+''';
+    }
+    final lines = memos.asMap().entries.map((entry) {
+      final index = entry.key + 1;
+      final m = entry.value;
+      final time = m.taskTime.trim().isEmpty ? '--:--' : m.taskTime.trim();
+      final memo = m.memo.trim().isEmpty ? '-' : m.memo.trim();
+      return '''
+# ${index}
+$time [${m.title.trim()}]
+$memo
+''';
+    }).join('\n');
+    return '''
+$header
+---
+$lines
+''';
+  }
+
+  Future<DateTime?> _pickDayForShare(
+    BuildContext context,
+    DashboardScheduleState state,
+  ) async {
+    final weekStart = scheduleDateOnly(state.weekStart);
+    final selected = scheduleDateOnly(state.selectedDay);
+    return showModalBottomSheet<DateTime>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        final sheetHeight =
+            (MediaQuery.sizeOf(ctx).height * 0.62).clamp(320.0, 520.0).toDouble();
+        return SizedBox(
+          height: sheetHeight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  '공유할 날짜 선택',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: 7,
+                    itemBuilder: (context, i) {
+                      final day = weekStart.add(Duration(days: i));
+                      final key = scheduleDateKey(day);
+                      final count =
+                          state.weekMemos.where((m) => m.taskDate == key).length;
+                      final isSelected = _scheduleIsSameDay(day, selected);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => Navigator.pop(ctx, day),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: isSelected
+                                  ? cs.primaryContainer
+                                  : cs.surfaceContainerHighest.withValues(
+                                      alpha: 0.4,
+                                    ),
+                              border: Border.all(
+                                color: isSelected
+                                    ? cs.primary
+                                    : cs.outlineVariant.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _dayTitleLine(day),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: isSelected
+                                          ? cs.onPrimaryContainer
+                                          : cs.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  count == 0 ? '일정 없음' : '$count개',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected
+                                        ? cs.onPrimaryContainer
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -519,7 +682,8 @@ class _DashboardScheduleCompactCardState
           color: cs.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
-      child: Padding(
+      child: Container(
+        color: Theme.of(context).cardColor,
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -534,18 +698,21 @@ class _DashboardScheduleCompactCardState
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
                 ),
-                Tooltip(
-                  message: '데이터는 기기에 저장됩니다. 잠금화면 위젯·카카오 등 공유는 추후 연결할 수 있어요.',
-                  child: Chip(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    label: const Text(
-                      '위젯·공유 예정',
-                      style:
-                          TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-                    ),
-                    side: BorderSide(color: cs.outlineVariant),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined, size: 20),
+                  onPressed: () async {
+                    try {
+                      final day = await _pickDayForShare(context, state);
+                      if (day == null || !context.mounted) return;
+                      await _shareSelectedDay(context, state, day);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('공유 중 오류가 발생했습니다: $e')),
+                        );
+                      }
+                    }
+                  },
                 ),
               ],
             ),
@@ -607,7 +774,6 @@ class _DashboardScheduleCompactCardState
                       },
                     ),
             ),
-            const SizedBox(height: 6),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -1088,6 +1254,16 @@ Future<void> openDashboardMemoEditor(
       : (initialDateOverride ?? st.selectedDay);
   final initialTime =
       existing != null ? _parseTaskTime(existing.taskTime) : null;
+  final places = await ref.read(dbHelperProvider).getAllPlaces();
+  places.sort((a, b) => (b.pid ?? 0).compareTo(a.pid ?? 0)); // 최근 등록 순
+  final seen = <String>{};
+  final placeNameSuggestions = <String>[];
+  for (final p in places) {
+    final name = p.pname.trim();
+    if (name.isEmpty || seen.contains(name)) continue;
+    seen.add(name);
+    placeNameSuggestions.add(name);
+  }
 
   final result = await showModalBottomSheet<DashboardMemoEditorResult?>(
     context: context,
@@ -1099,6 +1275,7 @@ Future<void> openDashboardMemoEditor(
       initialDate: initialDate,
       initialTime: initialTime,
       onPickTime: (initial) => _pickTaskTime(context, initial),
+      placeNameSuggestions: placeNameSuggestions,
     ),
   );
 

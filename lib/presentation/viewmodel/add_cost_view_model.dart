@@ -359,7 +359,10 @@ class AddCostViewModel extends Notifier<AddCostState> {
 
   void categoryChangeAction(String value) {
     state = state.copyWith(selectedCategory: value);
-    mNameController.text = state.selectedCategory ?? '';
+    mNameController.text = value;
+    mNameController.selection = TextSelection.fromPosition(
+      TextPosition(offset: mNameController.text.length),
+    );
     mNameFocus.requestFocus();
   }
 

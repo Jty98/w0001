@@ -42,6 +42,8 @@ class AddTextField extends StatelessWidget {
         focusNode: focusNode,
         onChanged: onChanged,
         onSubmitted: onSubmitted,
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
         readOnly: readOnly,
         controller: tController,
         decoration: InputDecoration(

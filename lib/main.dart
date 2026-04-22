@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/router/app_router.dart';
 import 'package:w0001/ui/widget/alarm_ringing_overlay.dart';
 import 'package:w0001/util/alarm_permission_helper.dart';
@@ -56,12 +57,13 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final AlarmRingingOverlayController _alarmOverlayController;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _alarmOverlayController = AlarmRingingOverlayController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _alarmOverlayController.start();
@@ -69,7 +71,20 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final container = rootProviderContainer;
+    if (container == null) return;
+    unawaited(
+      container
+          .read(dashboardScheduleProvider.notifier)
+          .syncWidgetSnapshotNow(),
+    );
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _alarmOverlayController.dispose();
     super.dispose();
   }
@@ -78,11 +93,15 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       routerConfig: _appRouter,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: TextScaler.noScaling,
+      builder: (context, child) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.noScaling,
+          ),
+          child: child!,
         ),
-        child: child!,
       ),
       title: 'Flutter Demo',
       theme: ThemeData(

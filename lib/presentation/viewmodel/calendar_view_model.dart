@@ -1,7 +1,6 @@
 import 'package:date_picker_plus/date_picker_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:w0001/data/datasources/local/calendar_local_data_source.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
@@ -20,7 +19,6 @@ import 'package:w0001/util/funtions.dart';
 
 class CalendarState {
   const CalendarState({
-    required this.calendarFormat,
     required this.selectedDay,
     required this.focusedDay,
     required this.totalCostList,
@@ -31,7 +29,6 @@ class CalendarState {
     required this.dialogDateTime,
   });
 
-  final CalendarFormat calendarFormat;
   final DateTime selectedDay;
   final DateTime focusedDay;
   final List<TotalCostModel> totalCostList;
@@ -45,7 +42,6 @@ class CalendarState {
     final now = DateTime.now();
     final day = DateTime(now.year, now.month, now.day);
     return CalendarState(
-      calendarFormat: CalendarFormat.month,
       selectedDay: now,
       focusedDay: day,
       totalCostList: const [],
@@ -58,7 +54,6 @@ class CalendarState {
   }
 
   CalendarState copyWith({
-    CalendarFormat? calendarFormat,
     DateTime? selectedDay,
     DateTime? focusedDay,
     List<TotalCostModel>? totalCostList,
@@ -70,7 +65,6 @@ class CalendarState {
     DateTime? dialogDateTime,
   }) {
     return CalendarState(
-      calendarFormat: calendarFormat ?? this.calendarFormat,
       selectedDay: selectedDay ?? this.selectedDay,
       focusedDay: focusedDay ?? this.focusedDay,
       totalCostList: totalCostList ?? this.totalCostList,
@@ -199,10 +193,6 @@ class CalendarViewModel extends Notifier<CalendarState> {
   List<String> getEventsForDay(DateTime day) {
     final selected = DateTime(day.year, day.month, day.day);
     return state.events[selected] ?? [];
-  }
-
-  void changeFormat(CalendarFormat format) {
-    state = state.copyWith(calendarFormat: format);
   }
 
   Future<void> fetchTotalCost() async {

@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:date_picker_plus/date_picker_plus.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,6 +24,7 @@ import 'package:w0001/domain/use_case/workcost_use_case.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
     show dbHelperProvider, placeUseCaseProvider;
+import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/funtions.dart';
 
 class PlaceDetailState {
@@ -202,6 +202,88 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     state = state.copyWith(alertText: '');
   }
 
+  Future<DateTimeRange?> _pickRangeWithScrollableCalendar(
+    BuildContext context,
+  ) async {
+    // 다이얼로그는 항상 초기화된 상태(미선택)로 시작해
+    // 다른 화면에서 사용한 범위가 남아 보이지 않도록 한다.
+    DateTime? rangeStart;
+    DateTime? rangeEnd;
+    return showDialog<DateTimeRange>(
+      context: context,
+      builder: (ctx) {
+        final screenH = MediaQuery.sizeOf(ctx).height;
+        final maxHeight = (screenH * 0.66).clamp(420.0, 560.0).toDouble();
+        final calHeight = (screenH * 0.36).clamp(250.0, 320.0).toDouble();
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Dialog(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          '기간 선택',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      ScrollableCalendarWidget(
+                        height: calHeight,
+                        initialRangeStart: rangeStart,
+                        initialRangeEnd: rangeEnd,
+                        showViewModeToggle: false,
+                        showRangeSummarySection: false,
+                        disableDateSelectionHighlight: true,
+                        onRangeChanged: (s, e) {
+                          rangeStart = s;
+                          rangeEnd = e;
+                          setModalState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              final s = rangeStart;
+                              if (s == null) {
+                                Navigator.of(ctx).pop();
+                                return;
+                              }
+                              final e = rangeEnd ?? s;
+                              final normalized = s.isBefore(e)
+                                  ? DateTimeRange(start: s, end: e)
+                                  : DateTimeRange(start: e, end: s);
+                              Navigator.of(ctx).pop(normalized);
+                            },
+                            child: const Text('확인'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ===== computed (기존 controller getter 대체) =====
 
   List<TotalCostModel> get rangeFilterList => state.totalCostList
@@ -292,7 +374,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       rname: rname,
       rprice: rprice,
       rorder: -1,
-      rdate: formatDateTimeWeekDayToString(state.dialogRevenuePickedDay),
+      rdate: formatDateTimeToIsoDate(state.dialogRevenuePickedDay),
     );
     await _revenueUseCase.updateRevenue(revenue: model, placeId: state.pid);
     await fetchAllRevenueFromPlace();
@@ -314,7 +396,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       pid: pid,
       rprice: rprice,
       rname: rname,
-      rdate: formatDateTimeWeekDayToString(state.revenuePickedDay),
+      rdate: formatDateTimeToIsoDate(state.revenuePickedDay),
     );
     await fetchAllRevenueFromPlace();
     resetRevenueTextController();
@@ -383,13 +465,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
     if (index == 0) {
       nextType = DayTpye.range;
-      nextRange = await showRangePickerDialog(
-            context: context,
-            minDate: DateTime(2000),
-            maxDate: DateTime(2099),
-            highlightColor: Colors.green,
-          ) ??
-          nextRange;
+      nextRange =
+          await _pickRangeWithScrollableCalendar(context) ?? nextRange;
     } else if (index == 1) {
       nextType = DayTpye.whole;
       nextRange = DateTimeRange(start: DateTime(2000), end: DateTime(2099, 12, 31));

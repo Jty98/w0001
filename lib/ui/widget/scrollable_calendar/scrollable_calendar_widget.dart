@@ -19,6 +19,9 @@ class ScrollableCalendarWidget extends StatefulWidget {
     this.onMonthChanged,
     this.onCalendarPageAnchorChanged,
     this.onViewModeChanged,
+    this.initialEvents = const [],
+    this.showRangeSummarySection = true,
+    this.disableDateSelectionHighlight = false,
   });
 
   final double height;
@@ -57,6 +60,15 @@ class ScrollableCalendarWidget extends StatefulWidget {
   /// 패키지 내부에서 1주/2주/월이 바뀔 때
   final void Function(CalendarViewMode mode)? onViewModeChanged;
 
+  /// 캘린더 날짜별 점/이벤트 표시용 데이터
+  final List<CalendarEvent> initialEvents;
+
+  /// range 선택 모드에서 상단 선택 기간 요약 UI 표시 여부
+  final bool showRangeSummarySection;
+
+  /// 날짜 선택 시 배경/범위 하이라이트를 비활성화합니다.
+  final bool disableDateSelectionHighlight;
+
   @override
   State<ScrollableCalendarWidget> createState() =>
       _ScrollableCalendarWidgetState();
@@ -67,16 +79,20 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
   DateTime? _rangeEnd;
   late DateTime _selectedDay;
   int _rebuildNonce = 0;
+  late final int _instanceSeed;
 
   bool get _isFixedRangeSinglePickMode =>
       widget.onDayPicked != null && !widget.useSingleDaySelection;
 
   bool get _showRangeSummary =>
-      widget.onRangeChanged != null && !widget.useSingleDaySelection;
+      widget.onRangeChanged != null &&
+      !widget.useSingleDaySelection &&
+      widget.showRangeSummarySection;
 
   @override
   void initState() {
     super.initState();
+    _instanceSeed = DateTime.now().microsecondsSinceEpoch;
     _rangeStart = widget.initialRangeStart;
     _rangeEnd = widget.initialRangeEnd ?? widget.initialRangeStart;
     final base = widget.initialSelectedDay ?? DateTime.now();
@@ -129,7 +145,29 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
 
   @override
   Widget build(BuildContext context) {
-    const style = CalendarStyle();
+    final cs = Theme.of(context).colorScheme;
+    final style = widget.disableDateSelectionHighlight
+        ? CalendarStyle(
+            focusedMonthBackgroundColor: Colors.transparent,
+            selectedDayBackgroundColor: const Color(0x2B3B82F6),
+            selectedDayTextStyle: TextStyle(
+              color: cs.primary,
+              fontWeight: FontWeight.bold,
+            ),
+            todayTextStyle: const TextStyle(
+              color: Color(0xFF1D4ED8),
+              fontWeight: FontWeight.w900,
+            ),
+            todayBorderColor: const Color(0xFF1D4ED8),
+            todayBorderWidth: 1.6,
+            eventRangeBackgroundColor: const Color(0x1F3B82F6),
+            eventStartEndBackgroundColor: const Color(0x3B2563EB),
+            eventStartEndTextStyle: TextStyle(
+              color: cs.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          )
+        : const CalendarStyle();
 
     final initialStart = widget.initialRangeStart;
     final initialEnd = widget.initialRangeEnd ?? initialStart;
@@ -147,9 +185,12 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
                 ? ValueKey(
                     'addcost-calendar-$_rebuildNonce-${_selectedDay.toIso8601String()}',
                   )
-                : widget.useSingleDaySelection
-                    ? const ValueKey('scroll-cal-schedule-single')
-                    : const ValueKey('place-range-calendar')),
+                : ValueKey(
+                    'scroll-cal-$_instanceSeed-'
+                    '${widget.useSingleDaySelection ? 'single' : 'range'}-'
+                    '${widget.disableDateSelectionHighlight ? 'flat' : 'normal'}-'
+                    '${widget.showViewModeToggle ? 'toggle' : 'notoggle'}',
+                  )),
         config: CalendarConfig(
           initialDate: focusDate,
           pageScrollDirection: CalendarPageScrollDirection.horizontal,
@@ -160,6 +201,7 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
           calendarHeightFactor: 1,
           initialEventStartDate: useRangeMode ? initialStart : null,
           initialEventEndDate: useRangeMode ? initialEnd : null,
+          initialEvents: widget.initialEvents,
         ),
         style: style,
         initialCalendarViewMode: widget.initialCalendarViewMode,
@@ -194,7 +236,6 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
                 widget.onRangeChanged?.call(start, end);
               },
         builder: (context, selectedDate, calendar) {
-          final cs = Theme.of(context).colorScheme;
           return Column(
             children: [
               if (_showRangeSummary)

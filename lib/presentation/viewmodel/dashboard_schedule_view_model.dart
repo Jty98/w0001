@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
     show dbHelperProvider;
+import 'package:w0001/util/widget_data_manager.dart';
 
 DateTime scheduleDateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -194,6 +195,12 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
       debugPrint('DashboardSchedule week reload failed: $e\n$st');
     } finally {
       state = state.copyWith(isWeekLoading: false);
+      // 현재 주가 열려 있을 때는 위젯 데이터(풀 + 이번 주)를 함께 동기화한다.
+      final now = DateTime.now();
+      final thisMon = scheduleStartOfWeekMonday(now);
+      if (scheduleDateOnly(state.weekStart) == scheduleDateOnly(thisMon)) {
+        await _updateWidgetData();
+      }
     }
   }
 
@@ -283,6 +290,54 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     state = state.copyWith(weekMemosByWeekKey: const {});
     await _reloadWeek();
     await refreshFullMemosIfLoaded();
+    await _updateWidgetData();
+  }
+
+  Future<void> _updateWidgetData() async {
+    try {
+      final db = ref.read(dbHelperProvider);
+      final thisMon = scheduleStartOfWeekMonday(DateTime.now());
+      final poolFrom = scheduleDateKey(thisMon.subtract(const Duration(days: 7 * 52)));
+      final poolTo = scheduleDateKey(thisMon.add(const Duration(days: 7 * 52 + 6)));
+      final poolList = await db.getScheduleMemosBetween(poolFrom, poolTo);
+      await WidgetDataManager.saveSchedulePool(poolList);
+
+      final from = scheduleDateKey(thisMon);
+      final to = scheduleDateKey(thisMon.add(const Duration(days: 6)));
+      final list = await db.getScheduleMemosBetween(from, to);
+      await WidgetDataManager.updateScheduleWidget(list);
+    } catch (e) {
+      debugPrint('Widget sync failed: $e');
+    }
+  }
+
+  Future<void> _applyPendingWidgetDoneUpdates() async {
+    final updates = await WidgetDataManager.consumePendingDoneUpdates();
+    if (updates.isEmpty) return;
+
+    final db = ref.read(dbHelperProvider);
+    var changed = false;
+    for (final u in updates) {
+      final sid = u.sid;
+      if (sid == null) continue;
+      final current = await db.getScheduleMemoBySid(sid);
+      if (current == null || current.done == u.done) continue;
+      final updated = current.copyWith(done: u.done);
+      await db.updateScheduleMemo(updated);
+      await _safeSyncAlarmForMemo(updated);
+      changed = true;
+    }
+
+    if (!changed) return;
+    state = state.copyWith(weekMemosByWeekKey: const {});
+    await _reloadWeek();
+    await refreshFullMemosIfLoaded();
+  }
+
+  /// 앱 포그라운드 복귀 시 위젯에서 발생한 변경을 반영하고 위젯을 재동기화한다.
+  Future<void> syncWidgetSnapshotNow() async {
+    await _applyPendingWidgetDoneUpdates();
+    await _updateWidgetData();
   }
 
   Future<void> setDone(int sid, bool done) async {

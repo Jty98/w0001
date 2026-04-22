@@ -14,24 +14,26 @@ import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 
 /// 현장 선택 첫 화면: 본문 하단(하단 탭바 바로 위)에서 띄울 간격 — 논리 픽셀(dp/pt), 해상도마다 동일 비율
-const double _kPlacePickerGapAboveBottomNav = 80;
+const double _kPlacePickerGapAboveBottomNav = 30;
 
 /// 현장 선택 메뉴를 필드 **위쪽**으로 열기 (한손 조작 시 목록이 손가락 쪽으로)
 RelativeRect _placeMenuAbovePosition(RenderBox button, RenderBox overlay) {
   final sz = button.size;
   final tl = button.localToGlobal(Offset.zero, ancestor: overlay);
-  final tr = button.localToGlobal(Offset(sz.width, 0), ancestor: overlay);
   final w = overlay.size.width;
   final h = overlay.size.height;
   const gap = 6.0;
-  const maxMenuHeight = 400.0;
   final anchorTop = tl.dy - gap;
-  final top = math.max(8.0, anchorTop - maxMenuHeight);
-  return RelativeRect.fromLTRB(
-    tl.dx.clamp(8.0, w - 8.0),
-    top,
-    math.max(8.0, w - tr.dx),
-    h - anchorTop,
+
+  // 위 공간만 사용해서 메뉴 높이를 계산해, 버튼 바로 위에 붙여 띄운다.
+  final maxUsableHeight = (anchorTop - 8.0).clamp(120.0, 360.0);
+  final top = (anchorTop - maxUsableHeight).clamp(8.0, h - 8.0);
+  final left = tl.dx.clamp(8.0, w - sz.width - 8.0);
+  final menuHeight = (anchorTop - top).clamp(0.0, h - top - 8.0);
+
+  return RelativeRect.fromRect(
+    Rect.fromLTWH(left, top, sz.width, menuHeight),
+    Offset.zero & Size(w, h),
   );
 }
 
@@ -379,6 +381,10 @@ Widget placeDropdown(
   BuildContext context, {
   bool openPopupAbove = false,
 }) {
+  final theme = Theme.of(context);
+  final cs = theme.colorScheme;
+  final borderRadius = BorderRadius.circular(10);
+
   return SizedBox(
     height: 54,
     child: DropdownSearch<PlaceModel>(
@@ -403,17 +409,57 @@ Widget placeDropdown(
       ),
       dropdownDecoratorProps: DropDownDecoratorProps(
         textAlign: TextAlign.center,
-        baseStyle: const TextStyle(
+        baseStyle: TextStyle(
           fontSize: 18,
-          color: Colors.black,
+          fontWeight: FontWeight.w500,
+          color: cs.onSurface,
         ),
         dropdownSearchDecoration: InputDecoration(
           isDense: true,
-          hintStyle: const TextStyle(color: Colors.red, fontSize: 18),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
           ),
-          hintText: '현장을 선택해 주세요.',
+          filled: true,
+          fillColor: cs.surfaceContainerLow,
+          prefixIcon: Icon(
+            Icons.home_work_outlined,
+            size: 20,
+            color: cs.onSurfaceVariant,
+          ),
+          hintStyle: TextStyle(
+            color: cs.outline,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+          helperStyle: TextStyle(
+            fontSize: 11,
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+          helperMaxLines: 1,
+          border: OutlineInputBorder(
+            borderRadius: borderRadius,
+            borderSide: BorderSide(
+              color: cs.outlineVariant,
+              width: 1.0,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: borderRadius,
+            borderSide: BorderSide(
+              color: cs.outlineVariant,
+              width: 1.0,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: borderRadius,
+            borderSide: BorderSide(
+              color: cs.primary,
+              width: 1.4,
+            ),
+          ),
+          hintText: '현장을 선택해 주세요',
         ),
       ),
       onChanged: (value) => vm.placeChangeAction(context, value!),

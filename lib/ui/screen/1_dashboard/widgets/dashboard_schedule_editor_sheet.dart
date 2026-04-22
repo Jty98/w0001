@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
-import 'package:w0001/util/funtions.dart';
 
 const List<int> _alarmOffsetChoices = [0, 30, 60, 180, 1440];
 
@@ -49,12 +48,14 @@ class DashboardScheduleMemoEditorSheet extends StatefulWidget {
     required this.initialDate,
     required this.initialTime,
     required this.onPickTime,
+    required this.placeNameSuggestions,
   });
 
   final ScheduleMemoModel? existing;
   final DateTime initialDate;
   final TimeOfDay? initialTime;
   final Future<TimeOfDay?> Function(TimeOfDay? initial) onPickTime;
+  final List<String> placeNameSuggestions;
 
   @override
   State<DashboardScheduleMemoEditorSheet> createState() =>
@@ -121,6 +122,78 @@ class _DashboardScheduleMemoEditorSheetState
         alarmEnabled: _alarmEnabled,
         alarmOffsetMinutes: _alarmEnabled ? _alarmOffsetMinutes : 0,
       ),
+    );
+  }
+
+  Future<void> _pickPlaceNameFromDialog() async {
+    if (widget.placeNameSuggestions.isEmpty) return;
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final filtered = widget.placeNameSuggestions
+                .where((name) => name.toLowerCase().contains(query.toLowerCase()))
+                .toList();
+            return AlertDialog(
+              title: const Text('현장 이름 선택'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: '현장 이름 검색',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setModalState(() => query = v.trim()),
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('검색 결과가 없습니다.'))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final name = filtered[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  onTap: () => Navigator.pop(ctx, name),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('닫기'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    _titleCtrl.text = selected;
+    _titleCtrl.selection = TextSelection.fromPosition(
+      TextPosition(offset: _titleCtrl.text.length),
     );
   }
 
@@ -227,11 +300,54 @@ class _DashboardScheduleMemoEditorSheetState
                 ),
                 textInputAction: TextInputAction.next,
               ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withValues(alpha: 0.5),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.7),
+                  ),
+                ),
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(
+                    Icons.business_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text(
+                    '현장 이름 불러오기',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    '최근 등록된 현장 검색/정렬',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  trailing: FilledButton.tonalIcon(
+                    onPressed: _pickPlaceNameFromDialog,
+                    icon: const Icon(Icons.search, size: 16),
+                    label: const Text('선택'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: _memoCtrl,
                 decoration: const InputDecoration(
-                  labelText: '메모',
+                  labelText: '내용',
+                  hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),
@@ -338,8 +454,9 @@ class _DashboardScheduleDatePickerDialogState
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.62;
-    final calHeight = MediaQuery.sizeOf(context).height * 0.45;
+    final screenH = MediaQuery.sizeOf(context).height;
+    final maxHeight = (screenH * 0.60).clamp(400.0, 520.0).toDouble();
+    final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
 
     return Dialog(
       child: ConstrainedBox(
@@ -361,6 +478,8 @@ class _DashboardScheduleDatePickerDialogState
                 initialRangeStart: _pickedDay,
                 initialRangeEnd: _pickedDay,
                 initialSelectedDay: _pickedDay,
+                showViewModeToggle: false,
+                disableDateSelectionHighlight: true,
                 onDayPicked: (d) {
                   if (!_readyForUserInput) return;
                   setState(() => _pickedDay = d);
