@@ -66,6 +66,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
       TextEditingController(text: '0');
   final TextEditingController placeContractTotalController =
       TextEditingController(text: '0');
+  final TextEditingController placeAddressController = TextEditingController();
 
   @override
   PlaceListState build() {
@@ -74,6 +75,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
       placeNameController.dispose();
       placeRevenueController.dispose();
       placeContractTotalController.dispose();
+      placeAddressController.dispose();
     });
     if (!_initialized) {
       _initialized = true;
@@ -108,6 +110,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     placeNameController.text = '';
     placeRevenueController.text = '0';
     placeContractTotalController.text = '0';
+    placeAddressController.text = '';
     _placeDialogRangeStart = null;
     _placeDialogRangeEnd = null;
     state = state.copyWith(updateText: '');
@@ -154,6 +157,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
   Future<bool> updatePlace(
     int pid,
     String pname,
+    String paddress,
     int prevenue,
     int pcontractTotal,
     DateTime? rangeStart,
@@ -181,6 +185,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
         pcomplete: 0,
         pstart: rangeStart.toIso8601String(),
         pend: end.toIso8601String(),
+        paddress: paddress.trim(),
         pcontractDate: '',
       );
       await _useCase.updatePlace(model);
@@ -228,6 +233,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
       pname: placeNameController.text,
       pstart: pstart,
       pend: pend,
+      paddress: placeAddressController.text.trim(),
       pcomplete: 0,
       pcontractDate: '',
     );

@@ -19,9 +19,9 @@ import 'package:w0001/ui/widget/total_price_bar.dart';
 import 'package:w0001/ui/widget/segment_widget.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 
-class PlaceScreen extends ConsumerWidget {
+class PlaceCostScreen extends ConsumerWidget {
   final PlaceInfoModel placeInfo;
-  const PlaceScreen({super.key, required this.placeInfo});
+  const PlaceCostScreen({super.key, required this.placeInfo});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

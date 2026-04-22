@@ -3,6 +3,7 @@ class PlaceInfoModel {
   final String pname;
   final String pstart;
   final String pend;
+  final String paddress;
   final int pcomplete;
   final int pfirstrevenue;
   final int pcontractTotal;
@@ -40,6 +41,7 @@ class PlaceInfoModel {
     required this.pcomplete,
     required this.pstart,
     required this.pend,
+    required this.paddress,
     required this.pfirstrevenue,
     required this.pcontractTotal,
     required this.workerCount,
@@ -79,6 +81,7 @@ class PlaceInfoModel {
         pcontractTotal = res['pcontractTotal'] ?? 0,
         pstart = res['pstart'] ?? '',
         pend = res['pend'] ?? '',
+        paddress = res['paddress'] ?? '',
         workerCount = res['workerCount'] ?? 0,
         totalAdditionalRevenue = res['totalAdditionalRevenue'] ?? 0,
         mTotal = res['mTotal'] ?? 0,

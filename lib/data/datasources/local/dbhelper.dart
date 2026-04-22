@@ -6,6 +6,7 @@ import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/place_dropdown_model.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/revenue_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
@@ -15,7 +16,7 @@ import 'package:w0001/data/model/dashboard_models.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 
 class DbHelper {
-  final int curruntVersion = 12;
+  final int curruntVersion = 14;
   Database? db;
 
   Future<Database> initializeDB() async {
@@ -41,6 +42,7 @@ class DbHelper {
           pname TEXT,
           pstart TEXT,
           pend TEXT,
+          paddress TEXT DEFAULT '',
           pcomplete INTEGER DEFAULT 0,
           prevenue INTEGER DEFAULT 0,
           pcontractTotal INTEGER DEFAULT 0,
@@ -133,6 +135,32 @@ class DbHelper {
         )''');
         await database.execute(
           'CREATE INDEX IF NOT EXISTS idx_schedulememo_taskDate ON ScheduleMemo(taskDate)',
+        );
+
+        await database.execute('''CREATE TABLE IF NOT EXISTS PlacePhotoGroup (
+          pgid INTEGER PRIMARY KEY AUTOINCREMENT,
+          pid INTEGER NOT NULL,
+          photoDate TEXT NOT NULL,
+          title TEXT NOT NULL DEFAULT '',
+          sortOrder INTEGER NOT NULL DEFAULT 0,
+          createdAtMs INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (pid) REFERENCES Place(pid)
+        )''');
+        await database.execute(
+          'CREATE INDEX IF NOT EXISTS idx_placephotogroup_pid_date ON PlacePhotoGroup(pid, photoDate)',
+        );
+
+        await database.execute('''CREATE TABLE IF NOT EXISTS PlacePhoto (
+          phid INTEGER PRIMARY KEY AUTOINCREMENT,
+          pgid INTEGER NOT NULL,
+          photoUrl TEXT NOT NULL,
+          originalName TEXT DEFAULT '',
+          sortOrder INTEGER NOT NULL DEFAULT 0,
+          createdAtMs INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (pgid) REFERENCES PlacePhotoGroup(pgid)
+        )''');
+        await database.execute(
+          'CREATE INDEX IF NOT EXISTS idx_placephoto_pgid_order ON PlacePhoto(pgid, sortOrder)',
         );
       },
       onUpgrade: (database, oldVersion, newVersion) async {
@@ -326,6 +354,42 @@ class DbHelper {
               database, 'ScheduleMemo', 'alarmOffsetMinutes')) {
             await database.execute(
               'ALTER TABLE ScheduleMemo ADD COLUMN alarmOffsetMinutes INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+        }
+
+        if (oldVersion < 13) {
+          await database.execute('''CREATE TABLE IF NOT EXISTS PlacePhotoGroup (
+            pgid INTEGER PRIMARY KEY AUTOINCREMENT,
+            pid INTEGER NOT NULL,
+            photoDate TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            createdAtMs INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (pid) REFERENCES Place(pid)
+          )''');
+          await database.execute(
+            'CREATE INDEX IF NOT EXISTS idx_placephotogroup_pid_date ON PlacePhotoGroup(pid, photoDate)',
+          );
+
+          await database.execute('''CREATE TABLE IF NOT EXISTS PlacePhoto (
+            phid INTEGER PRIMARY KEY AUTOINCREMENT,
+            pgid INTEGER NOT NULL,
+            photoUrl TEXT NOT NULL,
+            originalName TEXT DEFAULT '',
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            createdAtMs INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (pgid) REFERENCES PlacePhotoGroup(pgid)
+          )''');
+          await database.execute(
+            'CREATE INDEX IF NOT EXISTS idx_placephoto_pgid_order ON PlacePhoto(pgid, sortOrder)',
+          );
+        }
+
+        if (oldVersion < 14) {
+          if (!await _tableHasColumn(database, 'Place', 'paddress')) {
+            await database.execute(
+              "ALTER TABLE Place ADD COLUMN paddress TEXT DEFAULT ''",
             );
           }
         }
@@ -807,6 +871,7 @@ FROM
         'pname': newName,
         'pstart': place.pstart,
         'pend': place.pend,
+        'paddress': place.paddress,
         'pcomplete': place.pcomplete,
         'prevenue': place.prevenue,
         'pcontractTotal': place.pcontractTotal,
@@ -921,13 +986,14 @@ FROM
     final contractDate =
         _contractDateKey(placeModel.pcontractDate, placeModel.pstart);
     await db.rawUpdate(
-      "UPDATE Place SET pname = ?, prevenue = ?, pcontractTotal = ?, pstart = ?, pend = ?, pcontractDate = ? WHERE pid = ?",
+      "UPDATE Place SET pname = ?, prevenue = ?, pcontractTotal = ?, pstart = ?, pend = ?, paddress = ?, pcontractDate = ? WHERE pid = ?",
       [
         placeModel.pname,
         placeModel.prevenue,
         placeModel.pcontractTotal,
         placeModel.pstart,
         placeModel.pend,
+        placeModel.paddress,
         contractDate,
         placeModel.pid,
       ],
@@ -1946,6 +2012,87 @@ UNION
       where: 'sid = ?',
       whereArgs: [sid],
     );
+  }
+
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) async {
+    final db = await initializeDB();
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        g.pgid,
+        g.pid,
+        g.photoDate,
+        g.title,
+        g.sortOrder,
+        g.createdAtMs,
+        COUNT(p.phid) AS photoCount,
+        COALESCE(GROUP_CONCAT(p.photoUrl, '|||'), '') AS photoUrls
+      FROM PlacePhotoGroup g
+      LEFT JOIN PlacePhoto p ON p.pgid = g.pgid
+      WHERE g.pid = ?
+      GROUP BY g.pgid, g.pid, g.photoDate, g.title, g.sortOrder, g.createdAtMs
+      ORDER BY g.photoDate DESC, g.sortOrder ASC, g.pgid DESC
+      ''',
+      [pid],
+    );
+    return rows.map((e) => PlacePhotoGroupModel.fromMap(e)).toList();
+  }
+
+  Future<void> insertPlacePhotoGroup({
+    required int pid,
+    required String photoDate,
+    required String title,
+    required List<String> photoUrls,
+  }) async {
+    if (photoUrls.isEmpty) return;
+    final db = await initializeDB();
+    final dateKey = photoDate.length >= 10 ? photoDate.substring(0, 10) : photoDate;
+    final ms = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      final orderRow = await txn.rawQuery(
+        '''
+        SELECT COALESCE(MAX(sortOrder), -1) + 1 AS n
+        FROM PlacePhotoGroup
+        WHERE pid = ? AND photoDate = ?
+        ''',
+        [pid, dateKey],
+      );
+      final nextOrder = (orderRow.first['n'] as int?) ?? 0;
+      final pgid = await txn.insert('PlacePhotoGroup', {
+        'pid': pid,
+        'photoDate': dateKey,
+        'title': title.trim().isEmpty ? '사진 묶음' : title.trim(),
+        'sortOrder': nextOrder,
+        'createdAtMs': ms,
+      });
+      for (int i = 0; i < photoUrls.length; i++) {
+        final url = photoUrls[i].trim();
+        if (url.isEmpty) continue;
+        await txn.insert('PlacePhoto', {
+          'pgid': pgid,
+          'photoUrl': url,
+          'originalName': '',
+          'sortOrder': i,
+          'createdAtMs': ms,
+        });
+      }
+    });
+  }
+
+  Future<void> deletePlacePhotoGroup(int pgid) async {
+    final db = await initializeDB();
+    await db.transaction((txn) async {
+      await txn.delete(
+        'PlacePhoto',
+        where: 'pgid = ?',
+        whereArgs: [pgid],
+      );
+      await txn.delete(
+        'PlacePhotoGroup',
+        where: 'pgid = ?',
+        whereArgs: [pgid],
+      );
+    });
   }
 
   Future<bool> _tableHasColumn(

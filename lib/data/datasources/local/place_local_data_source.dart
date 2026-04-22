@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 
 /// 현장(Place) 관련 로컬 데이터소스 (SQLite)
@@ -22,6 +23,14 @@ abstract class PlaceLocalDataSource {
     DateTime endDate,
     int pid,
   );
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid);
+  Future<void> insertPlacePhotoGroup({
+    required int pid,
+    required String photoDate,
+    required String title,
+    required List<String> photoUrls,
+  });
+  Future<void> deletePlacePhotoGroup(int pgid);
 }
 
 class PlaceLocalDataSourceImpl implements PlaceLocalDataSource {
@@ -80,6 +89,31 @@ class PlaceLocalDataSourceImpl implements PlaceLocalDataSource {
       pid,
     );
     return raw.cast<Map<String, dynamic>>();
+  }
+
+  @override
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) {
+    return _dbHelper.getPlacePhotoGroups(pid);
+  }
+
+  @override
+  Future<void> insertPlacePhotoGroup({
+    required int pid,
+    required String photoDate,
+    required String title,
+    required List<String> photoUrls,
+  }) {
+    return _dbHelper.insertPlacePhotoGroup(
+      pid: pid,
+      photoDate: photoDate,
+      title: title,
+      photoUrls: photoUrls,
+    );
+  }
+
+  @override
+  Future<void> deletePlacePhotoGroup(int pgid) {
+    return _dbHelper.deletePlacePhotoGroup(pgid);
   }
 }
 

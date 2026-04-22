@@ -1,5 +1,6 @@
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 
 /// 현장(Place) 도메인 저장소 추상
@@ -20,4 +21,12 @@ abstract class PlaceRepository {
     DateTime endDate,
     int pid,
   );
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid);
+  Future<void> insertPlacePhotoGroup({
+    required int pid,
+    required String photoDate,
+    required String title,
+    required List<String> photoUrls,
+  });
+  Future<void> deletePlacePhotoGroup(int pgid);
 }

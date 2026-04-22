@@ -2,6 +2,7 @@ import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/data/datasources/local/place_local_data_source.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 
 class PlaceRepositoryImpl implements PlaceRepository {
@@ -64,6 +65,31 @@ class PlaceRepositoryImpl implements PlaceRepository {
       endDate,
       pid,
     );
+  }
+
+  @override
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) {
+    return _localDataSource.getPlacePhotoGroups(pid);
+  }
+
+  @override
+  Future<void> insertPlacePhotoGroup({
+    required int pid,
+    required String photoDate,
+    required String title,
+    required List<String> photoUrls,
+  }) {
+    return _localDataSource.insertPlacePhotoGroup(
+      pid: pid,
+      photoDate: photoDate,
+      title: title,
+      photoUrls: photoUrls,
+    );
+  }
+
+  @override
+  Future<void> deletePlacePhotoGroup(int pgid) {
+    return _localDataSource.deletePlacePhotoGroup(pgid);
   }
 }
 

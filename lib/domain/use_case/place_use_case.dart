@@ -1,6 +1,7 @@
 import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 
 class PlaceUseCase {
@@ -46,6 +47,28 @@ class PlaceUseCase {
     int pid,
   ) {
     return _repository.getPlaceTotalCostsForCsv(startDate, endDate, pid);
+  }
+
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) {
+    return _repository.getPlacePhotoGroups(pid);
+  }
+
+  Future<void> insertPlacePhotoGroup({
+    required int pid,
+    required String photoDate,
+    required String title,
+    required List<String> photoUrls,
+  }) {
+    return _repository.insertPlacePhotoGroup(
+      pid: pid,
+      photoDate: photoDate,
+      title: title,
+      photoUrls: photoUrls,
+    );
+  }
+
+  Future<void> deletePlacePhotoGroup(int pgid) {
+    return _repository.deletePlacePhotoGroup(pgid);
   }
 }
 

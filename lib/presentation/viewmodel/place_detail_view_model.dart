@@ -9,6 +9,7 @@ import 'package:w0001/data/datasources/local/materialcost_local_data_source.dart
 import 'package:w0001/data/datasources/local/revenue_local_data_source.dart';
 import 'package:w0001/data/datasources/local/workcost_local_data_source.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
+import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/revenue_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
@@ -38,8 +39,10 @@ class PlaceDetailState {
     required this.dialogDateTime,
     required this.revenuePickedDay,
     required this.dialogRevenuePickedDay,
+    required this.photoPickedDay,
     required this.totalCostList,
     required this.revenueList,
+    required this.photoGroupList,
     required this.alertText,
     required this.isLoading,
   });
@@ -53,8 +56,10 @@ class PlaceDetailState {
   final DateTime dialogDateTime;
   final DateTime revenuePickedDay;
   final DateTime dialogRevenuePickedDay;
+  final DateTime photoPickedDay;
   final List<TotalCostModel> totalCostList;
   final List<RevenueModel> revenueList;
+  final List<PlacePhotoGroupModel> photoGroupList;
   final String alertText;
   final bool isLoading;
 
@@ -68,8 +73,10 @@ class PlaceDetailState {
         dialogDateTime: DateTime.now(),
         revenuePickedDay: DateTime.now(),
         dialogRevenuePickedDay: DateTime.now(),
+        photoPickedDay: DateTime.now(),
         totalCostList: const [],
         revenueList: const [],
+        photoGroupList: const [],
         alertText: '',
         isLoading: false,
       );
@@ -83,8 +90,10 @@ class PlaceDetailState {
     DateTime? dialogDateTime,
     DateTime? revenuePickedDay,
     DateTime? dialogRevenuePickedDay,
+    DateTime? photoPickedDay,
     List<TotalCostModel>? totalCostList,
     List<RevenueModel>? revenueList,
+    List<PlacePhotoGroupModel>? photoGroupList,
     String? alertText,
     bool? isLoading,
   }) {
@@ -100,8 +109,10 @@ class PlaceDetailState {
       revenuePickedDay: revenuePickedDay ?? this.revenuePickedDay,
       dialogRevenuePickedDay:
           dialogRevenuePickedDay ?? this.dialogRevenuePickedDay,
+      photoPickedDay: photoPickedDay ?? this.photoPickedDay,
       totalCostList: totalCostList ?? this.totalCostList,
       revenueList: revenueList ?? this.revenueList,
+      photoGroupList: photoGroupList ?? this.photoGroupList,
       alertText: alertText ?? this.alertText,
       isLoading: isLoading ?? this.isLoading,
     );
@@ -162,6 +173,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   final TextEditingController dialogRNameController = TextEditingController();
   final TextEditingController rPriceController = TextEditingController();
   final TextEditingController rNameController = TextEditingController();
+  final TextEditingController photoTitleController = TextEditingController();
+  final TextEditingController photoUrlsController = TextEditingController();
 
   @override
   PlaceDetailState build() {
@@ -172,6 +185,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       dialogRNameController.dispose();
       rPriceController.dispose();
       rNameController.dispose();
+      photoTitleController.dispose();
+      photoUrlsController.dispose();
     });
 
     if (!_initialized) {
@@ -179,6 +194,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       Future.microtask(() async {
         await fetchTotalCostFromPlace();
         await fetchAllRevenueFromPlace();
+        await fetchPlacePhotoGroups();
       });
     }
     return PlaceDetailState.initial(pid);
@@ -196,6 +212,11 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   void setDialogRevenuePickedDay(DateTime value) {
     final d = DateTime(value.year, value.month, value.day);
     state = state.copyWith(dialogRevenuePickedDay: d);
+  }
+
+  void setPhotoPickedDay(DateTime value) {
+    final d = DateTime(value.year, value.month, value.day);
+    state = state.copyWith(photoPickedDay: d);
   }
 
   void clearAlertText() {
@@ -359,6 +380,39 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   Future<void> deleteRevenue({required int rid}) async {
     await _revenueUseCase.deleteRevenue(rid, pid);
     await fetchAllRevenueFromPlace();
+  }
+
+  Future<void> fetchPlacePhotoGroups() async {
+    final groups = await _placeUseCase.getPlacePhotoGroups(pid);
+    state = state.copyWith(photoGroupList: groups);
+  }
+
+  Future<void> addPlacePhotoGroup() async {
+    final title = photoTitleController.text.trim();
+    final urls = photoUrlsController.text
+        .split(RegExp(r'[\n,]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (urls.isEmpty) {
+      state = state.copyWith(alertText: '이미지 URL을 한 개 이상 입력해주세요.');
+      return;
+    }
+    state = state.copyWith(alertText: '');
+    await _placeUseCase.insertPlacePhotoGroup(
+      pid: pid,
+      photoDate: formatDateTimeToIsoDate(state.photoPickedDay),
+      title: title.isEmpty ? '사진 묶음' : title,
+      photoUrls: urls,
+    );
+    photoTitleController.clear();
+    photoUrlsController.clear();
+    await fetchPlacePhotoGroups();
+  }
+
+  Future<void> deletePlacePhotoGroup(int pgid) async {
+    await _placeUseCase.deletePlacePhotoGroup(pgid);
+    await fetchPlacePhotoGroups();
   }
 
   Future<void> updateRevenue({required int rid}) async {

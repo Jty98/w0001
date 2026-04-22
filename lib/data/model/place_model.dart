@@ -4,6 +4,7 @@ class PlaceModel {
   final String pname;
   final String pstart;
   final String pend;
+  final String paddress;
   int pcomplete;
   final int prevenue;
   final int pcontractTotal;
@@ -16,6 +17,7 @@ class PlaceModel {
     required this.pcomplete,
     required this.pstart,
     required this.pend,
+    this.paddress = '',
     required this.prevenue,
     this.pcontractTotal = 0,
     this.pcontractDate = '',
@@ -27,6 +29,7 @@ class PlaceModel {
         pcomplete = res['pcomplete'] ?? 0,
         pstart = res['pstart'],
         pend = res['pend'],
+        paddress = res['paddress'] ?? '',
         prevenue = res['prevenue'],
         pcontractTotal = res['pcontractTotal'] ?? 0,
         pcontractDate = res['pcontractDate'] ?? '';

@@ -4,14 +4,16 @@ import 'package:go_router/go_router.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/ui/screen/1_dashboard/dashboard_screen.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
-import 'package:w0001/ui/screen/5_place/place_list_screen.dart';
-import 'package:w0001/ui/screen/5_place/place_revenue_screen.dart';
-import 'package:w0001/ui/screen/5_place/place_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_detail_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_images_screen.dart';
 import 'package:w0001/ui/screen/2_add/add_screen.dart';
 import 'package:w0001/ui/screen/3_calendar/calendar_screen.dart';
 import 'package:w0001/ui/screen/4_human/human_screen.dart';
 import 'package:w0001/ui/screen/4_human/w_detail_screen.dart';
 import 'package:w0001/ui/screen/4_human/work_cost_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_list_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_revenue_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_cost_screen.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -51,7 +53,7 @@ GoRouter createAppRouter() {
                 path: '/place',
                 pageBuilder: (context, state) => const NoTransitionPage<void>(
                   key: ValueKey<String>('place'),
-                  child: PlaceListScreen(),
+                  child: PlaceScreen(),
                 ),
                 routes: [
                   GoRoute(
@@ -67,10 +69,34 @@ GoRouter createAppRouter() {
                       }
                       return MaterialPage<void>(
                         fullscreenDialog: true,
-                        child: PlaceScreen(placeInfo: extra),
+                        child: PlaceDetailScreen(placeInfo: extra),
                       );
                     },
                     routes: [
+                      GoRoute(
+                        path: 'cost',
+                        builder: (context, state) {
+                          final extra = state.extra;
+                          if (extra is! PlaceInfoModel) {
+                            return const Scaffold(
+                              body: Center(child: Text('현장 정보가 없습니다.')),
+                            );
+                          }
+                          return PlaceCostScreen(placeInfo: extra);
+                        },
+                      ),
+                      GoRoute(
+                        path: 'images',
+                        builder: (context, state) {
+                          final extra = state.extra;
+                          if (extra is! PlaceInfoModel) {
+                            return const Scaffold(
+                              body: Center(child: Text('현장 정보가 없습니다.')),
+                            );
+                          }
+                          return PlaceImagesScreen(placeInfo: extra);
+                        },
+                      ),
                       GoRoute(
                         path: 'revenue',
                         builder: (context, state) {

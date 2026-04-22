@@ -32,8 +32,8 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
   }
 }
 
-class PlaceListScreen extends ConsumerWidget {
-  const PlaceListScreen({super.key});
+class PlaceScreen extends ConsumerWidget {
+  const PlaceScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -136,6 +136,7 @@ class PlaceListScreen extends ConsumerWidget {
             nameController: viewModel.placeNameController,
             revenueController: viewModel.placeRevenueController,
             contractTotalController: viewModel.placeContractTotalController,
+            addressController: viewModel.placeAddressController,
             onPlaceDateRangeChanged: viewModel.setPlaceDialogDateRange,
           ),
         );
@@ -150,6 +151,7 @@ class PlaceListScreen extends ConsumerWidget {
     required TextEditingController nameController,
     required TextEditingController revenueController,
     required TextEditingController contractTotalController,
+    required TextEditingController addressController,
     required Future<void> Function(DateTime? rangeStart, DateTime? rangeEnd)
         onConfirm,
     DateTime? initialCalendarStart,
@@ -208,6 +210,13 @@ class PlaceListScreen extends ConsumerWidget {
                               labelText: '선수금',
                               isPrice: true,
                               keyboardType: TextInputType.number,
+                              readOnly: false,
+                            ),
+                            AddTextField(
+                              tController: addressController,
+                              labelText: '현장 주소',
+                              isPrice: false,
+                              keyboardType: TextInputType.text,
                               readOnly: false,
                             ),
                             ScrollableCalendarWidget(
@@ -324,6 +333,8 @@ class PlaceListScreen extends ConsumerWidget {
                       text: getPrice(
                           price: element.pcontractTotal, isContainWon: false));
               final (initStart, initEnd) = _parsedPlaceRange(element);
+              TextEditingController addressController =
+                  TextEditingController(text: element.paddress);
               showDialog<void>(
                 context: context,
                 builder: (dialogCtx) => _placeDialog(
@@ -331,6 +342,7 @@ class PlaceListScreen extends ConsumerWidget {
                   nameController: nameController,
                   revenueController: revenueController,
                   contractTotalController: contractTotalController,
+                  addressController: addressController,
                   initialCalendarStart: initStart,
                   initialCalendarEnd: initEnd,
                   onPlaceDateRangeChanged: null,
@@ -350,6 +362,7 @@ class PlaceListScreen extends ConsumerWidget {
                     final ok = await viewModel.updatePlace(
                       element.pid!,
                       nameController.text,
+                      addressController.text,
                       prevenue,
                       pcontractTotal,
                       rangeStart,
@@ -385,7 +398,7 @@ class PlaceListScreen extends ConsumerWidget {
         ],
       ),
       child: InkWell(
-        // nested route: /place/detail
+        // nested route: /place/detail (분기 화면)
         onTap: () => context.push('/place/detail', extra: element),
         onLongPress: () => showDialog<void>(
           context: context,
