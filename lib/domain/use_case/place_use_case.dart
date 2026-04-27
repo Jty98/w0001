@@ -49,19 +49,24 @@ class PlaceUseCase {
     return _repository.getPlaceTotalCostsForCsv(startDate, endDate, pid);
   }
 
-  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) {
-    return _repository.getPlacePhotoGroups(pid);
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(
+    int pid, {
+    required String photoType,
+  }) {
+    return _repository.getPlacePhotoGroups(pid, photoType: photoType);
   }
 
   Future<void> insertPlacePhotoGroup({
     required int pid,
     required String photoDate,
+    required String photoType,
     required String title,
     required List<String> photoUrls,
   }) {
     return _repository.insertPlacePhotoGroup(
       pid: pid,
       photoDate: photoDate,
+      photoType: photoType,
       title: title,
       photoUrls: photoUrls,
     );

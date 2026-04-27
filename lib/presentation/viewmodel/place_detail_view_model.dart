@@ -165,6 +165,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   late final _materialCostUseCase = ref.read(materialCostUseCaseProvider);
 
   bool _initialized = false;
+  int _photoFetchToken = 0;
 
   // 기존 controller에서 쓰던 입력 컨트롤러들 (UI에서 계속 재사용)
   final TextEditingController mNameController = TextEditingController();
@@ -194,7 +195,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       Future.microtask(() async {
         await fetchTotalCostFromPlace();
         await fetchAllRevenueFromPlace();
-        await fetchPlacePhotoGroups();
+        await fetchPlacePhotoGroups(photoType: 'site');
       });
     }
     return PlaceDetailState.initial(pid);
@@ -382,12 +383,110 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     await fetchAllRevenueFromPlace();
   }
 
-  Future<void> fetchPlacePhotoGroups() async {
-    final groups = await _placeUseCase.getPlacePhotoGroups(pid);
+  Future<void> fetchPlacePhotoGroups({required String photoType}) async {
+    final fetchToken = ++_photoFetchToken;
+    final groups = await _placeUseCase.getPlacePhotoGroups(
+      pid,
+      photoType: photoType,
+    );
+    if (fetchToken != _photoFetchToken) return;
     state = state.copyWith(photoGroupList: groups);
   }
 
-  Future<void> addPlacePhotoGroup() async {
+  Future<void> seedPhotoDummyDataIfEmpty() async {
+    final siteGroups = await _placeUseCase.getPlacePhotoGroups(
+      pid,
+      photoType: 'site',
+    );
+    final drawingGroups = await _placeUseCase.getPlacePhotoGroups(
+      pid,
+      photoType: 'drawing',
+    );
+    if (siteGroups.isNotEmpty || drawingGroups.isNotEmpty) return;
+
+    final today = DateTime.now();
+    String d(int minusDays) {
+      final day = today.subtract(Duration(days: minusDays));
+      return formatDateTimeToIsoDate(day);
+    }
+
+    final seeds = <({
+      String photoType,
+      String photoDate,
+      String title,
+      List<String> photoUrls
+    })>[
+      (
+        photoType: 'site',
+        photoDate: d(0),
+        title: '주방 설비 작업',
+        photoUrls: const [
+          'local://seed_site_kitchen_1.jpg',
+          'local://seed_site_kitchen_2.jpg',
+          'local://seed_site_kitchen_3.jpg',
+        ],
+      ),
+      (
+        photoType: 'site',
+        photoDate: d(1),
+        title: '홀 천장 마감',
+        photoUrls: const [
+          'local://seed_site_hall_1.jpg',
+          'local://seed_site_hall_2.jpg',
+        ],
+      ),
+      (
+        photoType: 'site',
+        photoDate: d(3),
+        title: '바닥 타일 시공',
+        photoUrls: const [
+          'local://seed_site_tile_1.jpg',
+          'local://seed_site_tile_2.jpg',
+          'local://seed_site_tile_3.jpg',
+          'local://seed_site_tile_4.jpg',
+        ],
+      ),
+      (
+        photoType: 'drawing',
+        photoDate: d(0),
+        title: '전기 배선 도면',
+        photoUrls: const [
+          'local://seed_drawing_elec_1.jpg',
+          'local://seed_drawing_elec_2.jpg',
+        ],
+      ),
+      (
+        photoType: 'drawing',
+        photoDate: d(2),
+        title: '가구 배치 도면',
+        photoUrls: const [
+          'local://seed_drawing_furniture_1.jpg',
+          'local://seed_drawing_furniture_2.jpg',
+          'local://seed_drawing_furniture_3.jpg',
+        ],
+      ),
+      (
+        photoType: 'drawing',
+        photoDate: d(4),
+        title: '주방 상세도',
+        photoUrls: const [
+          'local://seed_drawing_kitchen_1.jpg',
+        ],
+      ),
+    ];
+
+    for (final seed in seeds) {
+      await _placeUseCase.insertPlacePhotoGroup(
+        pid: pid,
+        photoDate: seed.photoDate,
+        photoType: seed.photoType,
+        title: seed.title,
+        photoUrls: seed.photoUrls,
+      );
+    }
+  }
+
+  Future<void> addPlacePhotoGroup({required String photoType}) async {
     final title = photoTitleController.text.trim();
     final urls = photoUrlsController.text
         .split(RegExp(r'[\n,]'))
@@ -402,17 +501,18 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     await _placeUseCase.insertPlacePhotoGroup(
       pid: pid,
       photoDate: formatDateTimeToIsoDate(state.photoPickedDay),
+      photoType: photoType,
       title: title.isEmpty ? '사진 묶음' : title,
       photoUrls: urls,
     );
     photoTitleController.clear();
     photoUrlsController.clear();
-    await fetchPlacePhotoGroups();
+    await fetchPlacePhotoGroups(photoType: photoType);
   }
 
-  Future<void> deletePlacePhotoGroup(int pgid) async {
+  Future<void> deletePlacePhotoGroup(int pgid, {required String photoType}) async {
     await _placeUseCase.deletePlacePhotoGroup(pgid);
-    await fetchPlacePhotoGroups();
+    await fetchPlacePhotoGroups(photoType: photoType);
   }
 
   Future<void> updateRevenue({required int rid}) async {

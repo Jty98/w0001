@@ -18,6 +18,8 @@ class _DashboardScheduleFullScreenState
   var _fullScreenMemosRequested = false;
 
   PageController? _monthPageCtrl;
+  final ScrollController _fullScrollCtrl = ScrollController();
+  final Map<String, GlobalKey> _daySectionKeys = {};
 
   @override
   void didChangeDependencies() {
@@ -175,15 +177,25 @@ class _DashboardScheduleFullScreenState
       });
     final header =
         '## 일정표\n### ${day.year}년 ${day.month}월 ${day.day}일 (${_weekdayKo[day.weekday - 1]})';
+    String toKoTime(String raw) {
+      final t = raw.trim();
+      if (t.isEmpty) return '시간 미정';
+      final parts = t.split(':');
+      if (parts.length != 2) return t;
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h == null || m == null) return t;
+      return '${h}시 ${m.toString().padLeft(2, '0')}분';
+    }
+
     final text = memos.isEmpty
-        ? '$header\n---\n- 등록된 일정이 없습니다.'
-        : '$header\n---\n${memos.asMap().entries.map((entry) {
-            final i = entry.key + 1;
-            final m = entry.value;
-            final time =
-                m.taskTime.trim().isEmpty ? '--:--' : m.taskTime.trim();
-            final memo = m.memo.trim().isEmpty ? '-' : m.memo.trim();
-            return '### $i\n$time [${m.title.trim()}]\n$memo';
+        ? '$header\n==========\n# [등록된 일정 없음] - 시간 미정\n- 메모 없음'
+        : '$header\n==========\n${memos.map((m) {
+            final title = m.title.trim().isEmpty ? '일정' : m.title.trim();
+            final timeKo = toKoTime(m.taskTime);
+            final memoBullets =
+                m.memo.trim().isEmpty ? '- 메모 없음' : m.memo.trim();
+            return '# [$title] ($timeKo)\n$memoBullets';
           }).join('\n\n')}';
 
     final box = context.findRenderObject() as RenderBox?;
@@ -201,8 +213,44 @@ class _DashboardScheduleFullScreenState
 
   @override
   void dispose() {
+    _fullScrollCtrl.dispose();
     _monthPageCtrl?.dispose();
     super.dispose();
+  }
+
+  void _scrollToDay(DateTime day) {
+    final key = _daySectionKeys[scheduleDateKey(scheduleDateOnly(day))];
+    final ctx = key?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      alignment: 0.06,
+    );
+  }
+
+  Future<void> _pickAndMoveToDay(DashboardScheduleViewModel vm) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: scheduleDateOnly(ref.read(dashboardScheduleProvider).selectedDay),
+      firstDate: now.subtract(const Duration(days: 366)),
+      lastDate: now.add(const Duration(days: 366)),
+      locale: const Locale('ko'),
+      helpText: '날짜 선택',
+    );
+    if (picked == null || !mounted) return;
+    final day = scheduleDateOnly(picked);
+    vm.setWeekPageIndex(vm.weekPageIndexFor(scheduleStartOfWeekMonday(day)));
+    vm.selectDay(day);
+    setState(() {
+      _monthViewMonth = DateTime(day.year, day.month, 1);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToDay(day);
+    });
   }
 
   Widget _buildMonthSwiper(
@@ -356,7 +404,7 @@ class _DashboardScheduleFullScreenState
                   existing: null,
                   initialDateOverride: state.selectedDay,
                 ),
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.edit_note_rounded),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -442,6 +490,12 @@ class _DashboardScheduleFullScreenState
                         ),
                       ),
                       TextButton(
+                        onPressed: state.isFullLoading
+                            ? null
+                            : () => _pickAndMoveToDay(vm),
+                        child: const Text('날짜선택'),
+                      ),
+                      TextButton(
                         onPressed: () {
                           vm.setWeekPageIndex(
                             vm.weekPageIndexFor(
@@ -461,6 +515,12 @@ class _DashboardScheduleFullScreenState
                               if (c != null && c.hasClients) {
                                 c.jumpToPage(t);
                               }
+                              _scrollToDay(today);
+                            });
+                          } else {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              _scrollToDay(today);
                             });
                           }
                         },
@@ -534,21 +594,26 @@ class _DashboardScheduleFullScreenState
     }
 
     final mon = scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
+    _daySectionKeys.clear();
 
     late final Widget scrollContent;
     if (_spanIndex == 0) {
       final memos = state.memosOnFullListForWeekMonday(mon);
       scrollContent = SingleChildScrollView(
+        controller: _fullScrollCtrl,
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
         child: _FullWeekBlock(
           weekStart: mon,
           memos: memos,
           weekRangeLabel: _weekRangeLine(mon),
+          onDayTap: _scrollToDay,
+          daySectionKeys: _daySectionKeys,
         ),
       );
     } else if (_spanIndex == 1) {
       final mon2 = mon.add(const Duration(days: 7));
       scrollContent = SingleChildScrollView(
+        controller: _fullScrollCtrl,
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -557,12 +622,16 @@ class _DashboardScheduleFullScreenState
               weekStart: mon,
               memos: state.memosOnFullListForWeekMonday(mon),
               weekRangeLabel: _weekRangeLine(mon),
+              onDayTap: _scrollToDay,
+              daySectionKeys: _daySectionKeys,
             ),
             const SizedBox(height: 10),
             _FullWeekBlock(
               weekStart: mon2,
               memos: state.memosOnFullListForWeekMonday(mon2),
               weekRangeLabel: _weekRangeLine(mon2),
+              onDayTap: _scrollToDay,
+              daySectionKeys: _daySectionKeys,
             ),
           ],
         ),
@@ -588,6 +657,7 @@ class _DashboardScheduleFullScreenState
         );
       } else {
         scrollContent = SingleChildScrollView(
+          controller: _fullScrollCtrl,
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -597,6 +667,8 @@ class _DashboardScheduleFullScreenState
                   weekStart: blocks[i],
                   memos: state.memosOnFullListForWeekMonday(blocks[i]),
                   weekRangeLabel: _weekRangeLine(blocks[i]),
+                  onDayTap: _scrollToDay,
+                  daySectionKeys: _daySectionKeys,
                 ),
                 if (i < blocks.length - 1) const SizedBox(height: 10),
               ],

@@ -23,10 +23,14 @@ abstract class PlaceLocalDataSource {
     DateTime endDate,
     int pid,
   );
-  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid);
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(
+    int pid, {
+    required String photoType,
+  });
   Future<void> insertPlacePhotoGroup({
     required int pid,
     required String photoDate,
+    required String photoType,
     required String title,
     required List<String> photoUrls,
   });
@@ -92,20 +96,25 @@ class PlaceLocalDataSourceImpl implements PlaceLocalDataSource {
   }
 
   @override
-  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) {
-    return _dbHelper.getPlacePhotoGroups(pid);
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(
+    int pid, {
+    required String photoType,
+  }) {
+    return _dbHelper.getPlacePhotoGroups(pid, photoType: photoType);
   }
 
   @override
   Future<void> insertPlacePhotoGroup({
     required int pid,
     required String photoDate,
+    required String photoType,
     required String title,
     required List<String> photoUrls,
   }) {
     return _dbHelper.insertPlacePhotoGroup(
       pid: pid,
       photoDate: photoDate,
+      photoType: photoType,
       title: title,
       photoUrls: photoUrls,
     );

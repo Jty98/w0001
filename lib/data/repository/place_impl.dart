@@ -68,20 +68,25 @@ class PlaceRepositoryImpl implements PlaceRepository {
   }
 
   @override
-  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) {
-    return _localDataSource.getPlacePhotoGroups(pid);
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(
+    int pid, {
+    required String photoType,
+  }) {
+    return _localDataSource.getPlacePhotoGroups(pid, photoType: photoType);
   }
 
   @override
   Future<void> insertPlacePhotoGroup({
     required int pid,
     required String photoDate,
+    required String photoType,
     required String title,
     required List<String> photoUrls,
   }) {
     return _localDataSource.insertPlacePhotoGroup(
       pid: pid,
       photoDate: photoDate,
+      photoType: photoType,
       title: title,
       photoUrls: photoUrls,
     );

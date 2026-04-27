@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kpostal/kpostal.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
@@ -34,6 +35,53 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 
 class PlaceScreen extends ConsumerWidget {
   const PlaceScreen({super.key});
+
+  static const String _addressSeparator = '||';
+
+  (String, String) _splitAddress(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return ('', '');
+    if (t.contains(_addressSeparator)) {
+      final parts = t.split(_addressSeparator);
+      final main = parts.isNotEmpty ? parts.first.trim() : '';
+      final detail = parts.length > 1 ? parts.sublist(1).join(_addressSeparator).trim() : '';
+      return (main, detail);
+    }
+    return (t, '');
+  }
+
+  String _joinAddress(String main, String detail) {
+    final m = main.trim();
+    final d = detail.trim();
+    if (m.isEmpty && d.isEmpty) return '';
+    if (d.isEmpty) return m;
+    if (m.isEmpty) return d;
+    return '$m$_addressSeparator$d';
+  }
+
+  Future<void> _openAddressSearch(
+    BuildContext context,
+    TextEditingController addressController,
+  ) async {
+    Kpostal? result;
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute(
+        builder: (_) => KpostalView(
+          callback: (Kpostal value) {
+            result = value;
+          },
+        ),
+      ),
+    );
+    final selected = result;
+    if (selected == null) return;
+    final road = selected.address.trim();
+    final jibun = selected.jibunAddress.trim();
+    final picked = road.isNotEmpty ? road : jibun;
+    if (picked.isNotEmpty) {
+      addressController.text = picked;
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -166,37 +214,46 @@ class PlaceScreen extends ConsumerWidget {
           final calendarHeight = (screenH * 0.34).clamp(250.0, 320.0).toDouble();
           DateTime? rangeStart = initialCalendarStart;
           DateTime? rangeEnd = initialCalendarEnd ?? initialCalendarStart;
+          final (initialMainAddress, initialDetailAddress) =
+              _splitAddress(addressController.text);
+          final mainAddressController =
+              TextEditingController(text: initialMainAddress);
+          final detailAddressController =
+              TextEditingController(text: initialDetailAddress);
+          var showAddressSection = initialMainAddress.isNotEmpty || initialDetailAddress.isNotEmpty;
 
           return Consumer(
             builder: (context, consumerRef, _) {
               final vmState = consumerRef.watch(placeListProvider);
               return StatefulBuilder(
                 builder: (context, setDialogState) {
+                  final cs = Theme.of(context).colorScheme;
                   return ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: maxHeight),
-                    child: Container(
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        color: const Color.fromARGB(255, 243, 243, 243),
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            Center(
                               child: Text(
                                 isAdd ? '현장 추가' : '현장 수정',
                                 style: bigStyle,
                               ),
                             ),
+                            const SizedBox(height: 12),
                             AddTextField(
                               tController: nameController,
                               labelText: '현장 이름 (필수)',
                               isPrice: false,
                               readOnly: false,
+                              witdh: double.infinity,
                             ),
                             AddTextField(
                               tController: contractTotalController,
@@ -204,6 +261,7 @@ class PlaceScreen extends ConsumerWidget {
                               isPrice: true,
                               keyboardType: TextInputType.number,
                               readOnly: false,
+                              witdh: double.infinity,
                             ),
                             AddTextField(
                               tController: revenueController,
@@ -211,53 +269,137 @@ class PlaceScreen extends ConsumerWidget {
                               isPrice: true,
                               keyboardType: TextInputType.number,
                               readOnly: false,
+                              witdh: double.infinity,
                             ),
-                            AddTextField(
-                              tController: addressController,
-                              labelText: '현장 주소',
-                              isPrice: false,
-                              keyboardType: TextInputType.text,
-                              readOnly: false,
-                            ),
-                            ScrollableCalendarWidget(
-                              height: calendarHeight,
-                              initialRangeStart: initialCalendarStart,
-                              initialRangeEnd:
-                                  initialCalendarEnd ?? initialCalendarStart,
-                              showViewModeToggle: false,
-                              showRangeSummarySection: false,
-                              disableDateSelectionHighlight: true,
-                              onRangeChanged: (s, e) {
-                                rangeStart = s;
-                                rangeEnd = e;
-                                onPlaceDateRangeChanged?.call(s, e);
-                                setDialogState(() {});
-                              },
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 10),
-                              child: Text(
-                                vmState.updateText,
-                                style: const TextStyle(color: Colors.red),
+                            const SizedBox(height: 2),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () =>
+                                  setDialogState(() => showAddressSection = !showAddressSection),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.location_on_outlined, size: 18, color: cs.primary),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        '현장 주소 (선택입력)',
+                                        style: TextStyle(fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                    Icon(
+                                      showAddressSection
+                                          ? Icons.keyboard_arrow_up
+                                          : Icons.keyboard_arrow_down,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                  },
-                                  child: const Text(
-                                    '취소',
-                                    style: TextStyle(color: Colors.red),
+                            if (showAddressSection) ...[
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: () => _openAddressSearch(
+                                  context,
+                                  mainAddressController,
+                                ),
+                                child: AbsorbPointer(
+                                  child: AddTextField(
+                                    tController: mainAddressController,
+                                    labelText: '현장 주소 (선택입력)',
+                                    isPrice: false,
+                                    keyboardType: TextInputType.text,
+                                    readOnly: true,
+                                    witdh: double.infinity,
                                   ),
                                 ),
-                                TextButton(
-                                  onPressed: () async {
-                                    await onConfirm(rangeStart, rangeEnd);
-                                  },
-                                  child: const Text('확인'),
+                              ),
+                              AddTextField(
+                                tController: detailAddressController,
+                                labelText: '상세주소 (직접입력)',
+                                isPrice: false,
+                                keyboardType: TextInputType.text,
+                                readOnly: false,
+                                witdh: double.infinity,
+                              ),
+                            ],
+                            const SizedBox(height: 6),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                color: cs.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: cs.outlineVariant.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: ScrollableCalendarWidget(
+                                height: calendarHeight,
+                                initialRangeStart: initialCalendarStart,
+                                initialRangeEnd:
+                                    initialCalendarEnd ?? initialCalendarStart,
+                                showViewModeToggle: false,
+                                showRangeSummarySection: false,
+                                disableDateSelectionHighlight: true,
+                                onRangeChanged: (s, e) {
+                                  rangeStart = s;
+                                  rangeEnd = e;
+                                  onPlaceDateRangeChanged?.call(s, e);
+                                  setDialogState(() {});
+                                },
+                              ),
+                            ),
+                            if (vmState.updateText.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Text(
+                                  vmState.updateText,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(double.infinity, 44),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      '취소',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: FilledButton(
+                                    onPressed: () async {
+                                      addressController.text = _joinAddress(
+                                        mainAddressController.text,
+                                        detailAddressController.text,
+                                      );
+                                      await onConfirm(rangeStart, rangeEnd);
+                                    },
+                                    style: FilledButton.styleFrom(
+                                      minimumSize: const Size(double.infinity, 44),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: const Text('저장'),
+                                  ),
                                 ),
                               ],
                             ),

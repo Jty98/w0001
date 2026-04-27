@@ -45,6 +45,8 @@ dependencies:
   excel: ^4.0.6
   # 파일 선택
   file_picker: ^5.2.10
+  # 카메라/갤러리 선택
+  image_picker: ^1.1.2
   # Win32 API (excel 패키지 의존성 호환성)
   win32: ^5.15.0
   # 그래프
@@ -57,6 +59,9 @@ dependencies:
   screenshot: ^3.0.0
   home_widget: ^0.9.1
   shared_preferences: ^2.5.5
+  kpostal: ^1.0.0
+  flutter_secure_storage: ^10.0.0
+  flutter_dotenv: ^6.0.1
 
 
 dev_dependencies:
@@ -84,6 +89,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - .env
     - assets/images/excel_logo.png
     - assets/images/add_money.png
 

@@ -9,6 +9,7 @@ import 'package:w0001/data/repository/calendar_impl.dart';
 import 'package:w0001/domain/repository/calendar_abst.dart';
 import 'package:w0001/domain/use_case/calendar_use_case.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
     show materialCostUseCaseProvider, workCostUseCaseProvider;
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
@@ -186,8 +187,14 @@ class CalendarViewModel extends Notifier<CalendarState> {
   }
 
   Future<void> fetchAllEvents() async {
-    final map = await _calendarUseCase.getAllEvents();
-    state = state.copyWith(events: map);
+    try {
+      final map = await ref.read(dashboardRemoteUseCaseProvider).calendarEvents();
+      state = state.copyWith(events: map);
+    } catch (e, st) {
+      debugPrint('Calendar events (remote) failed, fallback local: $e\n$st');
+      final map = await _calendarUseCase.getAllEvents();
+      state = state.copyWith(events: map);
+    }
   }
 
   List<String> getEventsForDay(DateTime day) {

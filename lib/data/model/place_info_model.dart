@@ -109,6 +109,47 @@ class PlaceInfoModel {
         otherExpensesTotal = res['otherExpensesTotal'] ?? 0,
         wTotal = res['wTotal'] ?? 0,
         wIncomplete = res['wIncomplete'] ?? 0;
+
+  /// 서버 `/dashboard/places-info` 등 camelCase JSON ([fromMap]과 동일 키).
+  factory PlaceInfoModel.fromJson(Map<String, dynamic> res) {
+    return PlaceInfoModel(
+      pid: (res['pid'] as num?)?.toInt(),
+      pname: res['pname'] as String? ?? '',
+      pcomplete: (res['pcomplete'] as num?)?.toInt() ?? 0,
+      pstart: res['pstart'] as String? ?? '',
+      pend: res['pend'] as String? ?? '',
+      paddress: res['paddress'] as String? ?? '',
+      pfirstrevenue: (res['prevenue'] as num?)?.toInt() ?? 0,
+      pcontractTotal: (res['pcontractTotal'] as num?)?.toInt() ?? 0,
+      workerCount: (res['workerCount'] as num?)?.toInt() ?? 0,
+      totalAdditionalRevenue: (res['totalAdditionalRevenue'] as num?)?.toInt() ?? 0,
+      mTotal: (res['mTotal'] as num?)?.toInt() ?? 0,
+      woodTotal: (res['woodTotal'] as num?)?.toInt() ?? 0,
+      metalTotal: (res['metalTotal'] as num?)?.toInt() ?? 0,
+      electricTotal: (res['electricTotal'] as num?)?.toInt() ?? 0,
+      lightingTotal: (res['lightingTotal'] as num?)?.toInt() ?? 0,
+      cleaningTotal: (res['cleaningTotal'] as num?)?.toInt() ?? 0,
+      filmTotal: (res['filmTotal'] as num?)?.toInt() ?? 0,
+      landscapeTotal: (res['landscapeTotal'] as num?)?.toInt() ?? 0,
+      hardwareTotal: (res['hardwareTotal'] as num?)?.toInt() ?? 0,
+      paintTotal: (res['paintTotal'] as num?)?.toInt() ?? 0,
+      facilityTotal: (res['facilityTotal'] as num?)?.toInt() ?? 0,
+      tileTotal: (res['tileTotal'] as num?)?.toInt() ?? 0,
+      glassTotal: (res['glassTotal'] as num?)?.toInt() ?? 0,
+      fuelTotal: (res['fuelTotal'] as num?)?.toInt() ?? 0,
+      accommodationTotal: (res['accommodationTotal'] as num?)?.toInt() ?? 0,
+      foodTotal: (res['foodTotal'] as num?)?.toInt() ?? 0,
+      personalExpensesTotal: (res['personalExpensesTotal'] as num?)?.toInt() ?? 0,
+      firefightingTotal: (res['firefightingTotal'] as num?)?.toInt() ?? 0,
+      signageTotal: (res['signageTotal'] as num?)?.toInt() ?? 0,
+      airConditioningTotal: (res['airConditioningTotal'] as num?)?.toInt() ?? 0,
+      demolitionTotal: (res['demolitionTotal'] as num?)?.toInt() ?? 0,
+      customMadeTotal: (res['customMadeTotal'] as num?)?.toInt() ?? 0,
+      otherExpensesTotal: (res['otherExpensesTotal'] as num?)?.toInt() ?? 0,
+      wTotal: (res['wTotal'] as num?)?.toInt() ?? 0,
+      wIncomplete: (res['wIncomplete'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 final Map<String, int Function(PlaceInfoModel)> categoryMapping = {

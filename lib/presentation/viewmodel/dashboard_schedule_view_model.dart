@@ -347,7 +347,28 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     final updated = found.copyWith(done: done);
     await db.updateScheduleMemo(updated);
     await _safeSyncAlarmForMemo(updated);
-    await _afterMutation();
+    _replaceMemoInState(updated);
+    await _updateWidgetData();
+  }
+
+  void _replaceMemoInState(ScheduleMemoModel updated) {
+    List<ScheduleMemoModel> replaceIn(List<ScheduleMemoModel> src) => src
+        .map((m) => m.sid == updated.sid ? updated : m)
+        .toList(growable: false);
+
+    final week = replaceIn(state.weekMemos);
+    final full = state.fullMemos == null ? null : replaceIn(state.fullMemos!);
+
+    final updatedWeekCache = <String, List<ScheduleMemoModel>>{};
+    state.weekMemosByWeekKey.forEach((key, value) {
+      updatedWeekCache[key] = replaceIn(value);
+    });
+
+    state = state.copyWith(
+      weekMemos: week,
+      fullMemos: full,
+      weekMemosByWeekKey: updatedWeekCache,
+    );
   }
 
   Future<void> addMemo({

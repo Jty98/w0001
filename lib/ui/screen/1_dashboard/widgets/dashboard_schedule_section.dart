@@ -1,9 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
+import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart' show dbHelperProvider;
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_editor_sheet.dart';
@@ -100,6 +103,7 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
     this.useFullMemosForDots = false,
     this.showWeekRangeHeader = true,
     this.dense = false,
+    this.onDayTap,
   });
 
   final DateTime weekMonday;
@@ -108,6 +112,7 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
 
   /// true면 패딩·글자를 줄여 2주 보기 등에서 세로 공간을 덜 씁니다.
   final bool dense;
+  final ValueChanged<DateTime>? onDayTap;
 
   bool _dotForDay(DashboardScheduleState state, DateTime day) {
     final key = scheduleDateKey(scheduleDateOnly(day));
@@ -187,7 +192,10 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () => vm.selectDay(day),
+                    onTap: () {
+                      vm.selectDay(day);
+                      onDayTap?.call(day);
+                    },
                     borderRadius: BorderRadius.circular(radius),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
@@ -253,10 +261,14 @@ class _ScheduleWeekDaySections extends ConsumerWidget {
   const _ScheduleWeekDaySections({
     required this.weekMonday,
     required this.memos,
+    this.onDayTap,
+    this.daySectionKeys,
   });
 
   final DateTime weekMonday;
   final List<ScheduleMemoModel> memos;
+  final ValueChanged<DateTime>? onDayTap;
+  final Map<String, GlobalKey>? daySectionKeys;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -278,7 +290,18 @@ class _ScheduleWeekDaySections extends ConsumerWidget {
       if (tiles.isNotEmpty) {
         tiles.add(const SizedBox(height: 8));
       }
-      tiles.add(_DaySchedulePane(day: day, memos: dayMemos));
+      final dayKey = scheduleDateKey(day);
+      final sectionKey = daySectionKeys == null
+          ? null
+          : daySectionKeys!.putIfAbsent(dayKey, GlobalKey.new);
+      tiles.add(
+        _DaySchedulePane(
+          day: day,
+          memos: dayMemos,
+          onDayTap: onDayTap,
+          sectionKey: sectionKey,
+        ),
+      );
     }
 
     if (tiles.isEmpty) {
@@ -309,10 +332,14 @@ class _DaySchedulePane extends ConsumerWidget {
   const _DaySchedulePane({
     required this.day,
     required this.memos,
+    this.onDayTap,
+    this.sectionKey,
   });
 
   final DateTime day;
   final List<ScheduleMemoModel> memos;
+  final ValueChanged<DateTime>? onDayTap;
+  final GlobalKey? sectionKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -342,6 +369,7 @@ class _DaySchedulePane extends ConsumerWidget {
     );
 
     return Theme(
+      key: sectionKey,
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: Material(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -361,6 +389,7 @@ class _DaySchedulePane extends ConsumerWidget {
               color: titleColor,
             ),
           ),
+          onExpansionChanged: (_) => onDayTap?.call(day),
           children: [
             for (final m in memos)
               Padding(
@@ -466,6 +495,35 @@ class _DashboardScheduleCompactCardState
   PageController? _pageController;
   var _pageControllerReady = false;
   var _syncingPageFromVm = false;
+  final Map<String, ScrollController> _weekScrollControllers = {};
+  final Map<String, Map<String, GlobalKey>> _weekDaySectionKeys = {};
+
+  String _weekKeyOf(DateTime day) =>
+      scheduleDateKey(scheduleStartOfWeekMonday(scheduleDateOnly(day)));
+
+  void _scrollToDaySection(DateTime day) {
+    final weekKey = _weekKeyOf(day);
+    final dayKey = scheduleDateKey(scheduleDateOnly(day));
+    final ctx = _weekDaySectionKeys[weekKey]?[dayKey]?.currentContext;
+    final ctrl = _weekScrollControllers[weekKey];
+    if (ctx == null || ctrl == null || !ctrl.hasClients) return;
+
+    final renderObject = ctx.findRenderObject();
+    if (renderObject == null) return;
+    final viewport = RenderAbstractViewport.of(renderObject);
+
+    final targetOffset = viewport.getOffsetToReveal(renderObject, 0.06).offset;
+    final position = ctrl.position;
+    final clamped = targetOffset.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    ctrl.animateTo(
+      clamped.toDouble(),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
+  }
 
   Future<void> _shareSelectedDay(
     BuildContext context,
@@ -501,33 +559,28 @@ class _DashboardScheduleCompactCardState
   String _buildDailyShareText(DateTime day, List<ScheduleMemoModel> memos) {
     final dateLabel =
         '${day.year}년 ${day.month}월 ${day.day}일 (${_weekdayKo[day.weekday - 1]})';
-    final header = '''
-## 📅 일정표
-### $dateLabel
-''';
-    if (memos.isEmpty) {
-      return '''
-$header
----
-- 등록된 일정이 없습니다.
-''';
+    final header = '## 일정표\n### $dateLabel\n';
+    String toKoTime(String raw) {
+      final t = raw.trim();
+      if (t.isEmpty) return '시간 미정';
+      final parts = t.split(':');
+      if (parts.length != 2) return t;
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h == null || m == null) return t;
+      return '${h}시 ${m.toString().padLeft(2, '0')}분';
     }
-    final lines = memos.asMap().entries.map((entry) {
-      final index = entry.key + 1;
-      final m = entry.value;
-      final time = m.taskTime.trim().isEmpty ? '--:--' : m.taskTime.trim();
-      final memo = m.memo.trim().isEmpty ? '-' : m.memo.trim();
-      return '''
-# ${index}
-$time [${m.title.trim()}]
-$memo
-''';
-    }).join('\n');
-    return '''
-$header
----
-$lines
-''';
+
+    if (memos.isEmpty) {
+      return '$header\n==========\n# [등록된 일정 없음] - 시간 미정\n- 메모 없음';
+    }
+    final lines = memos.map((m) {
+      final title = m.title.trim().isEmpty ? '일정' : m.title.trim();
+      final timeKo = toKoTime(m.taskTime);
+      final memoBullets = m.memo.trim().isEmpty ? '- 메모 없음' : m.memo.trim();
+      return '# [$title]\n($timeKo)\n$memoBullets';
+    }).join('\n\n');
+    return '$header\n==========\n$lines';
   }
 
   Future<DateTime?> _pickDayForShare(
@@ -641,6 +694,9 @@ $lines
 
   @override
   void dispose() {
+    for (final c in _weekScrollControllers.values) {
+      c.dispose();
+    }
     _pageController?.dispose();
     super.dispose();
   }
@@ -732,6 +788,13 @@ $lines
                       },
                       itemBuilder: (context, i) {
                         final mon = vm.weekMondayAtPageIndex(i);
+                        final weekKey = _weekKeyOf(mon);
+                        final scrollCtrl = _weekScrollControllers.putIfAbsent(
+                          weekKey,
+                          ScrollController.new,
+                        );
+                        final daySectionKeys =
+                            _weekDaySectionKeys.putIfAbsent(weekKey, () => {});
                         final list = state.memosForWeekMondayCached(mon);
                         final isActivePage =
                             vm.weekPageIndexFor(state.weekStart) == i;
@@ -752,6 +815,7 @@ $lines
                               weekMonday: mon,
                               showWeekRangeHeader: true,
                               useFullMemosForDots: false,
+                              onDayTap: _scrollToDaySection,
                             ),
                             Divider(
                               height: 20,
@@ -760,12 +824,15 @@ $lines
                             ),
                             Expanded(
                               child: SingleChildScrollView(
+                                controller: scrollCtrl,
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding:
                                     const EdgeInsets.only(top: 4, bottom: 8),
                                 child: _ScheduleWeekDaySections(
                                   weekMonday: mon,
                                   memos: list,
+                                  onDayTap: _scrollToDaySection,
+                                  daySectionKeys: daySectionKeys,
                                 ),
                               ),
                             ),
@@ -823,11 +890,15 @@ class _FullWeekBlock extends ConsumerWidget {
     required this.weekStart,
     required this.memos,
     required this.weekRangeLabel,
+    this.onDayTap,
+    this.daySectionKeys,
   });
 
   final DateTime weekStart;
   final List<ScheduleMemoModel> memos;
   final String weekRangeLabel;
+  final ValueChanged<DateTime>? onDayTap;
+  final Map<String, GlobalKey>? daySectionKeys;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -852,6 +923,8 @@ class _FullWeekBlock extends ConsumerWidget {
             _ScheduleWeekDaySections(
               weekMonday: weekStart,
               memos: memos,
+              onDayTap: onDayTap,
+              daySectionKeys: daySectionKeys,
             ),
           ],
         ),
@@ -1254,7 +1327,13 @@ Future<void> openDashboardMemoEditor(
       : (initialDateOverride ?? st.selectedDay);
   final initialTime =
       existing != null ? _parseTaskTime(existing.taskTime) : null;
-  final places = await ref.read(dbHelperProvider).getAllPlaces();
+  List<PlaceInfoModel> places;
+  try {
+    places = await ref.read(dashboardRemoteUseCaseProvider).placesInfo();
+  } catch (e, st) {
+    debugPrint('placesInfo failed, fallback local: $e\n$st');
+    places = await ref.read(dbHelperProvider).getAllPlaces();
+  }
   places.sort((a, b) => (b.pid ?? 0).compareTo(a.pid ?? 0)); // 최근 등록 순
   final seen = <String>{};
   final placeNameSuggestions = <String>[];
@@ -1282,12 +1361,13 @@ Future<void> openDashboardMemoEditor(
   if (result == null || !context.mounted) return;
 
   final taskTime = result.time == null ? '' : _timeToKey(result.time!);
+  final normalizedMemo = _normalizeMemoAsBullets(result.memo);
   if (existing == null) {
     await vm.addMemo(
       date: result.date,
       taskTime: taskTime,
       title: result.title,
-      memo: result.memo,
+      memo: normalizedMemo,
       alarmEnabled: result.alarmEnabled,
       alarmOffsetMinutes: result.alarmOffsetMinutes,
     );
@@ -1297,10 +1377,20 @@ Future<void> openDashboardMemoEditor(
         taskDate: scheduleDateKey(result.date),
         taskTime: taskTime,
         title: result.title,
-        memo: result.memo,
+        memo: normalizedMemo,
         alarmEnabled: result.alarmEnabled,
         alarmOffsetMinutes: result.alarmOffsetMinutes,
       ),
     );
   }
+}
+
+String _normalizeMemoAsBullets(String raw) {
+  final lines = raw
+      .split('\n')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .map((e) => e.startsWith('- ') ? e : '- $e')
+      .toList();
+  return lines.join('\n');
 }

@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:alarm/alarm.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:w0001/data/datasources/local/dbhelper.dart';
+import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/router/app_router.dart';
 import 'package:w0001/ui/widget/alarm_ringing_overlay.dart';
@@ -29,6 +31,8 @@ Future<void> _initAlarmServicesSafely() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
+  await AppHttpClient.I.init();
   unawaited(_initAlarmServicesSafely());
   // landscpae 막기
   SystemChrome.setPreferredOrientations(

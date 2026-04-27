@@ -254,10 +254,22 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
                   children: [
                     for (var i = 0; i < recent.length; i++) ...[
                       if (i > 0) const SizedBox(width: 8),
-                      ActionChip(
-                        label: Text(recent[i].hname),
-                        onPressed: () =>
-                            vm.tapPlaceRecentWorker(context, recent[i]),
+                      GestureDetector(
+                        onLongPress: () async {
+                          final hid = recent[i].hid;
+                          if (hid == null) return;
+                          await _confirmDeleteRecentWorker(
+                            context,
+                            ref,
+                            hid,
+                            recent[i].hname,
+                          );
+                        },
+                        child: ActionChip(
+                          label: Text(recent[i].hname),
+                          onPressed: () =>
+                              vm.tapPlaceRecentWorker(context, recent[i]),
+                        ),
                       ),
                     ],
                   ],
@@ -269,6 +281,35 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
       ),
     ),
   );
+}
+
+Future<void> _confirmDeleteRecentWorker(
+  BuildContext context,
+  WidgetRef ref,
+  int hid,
+  String name,
+) async {
+  final vm = ref.read(addCostProvider.notifier);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('인원 삭제'),
+      content: Text('$name 인원을 최근 목록에서 삭제할까요?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('취소'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('삭제', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+  if (ok == true && context.mounted) {
+    await vm.deletePlaceRecentWorker(hid);
+  }
 }
 
 Future<void> _confirmDeleteWorkCost(

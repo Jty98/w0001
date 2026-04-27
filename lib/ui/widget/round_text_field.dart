@@ -10,6 +10,9 @@ class RoundTextField extends StatelessWidget {
   final int? maxLength;
   final TextInputType? keyboardType;
   final double? height;
+  final bool obscureText;
+  final Widget? suffixIcon;
+  final Iterable<String>? autofillHints;
   final ValueChanged onChanged;
 
   const RoundTextField({
@@ -21,6 +24,9 @@ class RoundTextField extends StatelessWidget {
     this.maxLength,
     this.keyboardType,
     this.height,
+    this.obscureText = false,
+    this.suffixIcon,
+    this.autofillHints,
     required this.onChanged,
   });
 
@@ -31,7 +37,9 @@ class RoundTextField extends StatelessWidget {
       height: height ?? 66,
       child: TextField(
         controller: controller,
-        maxLines: maxLines,
+        obscureText: obscureText,
+        autofillHints: autofillHints,
+        maxLines: obscureText ? 1 : maxLines,
         maxLength: maxLength,
         keyboardType: keyboardType,
         inputFormatters: keyboardType == TextInputType.number
@@ -45,6 +53,7 @@ class RoundTextField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hintText,
           labelText: labelText,
+          suffixIcon: suffixIcon,
           counterText: '',
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),

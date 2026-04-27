@@ -21,10 +21,14 @@ abstract class PlaceRepository {
     DateTime endDate,
     int pid,
   );
-  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid);
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(
+    int pid, {
+    required String photoType,
+  });
   Future<void> insertPlacePhotoGroup({
     required int pid,
     required String photoDate,
+    required String photoType,
     required String title,
     required List<String> photoUrls,
   });

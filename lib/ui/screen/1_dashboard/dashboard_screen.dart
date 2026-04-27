@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_view_model.dart';
 import 'package:w0001/util/funtions.dart';
@@ -8,8 +10,28 @@ import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_outstanding_sheet.
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_summary_card.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessionIfNeeded());
+  }
+
+  /// 토큰만 있고 [authSessionProvider]가 비어 있을 때(앱 재실행·자동 로그인 등) GET `/auth/me`로 채움
+  void _loadSessionIfNeeded() {
+    if (!mounted) return;
+    final s = ref.read(authSessionProvider);
+    if (s.isLoading) return;
+    if (s.maybeWhen(data: (u) => u != null, orElse: () => false)) return;
+    ref.read(authSessionProvider.notifier).loadCurrentUser();
+  }
 
   void _showOutstandingSheet(BuildContext context, WidgetRef ref) {
     final places = ref.read(dashboardProvider).places;
@@ -35,7 +57,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(dashboardProvider);
     final vm = ref.read(dashboardProvider.notifier);
     final cs = Theme.of(context).colorScheme;
@@ -45,6 +67,11 @@ class DashboardScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('상황판'),
+        actions: [
+          IconButton(onPressed: () {
+            context.push('/dashboard/profile');
+          }, icon: const Icon(Icons.person)),
+        ],
       ),
       floatingActionButton: state.isLoading
           ? null
@@ -61,7 +88,7 @@ class DashboardScreen extends ConsumerWidget {
                   initialDateOverride: st.selectedDay,
                 );
               },
-              child: const Icon(Icons.add),
+              child: const Icon(Icons.edit_note_rounded),
             ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())

@@ -43,4 +43,20 @@ class MonthlySummaryModel {
 
   String get ymKey =>
       '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}';
+
+  /// 서버 [response_model] camelCase JSON.
+  factory MonthlySummaryModel.fromJson(Map<String, dynamic> j) {
+    return MonthlySummaryModel(
+      year: (j['year'] as num?)?.toInt() ?? 0,
+      month: (j['month'] as num?)?.toInt() ?? 1,
+      contractAmount: (j['contractAmount'] as num?)?.toInt() ?? 0,
+      collectionAmount: (j['collectionAmount'] as num?)?.toInt() ?? 0,
+      costAmount: (j['costAmount'] as num?)?.toInt() ?? 0,
+      newProjectCount: (j['newProjectCount'] as num?)?.toInt() ?? 0,
+      completedProjectCount: (j['completedProjectCount'] as num?)?.toInt() ?? 0,
+      completedContractMarginPct:
+          (j['completedContractMarginPct'] as num?)?.toDouble() ?? 0,
+      completedProfitAmount: (j['completedProfitAmount'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

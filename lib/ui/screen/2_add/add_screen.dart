@@ -119,6 +119,7 @@ class _AddScreenState extends ConsumerState<AddScreen>
         behavior: HitTestBehavior.deferToChild,
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
+          resizeToAvoidBottomInset: false,
           body: AnimatedBuilder(
             animation: _openController,
             builder: (context, _) {

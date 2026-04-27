@@ -537,6 +537,11 @@ class _DashboardMetricChartSheetBodyState
                   ),
                 ],
                 selected: {_period},
+                style: SegmentedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
                 onSelectionChanged: (Set<_SheetPeriod> next) {
                   if (next.isEmpty) return;
                   setState(() => _period = next.first);
@@ -571,6 +576,11 @@ class _DashboardMetricChartSheetBodyState
                 ),
               ],
               selected: {_placeFilter},
+              style: SegmentedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               onSelectionChanged: (next) {
                 if (next.isEmpty) return;
                 setState(() => _placeFilter = next.first);
@@ -739,6 +749,9 @@ class _DashboardMetricChartSheetBodyState
                 cs,
                 label: '공사원금',
                 value: getPrice(price: row.contractTotal),
+                backgroundColor: Colors.indigo.withValues(alpha: 0.14),
+                labelColor: Colors.indigo[800],
+                valueColor: Colors.indigo[900],
               ),
             ),
             const SizedBox(width: 6),
@@ -747,6 +760,9 @@ class _DashboardMetricChartSheetBodyState
                 cs,
                 label: '선수금',
                 value: getPrice(price: row.advanceCollected),
+                backgroundColor: Colors.teal.withValues(alpha: 0.14),
+                labelColor: Colors.teal[800],
+                valueColor: Colors.teal[900],
               ),
             ),
             const SizedBox(width: 6),
@@ -755,6 +771,9 @@ class _DashboardMetricChartSheetBodyState
                 cs,
                 label: '미수금',
                 value: getPrice(price: row.outstanding),
+                backgroundColor: Colors.deepOrange.withValues(alpha: 0.14),
+                labelColor: Colors.deepOrange[800],
+                valueColor: Colors.deepOrange[900],
               ),
             ),
           ],
@@ -839,11 +858,14 @@ class _DashboardMetricChartSheetBodyState
     ColorScheme cs, {
     required String label,
     required String value,
+    Color? backgroundColor,
+    Color? labelColor,
+    Color? valueColor,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: cs.secondaryContainer.withValues(alpha: 0.55),
+        color: backgroundColor ?? cs.secondaryContainer.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -854,7 +876,8 @@ class _DashboardMetricChartSheetBodyState
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              color: cs.onSecondaryContainer.withValues(alpha: 0.85),
+              color:
+                  labelColor ?? cs.onSecondaryContainer.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 2),
@@ -865,7 +888,7 @@ class _DashboardMetricChartSheetBodyState
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w800,
-              color: cs.onSecondaryContainer,
+              color: valueColor ?? cs.onSecondaryContainer,
             ),
           ),
         ],

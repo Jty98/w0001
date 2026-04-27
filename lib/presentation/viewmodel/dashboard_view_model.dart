@@ -2,8 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/dashboard_models.dart';
 import 'package:w0001/data/model/monthly_summary_model.dart';
-import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
-    show dbHelperProvider;
+import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 
 class DashboardState {
   final int selectedYear;
@@ -80,13 +79,12 @@ class DashboardViewModel extends Notifier<DashboardState> {
   Future<void> fetch() async {
     state = state.copyWith(isLoading: true);
     try {
-      final db = ref.read(dbHelperProvider);
       final now = DateTime.now();
-      final bundle = await db.loadDashboardDataBundle(
-        selectedYear: state.selectedYear,
-        kpiYear: now.year,
-        kpiMonth: now.month,
-      );
+      final bundle = await ref.read(dashboardRemoteUseCaseProvider).loadBundle(
+            selectedYear: state.selectedYear,
+            kpiYear: now.year,
+            kpiMonth: now.month,
+          );
       state = state.copyWith(
         kpi: bundle.kpi,
         monthly: bundle.monthly,

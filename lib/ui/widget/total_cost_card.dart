@@ -48,10 +48,6 @@ class TotalCostCard extends StatelessWidget {
     final accent = isWork ? (Colors.blue[700] ?? cs.primary) : (Colors.green[700] ?? cs.tertiary);
     final showNotPaid = isWork && wcomplete == 0;
 
-    final prefix = isWork
-        ? (showNotPaid ? '[미지급] ' : '')
-        : '[$category] ';
-
     return Card(
       elevation: 0,
       color: cs.surfaceContainerLow,
@@ -74,7 +70,7 @@ class TotalCostCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$prefix$name',
+                    name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

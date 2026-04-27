@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/ui/screen/0_auth/login_screen.dart';
+import 'package:w0001/ui/screen/0_auth/profile_screen.dart';
 import 'package:w0001/ui/screen/1_dashboard/dashboard_screen.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
 import 'package:w0001/ui/screen/5_place/place_detail_screen.dart';
@@ -11,7 +13,7 @@ import 'package:w0001/ui/screen/3_calendar/calendar_screen.dart';
 import 'package:w0001/ui/screen/4_human/human_screen.dart';
 import 'package:w0001/ui/screen/4_human/w_detail_screen.dart';
 import 'package:w0001/ui/screen/4_human/work_cost_screen.dart';
-import 'package:w0001/ui/screen/5_place/place_list_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_revenue_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_cost_screen.dart';
 
@@ -22,8 +24,16 @@ final GlobalKey<NavigatorState> rootNavigatorKey =
 GoRouter createAppRouter() {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/dashboard',
+    initialLocation: '/login',
     routes: [
+      // 로그인은 메인 쉘(하단 탭) 밖에서 전체 화면으로만 표시
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) => const NoTransitionPage<void>(
+          key: ValueKey<String>('login'),
+          child: LoginScreen(),
+        ),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return _MainShell(navigationShell: navigationShell);
@@ -38,6 +48,13 @@ GoRouter createAppRouter() {
                   child: DashboardScreen(),
                 ),
                 routes: [
+                  GoRoute(
+                    path: 'profile',
+                    pageBuilder: (context, state) => const NoTransitionPage<void>(
+                      key: ValueKey<String>('profile'),
+                      child: ProfileScreen(),
+                    ),
+                  ),
                   GoRoute(
                     path: 'schedule-full',
                     builder: (context, state) =>

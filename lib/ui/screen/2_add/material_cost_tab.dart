@@ -22,86 +22,118 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
   Widget build(BuildContext context) {
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: Column(
-        children: [
-          const SelectDateButton(),
-          const SizedBox(height: 10),
-          _categoryDropdownSearch(ref),
-          const SizedBox(height: 5),
-          AddTextField(
-            tController: vm.mNameController,
-            focusNode: vm.mNameFocus,
-            onSubmitted: (value) => vm.mPriceFocus.requestFocus(),
-            labelText: '자재 이름',
-            keyboardType: TextInputType.text,
-            isPrice: false,
-            height: 52,
-            witdh: double.infinity,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            readOnly: false,
-          ),
-          const SizedBox(height: 5),
-          AddTextField(
-            tController: vm.mPriceController,
-            focusNode: vm.mPriceFocus,
-            labelText: '금액',
-            keyboardType: TextInputType.number,
-            onSubmitted: (value) => vm.addMaterialCostList(context),
-            isPrice: true,
-            height: 52,
-            witdh: double.infinity,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            readOnly: false,
-          ),
-          const SizedBox(height: 6),
-          _MaterialNamePresetButtons(
-            selectedCategory: state.selectedCategory,
-            selectedPreset: _selectedPreset,
-            onSelect: (name) {
-              setState(() => _selectedPreset = name);
-              if (name == '직접입력') {
-                vm.mNameController.clear();
-                vm.mNameFocus.requestFocus();
-                return;
-              }
-              vm.mNameController.text = name;
-              vm.mNameController.selection = TextSelection.fromPosition(
-                TextPosition(offset: vm.mNameController.text.length),
-              );
-              vm.mPriceFocus.requestFocus();
-            },
-          ),
-          SizedBox(
-            height: 44,
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: (state.selectedPlace == null) ||
-                      (state.selectedCategory == null)
-                  ? () {
-                      ScaffoldMessenger.of(context).clearSnackBars();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('현장이나 카테고리를 선택해 주세요.'),
+      child: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                const SelectDateButton(),
+                const SizedBox(height: 10),
+                _categoryDropdownSearch(ref),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: AddTextField(
+                        tController: vm.mNameController,
+                        focusNode: vm.mNameFocus,
+                        onSubmitted: (value) => vm.mPriceFocus.requestFocus(),
+                        labelText: '자재 이름',
+                        keyboardType: TextInputType.text,
+                        isPrice: false,
+                        height: 52,
+                        witdh: double.infinity,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      );
+                        readOnly: false,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 4,
+                      child: AddTextField(
+                        tController: vm.mPriceController,
+                        focusNode: vm.mPriceFocus,
+                        labelText: '금액',
+                        keyboardType: TextInputType.number,
+                        onSubmitted: (value) => vm.addMaterialCostList(context),
+                        isPrice: true,
+                        height: 52,
+                        witdh: double.infinity,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        readOnly: false,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                _MaterialNamePresetButtons(
+                  selectedCategory: state.selectedCategory,
+                  selectedPreset: _selectedPreset,
+                  onSelect: (name) {
+                    setState(() => _selectedPreset = name);
+                    if (name == '직접입력') {
+                      vm.mNameController.clear();
+                      vm.mNameFocus.requestFocus();
+                      return;
                     }
-                  : () => vm.addMaterialCostList(context),
-              icon: const Icon(Icons.add),
-              label: const Text('자재 추가'),
+                    vm.mNameController.text = name;
+                    vm.mNameController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: vm.mNameController.text.length),
+                    );
+                    vm.mPriceFocus.requestFocus();
+                  },
+                ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  margin: EdgeInsets.only(
+                    bottom: keyboardInset > 0 ? keyboardInset + 8 : 0,
+                  ),
+                  child: SizedBox(
+                    height: 44,
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: (state.selectedPlace == null) ||
+                              (state.selectedCategory == null)
+                          ? () {
+                              ScaffoldMessenger.of(context).clearSnackBars();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('현장이나 카테고리를 선택해 주세요.'),
+                                ),
+                              );
+                            }
+                          : () => vm.addMaterialCostList(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('담기'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: ListView.builder(
-              reverse: false,
-              itemCount: state.materialCostList.length,
-              itemBuilder: (context, index) =>
-                  tempCostBuilder(ref, context, index, 'material'),
-            ),
+          SliverList.builder(
+            itemCount: state.materialCostList.length,
+            itemBuilder: (context, index) =>
+                tempCostBuilder(ref, context, index, 'material'),
           ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
         ],
       ),
     );

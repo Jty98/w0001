@@ -16,7 +16,7 @@ import 'package:w0001/data/model/dashboard_models.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 
 class DbHelper {
-  final int curruntVersion = 14;
+  final int curruntVersion = 15;
   Database? db;
 
   Future<Database> initializeDB() async {
@@ -141,6 +141,7 @@ class DbHelper {
           pgid INTEGER PRIMARY KEY AUTOINCREMENT,
           pid INTEGER NOT NULL,
           photoDate TEXT NOT NULL,
+          photoType TEXT NOT NULL DEFAULT 'site',
           title TEXT NOT NULL DEFAULT '',
           sortOrder INTEGER NOT NULL DEFAULT 0,
           createdAtMs INTEGER NOT NULL DEFAULT 0,
@@ -390,6 +391,14 @@ class DbHelper {
           if (!await _tableHasColumn(database, 'Place', 'paddress')) {
             await database.execute(
               "ALTER TABLE Place ADD COLUMN paddress TEXT DEFAULT ''",
+            );
+          }
+        }
+
+        if (oldVersion < 15) {
+          if (!await _tableHasColumn(database, 'PlacePhotoGroup', 'photoType')) {
+            await database.execute(
+              "ALTER TABLE PlacePhotoGroup ADD COLUMN photoType TEXT NOT NULL DEFAULT 'site'",
             );
           }
         }
@@ -2014,7 +2023,10 @@ UNION
     );
   }
 
-  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(int pid) async {
+  Future<List<PlacePhotoGroupModel>> getPlacePhotoGroups(
+    int pid, {
+    required String photoType,
+  }) async {
     final db = await initializeDB();
     final rows = await db.rawQuery(
       '''
@@ -2022,6 +2034,7 @@ UNION
         g.pgid,
         g.pid,
         g.photoDate,
+        g.photoType,
         g.title,
         g.sortOrder,
         g.createdAtMs,
@@ -2029,11 +2042,11 @@ UNION
         COALESCE(GROUP_CONCAT(p.photoUrl, '|||'), '') AS photoUrls
       FROM PlacePhotoGroup g
       LEFT JOIN PlacePhoto p ON p.pgid = g.pgid
-      WHERE g.pid = ?
-      GROUP BY g.pgid, g.pid, g.photoDate, g.title, g.sortOrder, g.createdAtMs
+      WHERE g.pid = ? AND g.photoType = ?
+      GROUP BY g.pgid, g.pid, g.photoDate, g.photoType, g.title, g.sortOrder, g.createdAtMs
       ORDER BY g.photoDate DESC, g.sortOrder ASC, g.pgid DESC
       ''',
-      [pid],
+      [pid, photoType],
     );
     return rows.map((e) => PlacePhotoGroupModel.fromMap(e)).toList();
   }
@@ -2041,6 +2054,7 @@ UNION
   Future<void> insertPlacePhotoGroup({
     required int pid,
     required String photoDate,
+    required String photoType,
     required String title,
     required List<String> photoUrls,
   }) async {
@@ -2053,14 +2067,15 @@ UNION
         '''
         SELECT COALESCE(MAX(sortOrder), -1) + 1 AS n
         FROM PlacePhotoGroup
-        WHERE pid = ? AND photoDate = ?
+        WHERE pid = ? AND photoDate = ? AND photoType = ?
         ''',
-        [pid, dateKey],
+        [pid, dateKey, photoType],
       );
       final nextOrder = (orderRow.first['n'] as int?) ?? 0;
       final pgid = await txn.insert('PlacePhotoGroup', {
         'pid': pid,
         'photoDate': dateKey,
+        'photoType': photoType,
         'title': title.trim().isEmpty ? '사진 묶음' : title.trim(),
         'sortOrder': nextOrder,
         'createdAtMs': ms,
