@@ -1,16 +1,16 @@
 import 'package:w0001/data/datasources/remote/http_client.dart';
-import 'package:w0001/data/datasources/remote/super_admin/humans_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/material_costs_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/place_collections_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/place_photo_groups_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/place_photos_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/place_revenues_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/place_work_days_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/place_worker_recents_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/places_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/schedule_memos_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/users_api.dart';
-import 'package:w0001/data/datasources/remote/super_admin/work_costs_api.dart';
+import 'package:w0001/data/datasources/remote/auth/users_api.dart';
+import 'package:w0001/data/datasources/remote/cost/material_costs_api.dart';
+import 'package:w0001/data/datasources/remote/cost/work_costs_api.dart';
+import 'package:w0001/data/datasources/remote/human/humans_api.dart';
+import 'package:w0001/data/datasources/remote/place/place_collections_api.dart';
+import 'package:w0001/data/datasources/remote/place/place_photo_groups_api.dart';
+import 'package:w0001/data/datasources/remote/place/place_photos_api.dart';
+import 'package:w0001/data/datasources/remote/place/place_revenues_api.dart';
+import 'package:w0001/data/datasources/remote/place/place_work_days_api.dart';
+import 'package:w0001/data/datasources/remote/place/place_worker_recents_api.dart';
+import 'package:w0001/data/datasources/remote/place/places_api.dart';
+import 'package:w0001/data/datasources/remote/schedule_memo/schedule_memos_api.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 
@@ -51,6 +51,38 @@ final class SuperAdminRemoteApi {
   Future<UserRead> userPatch(String uid, Map<String, dynamic> body) =>
       users.patch(uid, body);
   Future<void> userDelete(String uid) => users.delete(uid);
+
+  Future<List<UserRead>> usersPendingList({String? q}) => users.listPending(q: q);
+  Future<List<UserRead>> usersSearch({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+  }) =>
+      users.search(
+        role: role,
+        approvalStatus: approvalStatus,
+        isActive: isActive,
+        q: q,
+      );
+
+  Future<void> userApprove(String uid, {String? note}) =>
+      users.approve(uid, note: note);
+  Future<void> userReject(String uid, {String? note}) =>
+      users.reject(uid, note: note);
+  Future<void> userSuspend(
+    String uid, {
+    String? reason,
+    required String adminActionToken,
+  }) =>
+      users.suspend(uid, reason: reason, adminActionToken: adminActionToken);
+  Future<void> userActivate(String uid) => users.activate(uid);
+  Future<UserRead> userChangeRole(
+    String uid,
+    UserRole role, {
+    required String adminActionToken,
+  }) =>
+      users.changeRole(uid, role, adminActionToken: adminActionToken);
 
   Future<List<PlaceRead>> placesList() => places.list();
   Future<PlaceRead> placeGet(int pid) => places.get(pid);

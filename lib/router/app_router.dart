@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/ui/screen/0_auth/login_screen.dart';
+import 'package:w0001/ui/screen/0_auth/signup_screen.dart';
 import 'package:w0001/ui/screen/0_auth/profile_screen.dart';
 import 'package:w0001/ui/screen/1_dashboard/dashboard_screen.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
@@ -16,15 +17,18 @@ import 'package:w0001/ui/screen/4_human/work_cost_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_revenue_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_cost_screen.dart';
+import 'package:w0001/ui/screen/5_place/place_process_schedule_screen.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'root');
 
 /// 앱 전역 [GoRouter]. [main]에서 한 번 생성해 [MaterialApp.router]에 연결합니다.
-GoRouter createAppRouter() {
+///
+/// [initialLocation]은 [tryRestoreSessionIfAutoLoginEnabled] 성공 시 `/dashboard` 등으로 두면 됩니다.
+GoRouter createAppRouter({String initialLocation = '/login'}) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/login',
+    initialLocation: initialLocation,
     routes: [
       // 로그인은 메인 쉘(하단 탭) 밖에서 전체 화면으로만 표시
       GoRoute(
@@ -32,6 +36,13 @@ GoRouter createAppRouter() {
         pageBuilder: (context, state) => const NoTransitionPage<void>(
           key: ValueKey<String>('login'),
           child: LoginScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/signup',
+        pageBuilder: (context, state) => const NoTransitionPage<void>(
+          key: ValueKey<String>('signup'),
+          child: SignupScreen(),
         ),
       ),
       StatefulShellRoute.indexedStack(
@@ -124,6 +135,19 @@ GoRouter createAppRouter() {
                             );
                           }
                           return PlaceRevenueScreen(placeInfo: extra);
+                        },
+                      ),
+                      GoRoute(
+                        path: 'process-schedule',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) {
+                          final extra = state.extra;
+                          if (extra is! PlaceInfoModel) {
+                            return const Scaffold(
+                              body: Center(child: Text('현장 정보가 없습니다.')),
+                            );
+                          }
+                          return PlaceProcessScheduleScreen(placeInfo: extra);
                         },
                       ),
                     ],

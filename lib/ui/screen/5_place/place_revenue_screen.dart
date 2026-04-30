@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
+import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
@@ -20,6 +21,46 @@ class PlaceRevenueScreen extends ConsumerStatefulWidget {
 
 class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
   bool _latestFirst = true;
+
+  /// Provider dispose와 분리(삭제/전역 fetch 직후에도 유효)
+  late final TextEditingController _rNameController;
+  late final TextEditingController _rPriceController;
+  late final TextEditingController _dialogRNameController;
+  late final TextEditingController _dialogRPriceController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rNameController = TextEditingController();
+    _rPriceController = TextEditingController();
+    _dialogRNameController = TextEditingController();
+    _dialogRPriceController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final s = ref.read(placeDetailProvider(widget.placeInfo.pid!));
+      if (_rNameController.text.isEmpty) {
+        _rNameController.text = nextJangeumLabelForRevenueList(s.revenueList);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _rNameController.dispose();
+    _rPriceController.dispose();
+    _dialogRNameController.dispose();
+    _dialogRPriceController.dispose();
+    super.dispose();
+  }
+
+  bool _canAddRevenue(PlaceDetailState state) {
+    final raw = _rPriceController.text
+        .trim()
+        .replaceAll(RegExp(r'[,원]'), '');
+    if (raw.isEmpty) return false;
+    if (state.revenuePickedDay == null) return false;
+    return true;
+  }
 
   Future<DateTime?> _pickDateWithScrollableCalendar(
     BuildContext context, {
@@ -103,6 +144,11 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
     final placeInfo = widget.placeInfo;
     final state = ref.watch(placeDetailProvider(placeInfo.pid!));
     final vm = ref.read(placeDetailProvider(placeInfo.pid!).notifier);
+    ref.listen(placeDetailProvider(placeInfo.pid!), (prev, next) {
+      if (!mounted) return;
+      if (_rNameController.text.trim().isNotEmpty) return;
+      _rNameController.text = nextJangeumLabelForRevenueList(next.revenueList);
+    });
     final cs = Theme.of(context).colorScheme;
     final displayedRevenues = [...state.revenueList]
       ..sort((a, b) {
@@ -238,7 +284,10 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                     ],
                     selected: {_latestFirst},
                     showSelectedIcon: false,
-                    style: const ButtonStyle(
+                    style: SegmentedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       visualDensity: VisualDensity.compact,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -277,14 +326,16 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                             onPressed: (slidableCtx) => showDialog<void>(
                               context: slidableCtx,
                               builder: (dialogCtx) => deleteDialog(
-                                onPressed: () =>
-                                    vm.deleteRevenue(rid: revenue.rid).then(
-                                          (value) {
-                                            if (dialogCtx.mounted) {
-                                              Navigator.of(dialogCtx).pop();
-                                            }
-                                          },
-                                        ),
+                                onPressed: () {
+                                  vm
+                                      .deleteRevenue(rid: revenue.rid)
+                                      .then((_) async {
+                                    await FetchData.fetchAllData();
+                                    if (dialogCtx.mounted) {
+                                      Navigator.of(dialogCtx).pop();
+                                    }
+                                  });
+                                },
                               ),
                             ),
                           ),
@@ -292,8 +343,8 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                       ),
                       child: InkWell(
                         onTap: () {
-                          vm.dialogRNameController.text = revenue.rname;
-                          vm.dialogRPriceController.text = getPrice(
+                          _dialogRNameController.text = revenue.rname;
+                          _dialogRPriceController.text = getPrice(
                             price: revenue.rprice,
                             isContainWon: false,
                           );
@@ -343,11 +394,23 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                                   );
                                                 }
                                               },
+                                              style: OutlinedButton.styleFrom(
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 10,
+                                                  horizontal: 8,
+                                                ),
+                                              ),
                                               icon: const Icon(Icons.event),
                                               label: Text(
                                                 formatDateTimeWeekDayToString(
                                                   state.dialogRevenuePickedDay,
                                                 ),
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
                                           ),
@@ -360,7 +423,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                         bottom: 3,
                                       ),
                                       child: AddTextField(
-                                        tController: vm.dialogRNameController,
+                                        tController: _dialogRNameController,
                                         labelText: '수익 내용',
                                         isPrice: false,
                                         height: 60,
@@ -370,7 +433,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                       ),
                                     ),
                                     AddTextField(
-                                      tController: vm.dialogRPriceController,
+                                      tController: _dialogRPriceController,
                                       labelText: '추가금',
                                       isPrice: true,
                                       height: 60,
@@ -391,21 +454,40 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                           ),
                                         ),
                                         TextButton(
-                                          onPressed: () => vm
-                                              .updateRevenue(rid: revenue.rid)
-                                              .then((value) {
-                                            if (dialogCtx.mounted) {
-                                              Navigator.of(dialogCtx).pop();
-                                            }
-                                            if (context.mounted) {
-                                              showDialog<void>(
-                                                context: context,
-                                                builder: (_) => saveDialog(
-                                                  text: '수정되었습니다.',
-                                                ),
-                                              );
-                                            }
-                                          }),
+                                          onPressed: () {
+                                            final rp = int.tryParse(
+                                                  _dialogRPriceController.text
+                                                      .trim()
+                                                      .replaceAll(
+                                                        RegExp(r'[,원]'),
+                                                        '',
+                                                      ),
+                                                ) ??
+                                                0;
+                                            vm
+                                                .updateRevenue(
+                                                    rid: revenue.rid,
+                                                    rname: _dialogRNameController
+                                                        .text,
+                                                    rprice: rp,
+                                                    revenueDate: state
+                                                        .dialogRevenuePickedDay,
+                                                )
+                                                .then((_) async {
+                                              await FetchData.fetchAllData();
+                                              if (dialogCtx.mounted) {
+                                                Navigator.of(dialogCtx).pop();
+                                              }
+                                              if (context.mounted) {
+                                                showDialog<void>(
+                                                  context: context,
+                                                  builder: (_) => saveDialog(
+                                                    text: '수정되었습니다.',
+                                                  ),
+                                                );
+                                              }
+                                            });
+                                          },
                                           child: const Text('수정'),
                                         ),
                                       ],
@@ -473,6 +555,10 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                   return Column(
                     children: [
                       Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        clipBehavior: Clip.antiAlias,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             vertical: 5,
@@ -488,20 +574,36 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                     Expanded(
                                       child: OutlinedButton.icon(
                                         onPressed: () async {
+                                          final current =
+                                              state.revenuePickedDay;
                                           final picked =
                                               await _pickDateWithScrollableCalendar(
                                             context,
-                                            initialDay: state.revenuePickedDay,
+                                            initialDay: current ??
+                                                DateTime.now(),
                                           );
                                           if (picked != null) {
                                             vm.setRevenuePickedDay(picked);
                                           }
                                         },
-                                        icon: const Icon(Icons.event),
-                                        label: Text(
-                                          formatDateTimeWeekDayToString(
-                                            state.revenuePickedDay,
+                                        style: OutlinedButton.styleFrom(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                            horizontal: 8,
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.event, size: 20),
+                                        label: Text(
+                                          state.revenuePickedDay == null
+                                              ? '날짜 선택'
+                                              : formatDateTimeWeekDayToString(
+                                                  state.revenuePickedDay!,
+                                                ),
+                                          textAlign: TextAlign.center,
                                         ),
                                       ),
                                     ),
@@ -512,32 +614,51 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                 border: const UnderlineInputBorder(),
                                 height: 63,
                                 witdh: MediaQuery.of(context).size.width,
-                                tController: vm.rNameController,
-                                labelText: '내용 (선택)',
+                                tController: _rNameController,
+                                labelText: '수익 내용',
                                 readOnly: false,
                                 isPrice: false,
                                 keyboardType: TextInputType.text,
+                                onChanged: (_) => setState(() {}),
                               ),
                               AddTextField(
                                 border: InputBorder.none,
                                 height: 50,
                                 witdh: MediaQuery.of(context).size.width,
-                                tController: vm.rPriceController,
+                                tController: _rPriceController,
                                 labelText: '추가금',
                                 readOnly: false,
                                 isPrice: true,
                                 keyboardType: TextInputType.number,
-                                onChanged: (value) =>
-                                    vm.updateRevenueController(value),
+                                onChanged: (_) => setState(() {}),
                               ),
                             ],
                           ),
                         ),
                       ),
                       TextButton(
-                        onPressed: vm.rPriceController.text.isEmpty
-                            ? null
-                            : () => vm.insertRevenue(),
+                        onPressed: _canAddRevenue(state)
+                            ? () async {
+                                final err = await vm.insertRevenue(
+                                  rnameOrEmpty: _rNameController.text,
+                                  rpriceRaw: _rPriceController.text,
+                                );
+                                if (!context.mounted) return;
+                                if (err != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(err)),
+                                  );
+                                  return;
+                                }
+                                final list = ref
+                                    .read(placeDetailProvider(placeInfo.pid!))
+                                    .revenueList;
+                                _rNameController.text =
+                                    nextJangeumLabelForRevenueList(list);
+                                _rPriceController.clear();
+                                await FetchData.fetchAllData();
+                              }
+                            : null,
                         child: const Text('추가', style: normalStyle),
                       ),
                     ],

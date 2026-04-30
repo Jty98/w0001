@@ -82,79 +82,90 @@ class _DashboardScheduleFullScreenState
       context: context,
       showDragHandle: true,
       useSafeArea: true,
+      isScrollControlled: true,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                '공유할 날짜 선택',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 10),
-              ...List.generate(7, (i) {
-                final day = weekStart.add(Duration(days: i));
-                final key = scheduleDateKey(day);
-                final count =
-                    (state.fullMemos ?? const <ScheduleMemoModel>[])
-                        .where((m) => m.taskDate == key)
-                        .length;
-                final isSelected = _scheduleIsSameDay(day, selected);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.pop(ctx, day),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: isSelected
-                            ? cs.primaryContainer
-                            : cs.surfaceContainerHighest.withValues(alpha: 0.4),
-                        border: Border.all(
-                          color: isSelected
-                              ? cs.primary
-                              : cs.outlineVariant.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _dayTitleLine(day),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
+        final sheetHeight = (MediaQuery.sizeOf(ctx).height * 0.62)
+            .clamp(320.0, 520.0)
+            .toDouble();
+        return SizedBox(
+          height: sheetHeight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  '공유할 날짜 선택',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: 7,
+                    itemBuilder: (context, i) {
+                      final day = weekStart.add(Duration(days: i));
+                      final key = scheduleDateKey(day);
+                      final count = (state.fullMemos ?? const <ScheduleMemoModel>[])
+                          .where((m) => m.taskDate == key)
+                          .length;
+                      final isSelected = _scheduleIsSameDay(day, selected);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => Navigator.pop(ctx, day),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: isSelected
+                                  ? cs.primaryContainer
+                                  : cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.4),
+                              border: Border.all(
                                 color: isSelected
-                                    ? cs.onPrimaryContainer
-                                    : cs.onSurface,
+                                    ? cs.primary
+                                    : cs.outlineVariant.withValues(alpha: 0.55),
                               ),
                             ),
-                          ),
-                          Text(
-                            count == 0 ? '일정 없음' : '$count개',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isSelected
-                                  ? cs.onPrimaryContainer
-                                  : cs.onSurfaceVariant,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _dayTitleLine(day),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: isSelected
+                                          ? cs.onPrimaryContainer
+                                          : cs.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  count == 0 ? '일정 없음' : '$count개',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected
+                                        ? cs.onPrimaryContainer
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              }),
-            ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -488,12 +499,6 @@ class _DashboardScheduleFullScreenState
                             fontSize: 13,
                           ),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: state.isFullLoading
-                            ? null
-                            : () => _pickAndMoveToDay(vm),
-                        child: const Text('날짜선택'),
                       ),
                       TextButton(
                         onPressed: () {

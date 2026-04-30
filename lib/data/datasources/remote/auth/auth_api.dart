@@ -18,7 +18,10 @@ final class AuthApi {
       ApiEndpoint.authLogin,
       data: loginRequestBody(uid, upw),
     );
-    return LoginResponse.fromJson(res.data! as Map<String, dynamic>);
+    return LoginResponse.fromJson(
+      res.data! as Map<String, dynamic>,
+      requireRefreshTokenInResponse: true,
+    );
   }
 
   /// POST `/auth/refresh` — 인증 헤더 없음 (토큰 회전)
@@ -28,6 +31,18 @@ final class AuthApi {
       data: refreshRequestBody(refreshToken),
     );
     return LoginResponse.fromJson(res.data! as Map<String, dynamic>);
+  }
+
+  /// POST `/auth/signup` — 인증 헤더 없음·토큰 없음
+  Future<void> signup({
+    required String uid,
+    required String upw,
+    required String uname,
+  }) async {
+    await _http.post<dynamic>(
+      ApiEndpoint.authSignup,
+      data: signupRequestBody(uid: uid, upw: upw, uname: uname),
+    );
   }
 
   /// GET `/auth/me` — Bearer access (인터셉터가 붙임)
@@ -43,6 +58,28 @@ final class AuthApi {
       options: Options(
         responseType: ResponseType.plain,
       ),
+    );
+  }
+
+  /// POST `/auth/verify-sensitive-action` — Bearer + super_admin.
+  ///
+  /// 반환된 [SensitiveActionVerifyResponse.actionToken] 은 민감 사용자 API 호출 시
+  /// [ApiEndpoint.headerAdminActionToken] 헤더에 넣는다.
+  Future<SensitiveActionVerifyResponse> verifySensitiveAction({
+    required String password,
+  }) async {
+    final res = await _http.post<dynamic>(
+      ApiEndpoint.authVerifySensitiveAction,
+      data: <String, dynamic>{'password': password},
+    );
+    final data = res.data;
+    if (data is! Map) {
+      throw const FormatException(
+        '민감 작업 재인증 응답 형식이 올바르지 않습니다.',
+      );
+    }
+    return SensitiveActionVerifyResponse.fromJson(
+      Map<String, dynamic>.from(data),
     );
   }
 }

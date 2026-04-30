@@ -17,4 +17,11 @@ class AuthUseCase {
   Future<UserRead> getCurrentUser() => _repository.getCurrentUser();
 
   Future<void> logout() => _repository.logout();
+
+  Future<void> signup({
+    required String uid,
+    required String upw,
+    required String uname,
+  }) =>
+      _repository.signup(uid: uid, upw: upw, uname: uname);
 }

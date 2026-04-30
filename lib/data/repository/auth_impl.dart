@@ -13,6 +13,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String uid,
     required String upw,
   }) async {
+    await AuthTokenStorage.I.clear();
     final r = await _api.login(uid: uid, upw: upw);
     await AuthTokenStorage.I.write(
       access: r.accessToken,
@@ -28,11 +29,17 @@ class AuthRepositoryImpl implements AuthRepository {
       throw StateError('refresh_token 이 없습니다.');
     }
     final r = await _api.refresh(refreshToken: rt);
+    final nextRefresh =
+        r.refreshToken.isNotEmpty ? r.refreshToken : rt;
     await AuthTokenStorage.I.write(
       access: r.accessToken,
-      refresh: r.refreshToken,
+      refresh: nextRefresh,
     );
-    return r;
+    return LoginResponse(
+      accessToken: r.accessToken,
+      refreshToken: nextRefresh,
+      tokenType: r.tokenType,
+    );
   }
 
   @override
@@ -46,4 +53,12 @@ class AuthRepositoryImpl implements AuthRepository {
       await AuthTokenStorage.I.clear();
     }
   }
+
+  @override
+  Future<void> signup({
+    required String uid,
+    required String upw,
+    required String uname,
+  }) =>
+      _api.signup(uid: uid, upw: upw, uname: uname);
 }

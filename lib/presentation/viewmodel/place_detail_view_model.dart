@@ -5,9 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:w0001/data/datasources/local/materialcost_local_data_source.dart';
-import 'package:w0001/data/datasources/local/revenue_local_data_source.dart';
-import 'package:w0001/data/datasources/local/workcost_local_data_source.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/revenue_model.dart';
@@ -22,11 +19,19 @@ import 'package:w0001/domain/repository/workcost_abst.dart';
 import 'package:w0001/domain/use_case/materialcost_use_case.dart';
 import 'package:w0001/domain/use_case/revenue_use_case.dart';
 import 'package:w0001/domain/use_case/workcost_use_case.dart';
+import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
-    show dbHelperProvider, placeUseCaseProvider;
+    show placeUseCaseProvider;
+import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/funtions.dart';
+
+/// 선수금 제외 추가 수익 기본 라벨: `1차 잔금`, `2차 잔금`, …
+/// 수익 입력은 [PlaceRevenueScreen] 쪽 `TextEditingController`에서 관리(Provider dispose와 분리).
+String nextJangeumLabelForRevenueList(List<RevenueModel> list) {
+  return '${list.length + 1}차 잔금';
+}
 
 class PlaceDetailState {
   const PlaceDetailState({
@@ -54,7 +59,8 @@ class PlaceDetailState {
   final FilterType selectedFilterType;
   final String? selectedDropdownCategory;
   final DateTime dialogDateTime;
-  final DateTime revenuePickedDay;
+  /// 추가 수익 등록용. `null`이면 아직 캘린더에서 날짜를 확정하지 않은 상태.
+  final DateTime? revenuePickedDay;
   final DateTime dialogRevenuePickedDay;
   final DateTime photoPickedDay;
   final List<TotalCostModel> totalCostList;
@@ -71,7 +77,7 @@ class PlaceDetailState {
         selectedFilterType: FilterType.all,
         selectedDropdownCategory: null,
         dialogDateTime: DateTime.now(),
-        revenuePickedDay: DateTime.now(),
+        revenuePickedDay: null,
         dialogRevenuePickedDay: DateTime.now(),
         photoPickedDay: DateTime.now(),
         totalCostList: const [],
@@ -89,6 +95,7 @@ class PlaceDetailState {
     String? selectedDropdownCategory,
     DateTime? dialogDateTime,
     DateTime? revenuePickedDay,
+    bool setRevenuePicked = false,
     DateTime? dialogRevenuePickedDay,
     DateTime? photoPickedDay,
     List<TotalCostModel>? totalCostList,
@@ -106,7 +113,9 @@ class PlaceDetailState {
       selectedDropdownCategory:
           selectedDropdownCategory ?? this.selectedDropdownCategory,
       dialogDateTime: dialogDateTime ?? this.dialogDateTime,
-      revenuePickedDay: revenuePickedDay ?? this.revenuePickedDay,
+      revenuePickedDay: setRevenuePicked
+          ? revenuePickedDay
+          : this.revenuePickedDay,
       dialogRevenuePickedDay:
           dialogRevenuePickedDay ?? this.dialogRevenuePickedDay,
       photoPickedDay: photoPickedDay ?? this.photoPickedDay,
@@ -119,32 +128,24 @@ class PlaceDetailState {
   }
 }
 
-final workCostLocalDataSourceProvider = Provider<WorkCostLocalDataSource>(
-  (ref) => WorkCostLocalDataSourceImpl(ref.read(dbHelperProvider)),
-);
 final workCostRepositoryProvider = Provider<WorkCostRepository>(
-  (ref) => WorkCostRepositoryImpl(ref.read(workCostLocalDataSourceProvider)),
+  (ref) =>
+      WorkCostRepositoryImpl(ref.read(superAdminRemoteRepositoryProvider)),
 );
 final workCostUseCaseProvider = Provider<WorkCostUseCase>(
   (ref) => WorkCostUseCase(ref.read(workCostRepositoryProvider)),
 );
 
-final materialCostLocalDataSourceProvider = Provider<MaterialCostLocalDataSource>(
-  (ref) => MaterialCostLocalDataSourceImpl(ref.read(dbHelperProvider)),
-);
 final materialCostRepositoryProvider = Provider<MaterialCostRepository>(
   (ref) =>
-      MaterialCostRepositoryImpl(ref.read(materialCostLocalDataSourceProvider)),
+      MaterialCostRepositoryImpl(ref.read(superAdminRemoteRepositoryProvider)),
 );
 final materialCostUseCaseProvider = Provider<MaterialCostUseCase>(
   (ref) => MaterialCostUseCase(ref.read(materialCostRepositoryProvider)),
 );
 
-final revenueLocalDataSourceProvider = Provider<RevenueLocalDataSource>(
-  (ref) => RevenueLocalDataSourceImpl(ref.read(dbHelperProvider)),
-);
 final revenueRepositoryProvider = Provider<RevenueRepository>(
-  (ref) => RevenueRepositoryImpl(ref.read(revenueLocalDataSourceProvider)),
+  (ref) => RevenueRepositoryImpl(ref.read(superAdminRemoteRepositoryProvider)),
 );
 final revenueUseCaseProvider = Provider<RevenueUseCase>(
   (ref) => RevenueUseCase(ref.read(revenueRepositoryProvider)),
@@ -167,13 +168,9 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   bool _initialized = false;
   int _photoFetchToken = 0;
 
-  // 기존 controller에서 쓰던 입력 컨트롤러들 (UI에서 계속 재사용)
+  // 수익(추가/수정) TextEditingController는 [PlaceRevenueScreen] State에서 수명 관리(Provider와 분리)
   final TextEditingController mNameController = TextEditingController();
   final TextEditingController mPriceController = TextEditingController();
-  final TextEditingController dialogRPriceController = TextEditingController();
-  final TextEditingController dialogRNameController = TextEditingController();
-  final TextEditingController rPriceController = TextEditingController();
-  final TextEditingController rNameController = TextEditingController();
   final TextEditingController photoTitleController = TextEditingController();
   final TextEditingController photoUrlsController = TextEditingController();
 
@@ -182,10 +179,6 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     ref.onDispose(() {
       mNameController.dispose();
       mPriceController.dispose();
-      dialogRPriceController.dispose();
-      dialogRNameController.dispose();
-      rPriceController.dispose();
-      rNameController.dispose();
       photoTitleController.dispose();
       photoUrlsController.dispose();
     });
@@ -207,7 +200,10 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   void setRevenuePickedDay(DateTime value) {
     final d = DateTime(value.year, value.month, value.day);
-    state = state.copyWith(revenuePickedDay: d);
+    state = state.copyWith(
+      revenuePickedDay: d,
+      setRevenuePicked: true,
+    );
   }
 
   void setDialogRevenuePickedDay(DateTime value) {
@@ -345,18 +341,19 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   // ===== actions =====
 
-  void resetRevenueTextController() {
-    rPriceController.text = '';
-    rNameController.text = '';
+  /// 비용 화면에서 수익 화면으로 갔다 돌아올 때: 날짜만 초기화(입력 필드는 수익 화면 dispose로 끊김).
+  void clearRevenuePickedOnLeaveRevenueScreen() {
+    state = state.copyWith(
+      revenuePickedDay: null,
+      setRevenuePicked: true,
+    );
   }
 
-  void resetDialogRevenueTextController() {
-    dialogRPriceController.text = '';
-    dialogRNameController.text = '';
-  }
-
-  void updateRevenueController(String value) {
-    rPriceController.text = value;
+  void _resetRevenueFormAfterInsert() {
+    state = state.copyWith(
+      revenuePickedDay: null,
+      setRevenuePicked: true,
+    );
   }
 
   void dropDownCategoryChangeAction(String value) {
@@ -378,6 +375,13 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     state = state.copyWith(revenueList: list);
   }
 
+  /// [FetchData.fetchAllData]용: `invalidate`로 notifier를 끊지 않고 목록·비용·사진만 다시 읽는다. (TextEditingController 유지)
+  Future<void> refreshForGlobalFetch() async {
+    await fetchTotalCostFromPlace();
+    await fetchAllRevenueFromPlace();
+    await fetchPlacePhotoGroups(photoType: 'site');
+  }
+
   Future<void> deleteRevenue({required int rid}) async {
     await _revenueUseCase.deleteRevenue(rid, pid);
     await fetchAllRevenueFromPlace();
@@ -391,99 +395,6 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     );
     if (fetchToken != _photoFetchToken) return;
     state = state.copyWith(photoGroupList: groups);
-  }
-
-  Future<void> seedPhotoDummyDataIfEmpty() async {
-    final siteGroups = await _placeUseCase.getPlacePhotoGroups(
-      pid,
-      photoType: 'site',
-    );
-    final drawingGroups = await _placeUseCase.getPlacePhotoGroups(
-      pid,
-      photoType: 'drawing',
-    );
-    if (siteGroups.isNotEmpty || drawingGroups.isNotEmpty) return;
-
-    final today = DateTime.now();
-    String d(int minusDays) {
-      final day = today.subtract(Duration(days: minusDays));
-      return formatDateTimeToIsoDate(day);
-    }
-
-    final seeds = <({
-      String photoType,
-      String photoDate,
-      String title,
-      List<String> photoUrls
-    })>[
-      (
-        photoType: 'site',
-        photoDate: d(0),
-        title: '주방 설비 작업',
-        photoUrls: const [
-          'local://seed_site_kitchen_1.jpg',
-          'local://seed_site_kitchen_2.jpg',
-          'local://seed_site_kitchen_3.jpg',
-        ],
-      ),
-      (
-        photoType: 'site',
-        photoDate: d(1),
-        title: '홀 천장 마감',
-        photoUrls: const [
-          'local://seed_site_hall_1.jpg',
-          'local://seed_site_hall_2.jpg',
-        ],
-      ),
-      (
-        photoType: 'site',
-        photoDate: d(3),
-        title: '바닥 타일 시공',
-        photoUrls: const [
-          'local://seed_site_tile_1.jpg',
-          'local://seed_site_tile_2.jpg',
-          'local://seed_site_tile_3.jpg',
-          'local://seed_site_tile_4.jpg',
-        ],
-      ),
-      (
-        photoType: 'drawing',
-        photoDate: d(0),
-        title: '전기 배선 도면',
-        photoUrls: const [
-          'local://seed_drawing_elec_1.jpg',
-          'local://seed_drawing_elec_2.jpg',
-        ],
-      ),
-      (
-        photoType: 'drawing',
-        photoDate: d(2),
-        title: '가구 배치 도면',
-        photoUrls: const [
-          'local://seed_drawing_furniture_1.jpg',
-          'local://seed_drawing_furniture_2.jpg',
-          'local://seed_drawing_furniture_3.jpg',
-        ],
-      ),
-      (
-        photoType: 'drawing',
-        photoDate: d(4),
-        title: '주방 상세도',
-        photoUrls: const [
-          'local://seed_drawing_kitchen_1.jpg',
-        ],
-      ),
-    ];
-
-    for (final seed in seeds) {
-      await _placeUseCase.insertPlacePhotoGroup(
-        pid: pid,
-        photoDate: seed.photoDate,
-        photoType: seed.photoType,
-        title: seed.title,
-        photoUrls: seed.photoUrls,
-      );
-    }
   }
 
   Future<void> addPlacePhotoGroup({required String photoType}) async {
@@ -510,50 +421,87 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     await fetchPlacePhotoGroups(photoType: photoType);
   }
 
+  /// 기기에서 고른 이미지 경로를 업로드 후 `PlacePhoto` 행으로 저장. 실패 시 안내 문구.
+  Future<String?> addPlacePhotoGroupFromDeviceFiles({
+    required String photoType,
+    required DateTime photoDate,
+    required List<String> localPaths,
+  }) async {
+    if (localPaths.isEmpty) {
+      return '첨부된 이미지가 없습니다.';
+    }
+    final title = photoTitleController.text.trim();
+    state = state.copyWith(alertText: '');
+    try {
+      await _placeUseCase.insertPlacePhotoGroupFromDeviceFiles(
+        pid: pid,
+        photoDate: formatDateTimeToIsoDate(photoDate),
+        photoType: photoType,
+        title: title.isEmpty ? '사진 묶음' : title,
+        localFilePaths: localPaths,
+      );
+      photoTitleController.clear();
+      photoUrlsController.clear();
+      await fetchPlacePhotoGroups(photoType: photoType);
+      return null;
+    } on HttpClientException catch (e) {
+      return e.message;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> deletePlacePhotoGroup(int pgid, {required String photoType}) async {
     await _placeUseCase.deletePlacePhotoGroup(pgid);
     await fetchPlacePhotoGroups(photoType: photoType);
   }
 
-  Future<void> updateRevenue({required int rid}) async {
-    final rprice = int.tryParse(
-          dialogRPriceController.text.trim().replaceAll(RegExp(r'[,원]'), ''),
-        ) ??
-        0;
-    final rname =
-        dialogRNameController.text.trim().isEmpty ? '수익금' : dialogRNameController.text.trim();
+  Future<void> updateRevenue({
+    required int rid,
+    required String rname,
+    required int rprice,
+    required DateTime revenueDate,
+  }) async {
     final model = RevenueModel(
       rid: rid,
       rpid: -1,
-      rname: rname,
+      rname: rname.trim().isEmpty ? '수익금' : rname.trim(),
       rprice: rprice,
       rorder: -1,
-      rdate: formatDateTimeToIsoDate(state.dialogRevenuePickedDay),
+      rdate: formatDateTimeToIsoDate(revenueDate),
     );
     await _revenueUseCase.updateRevenue(revenue: model, placeId: state.pid);
     await fetchAllRevenueFromPlace();
   }
 
-  Future<void> insertRevenue() async {
-    final rprice = int.tryParse(
-          rPriceController.text.trim().replaceAll(RegExp(r'[,원]'), ''),
-        ) ??
-        0;
-    final rname = rNameController.text.trim().isEmpty ? '수익금' : rNameController.text.trim();
-
-    if (rPriceController.text.trim().replaceAll(RegExp(r'[,원]'), '').isEmpty) {
-      state = state.copyWith(alertText: '수익금을 입력해주세요');
-      return;
+  /// 성공 시 `null`, 실패 시 안내 문구(스낵바 등에 사용).
+  /// [rnameOrEmpty]·[rpriceRaw]는 수익 화면 `TextEditingController`에서 전달.
+  Future<String?> insertRevenue({
+    required String rnameOrEmpty,
+    required String rpriceRaw,
+  }) async {
+    if (state.revenuePickedDay == null) {
+      return '날짜를 선택해주세요';
     }
+    final priceTokens = rpriceRaw.trim().replaceAll(RegExp(r'[,원]'), '');
+    if (priceTokens.isEmpty) {
+      return '수익금을 입력해주세요';
+    }
+    final rprice = int.tryParse(priceTokens) ?? 0;
+    final trimmedName = rnameOrEmpty.trim();
+    final rname = trimmedName.isEmpty
+        ? nextJangeumLabelForRevenueList(state.revenueList)
+        : trimmedName;
 
     await _revenueUseCase.insertRevenue(
       pid: pid,
       rprice: rprice,
       rname: rname,
-      rdate: formatDateTimeToIsoDate(state.revenuePickedDay),
+      rdate: formatDateTimeToIsoDate(state.revenuePickedDay!),
     );
     await fetchAllRevenueFromPlace();
-    resetRevenueTextController();
+    _resetRevenueFormAfterInsert();
+    return null;
   }
 
   Future<void> deleteCost(String category, int id) async {

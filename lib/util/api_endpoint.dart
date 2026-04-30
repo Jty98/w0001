@@ -2,20 +2,43 @@
 ///
 /// [AppHttpClient]·[AuthApi]·슈퍼관리자 원격 API에서 공통 사용.
 abstract final class ApiEndpoint {
+  // --- Uploads (Bearer, 일반 사용자) ---
+  static const String uploadsImage = '/uploads/image';
+
   // --- Auth ---
   static const String authLogin = '/auth/login';
   static const String authRefresh = '/auth/refresh';
+  static const String authSignup = '/auth/signup';
   static const String authMe = '/auth/me';
   static const String authLogout = '/auth/logout';
+  static const String authVerifySensitiveAction = '/auth/verify-sensitive-action';
+
+  /// [POST /users/.../suspend], [POST /users/.../role] 등 민감 작업 시 Bearer와 함께 전달.
+  static const String headerAdminActionToken = 'X-Admin-Action-Token';
 
   // --- Users ---
   static const String users = '/users';
+  static const String usersPending = '$users/pending';
+  static const String usersSearch = '$users/search';
   static String usersUid(String uid) =>
       '$users/${Uri.encodeComponent(uid)}';
+
+  static String usersUidApprove(String uid) =>
+      '${usersUid(uid)}/approve';
+  static String usersUidReject(String uid) =>
+      '${usersUid(uid)}/reject';
+  static String usersUidSuspend(String uid) =>
+      '${usersUid(uid)}/suspend';
+  static String usersUidActivate(String uid) =>
+      '${usersUid(uid)}/activate';
+  static String usersUidRole(String uid) =>
+      '${usersUid(uid)}/role';
 
   // --- Places ---
   static const String places = '/places';
   static String placesPid(int pid) => '$places/$pid';
+  static String placesProcessSchedule(int pid) =>
+      '${placesPid(pid)}/process-schedule';
 
   // --- Humans ---
   static const String humans = '/humans';
@@ -57,6 +80,10 @@ abstract final class ApiEndpoint {
   // --- Place photos ---
   static const String placePhotos = '/place-photos';
   static String placePhotosPhid(int phid) => '$placePhotos/$phid';
+
+  /// 디스크 원본 바이너리 (Bearer, 일반 사용자). [inline] 은 쿼리로 `true`/`false`.
+  static String placePhotosOriginalFile(int phid) =>
+      '$placePhotos/$phid/original-file';
 
   // --- Dashboard (super_admin, aggregated) ---
   static const String dashboard = '/dashboard';

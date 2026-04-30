@@ -5,7 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:w0001/data/datasources/remote/auth_token_storage.dart';
+import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/util/api_endpoint.dart';
+import 'package:w0001/util/auth_api_user_messages.dart';
 
 // ---------------------------------------------------------------------------
 // Exceptions (CRUD / 네트워크 공통)
@@ -59,7 +61,7 @@ final class HttpParseException extends HttpClientException {
 
 /// `dotenv`에 `base_url` 필수. [init]은 [main]에서 [dotenv.load] 이후 호출.
 ///
-/// * `Authorization: Bearer {access_token}` (로그인·리프레시 경로는 제외)
+/// * `Authorization: Bearer {access_token}` (로그인·회원가입·리프레시 경로는 제외)
 /// * 401 → [리프레시] 후 원 요청 1회 재시도(리프레시 본인 / 이미 재시도한 경우 제외)
 final class AppHttpClient {
   AppHttpClient._();
@@ -72,6 +74,7 @@ final class AppHttpClient {
   late String _baseUrl;
   late String _refreshPath;
   late String _loginPath;
+  late String _signupPath;
 
   Future<void>? _ongoingRefresh;
   bool _isInit = false;
@@ -80,7 +83,7 @@ final class AppHttpClient {
 
   Dio get raw => _dio;
 
-  /// 선택 `.env` 키: `auth_refresh_path`, `auth_login_path` (기본 `/auth/refresh`, `/auth/login`)
+  /// 선택 `.env` 키: `auth_refresh_path`, `auth_login_path`, `auth_signup_path`
   Future<void> init({Duration? connectTimeout, Duration? receiveTimeout}) async {
     final base = dotenv.env['base_url']?.trim();
     if (base == null || base.isEmpty) {
@@ -95,6 +98,11 @@ final class AppHttpClient {
     _loginPath = (dotenv.env['auth_login_path']?.trim() ?? ApiEndpoint.authLogin);
     if (!_loginPath.startsWith('/')) {
       _loginPath = '/$_loginPath';
+    }
+    _signupPath =
+        (dotenv.env['auth_signup_path']?.trim() ?? ApiEndpoint.authSignup);
+    if (!_signupPath.startsWith('/')) {
+      _signupPath = '/$_signupPath';
     }
 
     _dio = Dio(
@@ -142,14 +150,30 @@ final class AppHttpClient {
     _isInit = true;
   }
 
+  /// [baseUrl]에 `/api/v1` 등 prefix가 있으면 [RequestOptions.uri.path]는 `/api/v1/auth/login` 형태가 된다.
+  /// 이 경우에도 로그인·리프레시에는 Bearer를 붙이지 않는다(만료 access로 401·혼선 방지).
+  bool _pathMatchesAuthRoute(String requestPath, String configuredPath) {
+    return requestPath == configuredPath ||
+        requestPath.endsWith(configuredPath);
+  }
+
   bool _shouldSkipAuthHeader(RequestOptions o) {
     final p = o.uri.path;
-    if (p == _loginPath) return true;
-    if (p == _refreshPath) return true;
+    if (_pathMatchesAuthRoute(p, _loginPath)) return true;
+    if (_pathMatchesAuthRoute(p, _refreshPath)) return true;
+    if (_pathMatchesAuthRoute(p, _signupPath)) return true;
     return false;
   }
 
-  bool _isRefreshRequest(RequestOptions o) => o.uri.path == _refreshPath;
+  bool _isRefreshRequest(RequestOptions o) =>
+      _pathMatchesAuthRoute(o.uri.path, _refreshPath);
+
+  /// 로그인·회원가입 POST 는 Bearer 없이 401 나오므로 리프레시로 보완하지 않음.
+  bool _isCredentialAuthRequest(RequestOptions o) {
+    final p = o.uri.path;
+    return _pathMatchesAuthRoute(p, _loginPath) ||
+        _pathMatchesAuthRoute(p, _signupPath);
+  }
 
   void _onUnauthorized401(
     DioException err,
@@ -163,7 +187,26 @@ final class AppHttpClient {
       // 리프레시 API가 401이면 루프 방지: 그대로 매핑
       return handler.next(_mapDioToClientException(err));
     }
+    if (_isCredentialAuthRequest(req)) {
+      return handler.next(_mapDioToClientException(err));
+    }
+
+    final structured = tryParseAuthStructuredDetail(err.response?.data);
+    if (structured != null &&
+        AuthApiErrorCodes.isInterceptorAccountBlocked(structured.code)) {
+      unawaited(_clearAuthThenNext401(err, handler));
+      return;
+    }
+
     unawaited(_refreshAndRetry(err, handler));
+  }
+
+  Future<void> _clearAuthThenNext401(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    await AuthTokenStorage.I.clear();
+    handler.next(_mapDioToClientException(err));
   }
 
   Future<void> _refreshAndRetry(
@@ -178,7 +221,10 @@ final class AppHttpClient {
         DioException(
           requestOptions: failed,
           type: DioExceptionType.badResponse,
-          error: const HttpAuthException('로그인이 필요합니다.', statusCode: 401),
+          error: HttpAuthException(
+            authTokenSessionUnifiedMessageKo,
+            statusCode: 401,
+          ),
           response: err.response,
         ),
       );
@@ -224,7 +270,7 @@ final class AppHttpClient {
     }
   }
 
-  /// POST [path] body `{ "refresh_token": "..." }` → `access_token` (+ `refresh_token` 옵션)
+  /// POST [path] body [refreshRequestBody] (`refresh_token` 단일)·응답은 [AuthTokenPayload]
   Future<void> _runRefreshOrWait(String refreshToken) {
     if (_ongoingRefresh != null) {
       return _ongoingRefresh!;
@@ -249,19 +295,34 @@ final class AppHttpClient {
     try {
       res = await plain.post<dynamic>(
         _refreshPath,
-        data: <String, dynamic>{'refresh_token': refreshToken},
+        data: refreshRequestBody(refreshToken),
       );
     } on DioException catch (e) {
       final code = e.response?.statusCode;
-      if (code == 401) {
-        await AuthTokenStorage.I.clear();
-        throw HttpAuthException(
-          '세션이 만료되었습니다. 다시 로그인해 주세요.',
-          statusCode: 401,
+        if (code == 401) {
+          await AuthTokenStorage.I.clear();
+          final msg = resolveAuthRelatedUserLine(
+            httpStatusCode: 401,
+            responseData: e.response?.data,
+            fallbackMessage: authTokenSessionUnifiedMessageKo,
+          );
+          throw HttpAuthException(
+            msg,
+            statusCode: 401,
+            cause: e,
+          );
+        }
+      // 타임아웃·연결 끊김 등 일시 오류에서는 저장된 토큰을 유지한다 (재시도·오프라인 복귀 대비).
+      final transient = e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionError;
+      if (transient || code == null) {
+        throw HttpConnectionException(
+          '네트워크 오류로 토큰을 갱신하지 못했습니다.',
           cause: e,
         );
       }
-      await AuthTokenStorage.I.clear();
       throw HttpStatusException(
         '토큰 갱신에 실패했습니다.',
         statusCode: code,
@@ -282,17 +343,17 @@ final class AppHttpClient {
       await AuthTokenStorage.I.clear();
       throw const HttpParseException('토큰 응답 형식이 올바르지 않습니다.');
     }
-    final m = Map<String, dynamic>.from(data);
-    final access = m['access_token'] ?? m['accessToken'];
-    final newRefresh = m['refresh_token'] ?? m['refreshToken'] ?? refreshToken;
-    if (access is! String || access.isEmpty) {
+    AuthTokenPayload p;
+    try {
+      p = AuthTokenPayload.fromJson(Map<String, dynamic>.from(data));
+    } on FormatException catch (e) {
       await AuthTokenStorage.I.clear();
-      throw const HttpParseException('access_token이 응답에 없습니다.');
+      throw HttpParseException(e.message, cause: e);
     }
-    final rs = newRefresh is String && newRefresh.isNotEmpty
-        ? newRefresh
+    final rs = (p.refreshToken != null && p.refreshToken!.isNotEmpty)
+        ? p.refreshToken!
         : refreshToken;
-    await AuthTokenStorage.I.write(access: access, refresh: rs);
+    await AuthTokenStorage.I.write(access: p.accessToken, refresh: rs);
   }
 
   // --- CRUD ---
@@ -348,6 +409,23 @@ final class AppHttpClient {
     );
   }
 
+  Future<Response<T>> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+  }) {
+    return _request<T>(
+      'PUT',
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+      cancelToken: cancelToken,
+    );
+  }
+
   Future<Response<T>> delete<T>(
     String path, {
     Object? data,
@@ -392,7 +470,7 @@ final class AppHttpClient {
 
   Future<void> clearAuth() => AuthTokenStorage.I.clear();
 
-  static DioException _mapDioToClientException(DioException e) {
+  DioException _mapDioToClientException(DioException e) {
     if (e.error is HttpClientException) {
       return e;
     }
@@ -415,18 +493,32 @@ final class AppHttpClient {
         final c = e.response?.statusCode;
         final b = e.response?.data;
         if (c == 401) {
+          // `detail.code` 없을 때: 로그인 호출면 자격증명 실패, 그 외는 토큰/세션 문제로 안내.
+          final fallback401 = _isCredentialAuthRequest(e.requestOptions)
+              ? '아이디 또는 비밀번호가 일치하지 않습니다.'
+              : authTokenSessionUnifiedMessageKo;
+          final msg = resolveAuthRelatedUserLine(
+            httpStatusCode: 401,
+            responseData: b,
+            fallbackMessage: fallback401,
+          );
           return DioException(
             requestOptions: e.requestOptions,
             type: e.type,
-            error: const HttpAuthException('인증이 필요합니다.', statusCode: 401),
+            error: HttpAuthException(msg, statusCode: 401),
             response: e.response,
           );
         }
+        final statusMsg = resolveAuthRelatedUserLine(
+          httpStatusCode: c,
+          responseData: b,
+          fallbackMessage: '서버 응답 오류 (HTTP $c)',
+        );
         return DioException(
           requestOptions: e.requestOptions,
           type: e.type,
           error: HttpStatusException(
-            '서버 응답 오류 (HTTP $c)',
+            statusMsg,
             statusCode: c,
             body: b,
             cause: e,

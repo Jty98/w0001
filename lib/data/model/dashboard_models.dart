@@ -1,3 +1,4 @@
+import 'package:w0001/data/model/dashboard_json_helpers.dart';
 import 'package:w0001/data/model/monthly_summary_model.dart';
 
 /// 상단 KPI (기본: 이번 달 기준).
@@ -14,10 +15,10 @@ class DashboardKpiSnapshot {
   /// 이번 달 KPI 연·월에 **완료 처리된** 현장 수(pend 기준).
   final int completedSitesInKpiMonth;
 
-  /// 완료 현장만: Σ(공사금액−현장원가) / Σ(공사금액) × 100. 해당 월 완료 없으면 0.
+  /// 상단 KPI, 해당 연·월 **완료**만: Σ(이익) ÷ Σ(공사금액) × 100 (`completedContractMarginPct`).
   final double completedContractMarginPct;
 
-  /// 당월 **완료 처리된 공사만**: Σ(공사금액 − 인건비·자재 등 현장 원가).
+  /// 해당 `year`/`month` **완료** 공사만, Σ(수금−원가) (`completedContractProfitTotal`).
   final int completedContractProfitTotal;
 
   const DashboardKpiSnapshot({
@@ -39,20 +40,17 @@ class DashboardKpiSnapshot {
 
   factory DashboardKpiSnapshot.fromJson(Map<String, dynamic> j) {
     return DashboardKpiSnapshot(
-      year: (j['year'] as num?)?.toInt() ?? 0,
-      month: (j['month'] as num?)?.toInt() ?? 1,
-      monthlyContract: (j['monthlyContract'] as num?)?.toInt() ?? 0,
-      monthlyCollection: (j['monthlyCollection'] as num?)?.toInt() ?? 0,
-      monthlyCost: (j['monthlyCost'] as num?)?.toInt() ?? 0,
-      inProgressPlaces: (j['inProgressPlaces'] as num?)?.toInt() ?? 0,
-      completedPlaces: (j['completedPlaces'] as num?)?.toInt() ?? 0,
-      outstandingReceivable: (j['outstandingReceivable'] as num?)?.toInt() ?? 0,
-      completedSitesInKpiMonth:
-          (j['completedSitesInKpiMonth'] as num?)?.toInt() ?? 0,
-      completedContractMarginPct:
-          (j['completedContractMarginPct'] as num?)?.toDouble() ?? 0,
-      completedContractProfitTotal:
-          (j['completedContractProfitTotal'] as num?)?.toInt() ?? 0,
+      year: dashReadInt(j, 'year'),
+      month: dashReadInt(j, 'month').clamp(1, 12),
+      monthlyContract: dashReadInt(j, 'monthlyContract'),
+      monthlyCollection: dashReadInt(j, 'monthlyCollection'),
+      monthlyCost: dashReadInt(j, 'monthlyCost'),
+      inProgressPlaces: dashReadInt(j, 'inProgressPlaces'),
+      completedPlaces: dashReadInt(j, 'completedPlaces'),
+      outstandingReceivable: dashReadInt(j, 'outstandingReceivable'),
+      completedSitesInKpiMonth: dashReadInt(j, 'completedSitesInKpiMonth'),
+      completedContractMarginPct: dashReadDouble(j, 'completedContractMarginPct'),
+      completedContractProfitTotal: dashReadInt(j, 'completedContractProfitTotal'),
     );
   }
 }
@@ -66,10 +64,10 @@ class YearlyDashboardPoint {
   final int newProjectCount;
   final int completedProjectCount;
 
-  /// 그 해 **완료된** 현장만: Σ(공사금액−현장원가) / Σ(공사금액) × 100.
+  /// pend 연도 **완료**만: Σ(이익) ÷ Σ(공사금액) × 100 (`completedContractMarginPct`).
   final double completedContractMarginPct;
 
-  /// 그 해 **완료 처리된 현장만**(pend 연도 기준): Σ(공사금액 − 현장 원가).
+  /// 그 해 **완료** 현장만, Σ(수금−원가) (pend 연도, `completedProfitTotal`).
   final int completedProfitTotal;
 
   const YearlyDashboardPoint({
@@ -87,15 +85,14 @@ class YearlyDashboardPoint {
 
   factory YearlyDashboardPoint.fromJson(Map<String, dynamic> j) {
     return YearlyDashboardPoint(
-      year: (j['year'] as num?)?.toInt() ?? 0,
-      contractTotal: (j['contractTotal'] as num?)?.toInt() ?? 0,
-      collectionTotal: (j['collectionTotal'] as num?)?.toInt() ?? 0,
-      costTotal: (j['costTotal'] as num?)?.toInt() ?? 0,
-      newProjectCount: (j['newProjectCount'] as num?)?.toInt() ?? 0,
-      completedProjectCount: (j['completedProjectCount'] as num?)?.toInt() ?? 0,
-      completedContractMarginPct:
-          (j['completedContractMarginPct'] as num?)?.toDouble() ?? 0,
-      completedProfitTotal: (j['completedProfitTotal'] as num?)?.toInt() ?? 0,
+      year: dashReadInt(j, 'year'),
+      contractTotal: dashReadInt(j, 'contractTotal'),
+      collectionTotal: dashReadInt(j, 'collectionTotal'),
+      costTotal: dashReadInt(j, 'costTotal'),
+      newProjectCount: dashReadInt(j, 'newProjectCount'),
+      completedProjectCount: dashReadInt(j, 'completedProjectCount'),
+      completedContractMarginPct: dashReadDouble(j, 'completedContractMarginPct'),
+      completedProfitTotal: dashReadInt(j, 'completedProfitTotal'),
     );
   }
 }
@@ -130,14 +127,14 @@ class DashboardPlaceRow {
 
   factory DashboardPlaceRow.fromJson(Map<String, dynamic> j) {
     return DashboardPlaceRow(
-      pid: (j['pid'] as num?)?.toInt() ?? 0,
-      pname: j['pname'] as String? ?? '',
-      contractTotal: (j['contractTotal'] as num?)?.toInt() ?? 0,
-      collected: (j['collected'] as num?)?.toInt() ?? 0,
-      costTotal: (j['costTotal'] as num?)?.toInt() ?? 0,
-      outstanding: (j['outstanding'] as num?)?.toInt() ?? 0,
-      advanceCollected: (j['advanceCollected'] as num?)?.toInt() ?? 0,
-      balanceBreakdown: j['balanceBreakdown'] as String? ?? '',
+      pid: dashReadInt(j, 'pid'),
+      pname: dashReadString(j, 'pname'),
+      contractTotal: dashReadInt(j, 'contractTotal'),
+      collected: dashReadInt(j, 'collected'),
+      costTotal: dashReadInt(j, 'costTotal'),
+      outstanding: dashReadInt(j, 'outstanding'),
+      advanceCollected: dashReadInt(j, 'advanceCollected'),
+      balanceBreakdown: dashReadString(j, 'balanceBreakdown'),
     );
   }
 }
@@ -157,15 +154,119 @@ class DashboardDataBundle {
   });
 
   factory DashboardDataBundle.fromJson(Map<String, dynamic> j) {
+    var kpi = DashboardKpiSnapshot.fromJson(
+      _asMap(j['kpi']) ?? <String, dynamic>{},
+    );
+    final monthly = _mapList(j['monthly'], MonthlySummaryModel.fromJson);
+    kpi = _kpiAlignWithMonthlyWhenZero(kpi, monthly);
+    kpi = _kpiFillTopLineFromMonthlyWhenZeros(kpi, monthly);
     return DashboardDataBundle(
-      kpi: DashboardKpiSnapshot.fromJson(
-        _asMap(j['kpi']) ?? <String, dynamic>{},
-      ),
-      monthly: _mapList(j['monthly'], MonthlySummaryModel.fromJson),
+      kpi: kpi,
+      monthly: monthly,
       yearly: _mapList(j['yearly'], YearlyDashboardPoint.fromJson),
       places: _mapList(j['places'], DashboardPlaceRow.fromJson),
     );
   }
+}
+
+/// KPI `completedContractProfit*` 키 누락(0)인데, 같은 달 [monthly]에만 올 수 있는 응답용 보강.
+DashboardKpiSnapshot _kpiAlignWithMonthlyWhenZero(
+  DashboardKpiSnapshot kpi,
+  List<MonthlySummaryModel> monthly,
+) {
+  if (kpi.completedContractProfitTotal != 0 ||
+      kpi.completedContractMarginPct != 0) {
+    return kpi;
+  }
+  MonthlySummaryModel? pick;
+  for (final m in monthly) {
+    if (m.year == kpi.year && m.month == kpi.month) {
+      pick = m;
+      break;
+    }
+  }
+  if (pick == null && (kpi.year == 0) && monthly.isNotEmpty) {
+    final now = DateTime.now();
+    for (final m in monthly) {
+      if (m.year == now.year && m.month == now.month) {
+        pick = m;
+        break;
+      }
+    }
+    pick ??= monthly.last;
+  }
+  if (pick == null) return kpi;
+  if (pick.completedProfitAmount == 0 && pick.completedContractMarginPct == 0) {
+    return kpi;
+  }
+  final y = (kpi.year == 0) ? pick.year : kpi.year;
+  final mon = (kpi.year == 0) ? pick.month : kpi.month;
+  return DashboardKpiSnapshot(
+    year: y,
+    month: mon,
+    monthlyContract: kpi.monthlyContract,
+    monthlyCollection: kpi.monthlyCollection,
+    monthlyCost: kpi.monthlyCost,
+    inProgressPlaces: kpi.inProgressPlaces,
+    completedPlaces: kpi.completedPlaces,
+    outstandingReceivable: kpi.outstandingReceivable,
+    completedSitesInKpiMonth: pick.completedProjectCount,
+    completedContractMarginPct: pick.completedContractMarginPct,
+    completedContractProfitTotal: pick.completedProfitAmount,
+  );
+}
+
+/// KPI `monthlyContract` / `monthlyCollection` / `monthlyCost`가 0인데 같은 달 [monthly] 행에만
+/// 들어있는 번들 응답을 맞춤 (키·쿼리 불일치 시 상단 카드만 0으로 보이는 현상 완화).
+DashboardKpiSnapshot _kpiFillTopLineFromMonthlyWhenZeros(
+  DashboardKpiSnapshot kpi,
+  List<MonthlySummaryModel> monthly,
+) {
+  MonthlySummaryModel? pick;
+  for (final m in monthly) {
+    if (m.year == kpi.year && m.month == kpi.month) {
+      pick = m;
+      break;
+    }
+  }
+  if (pick == null && kpi.year == 0 && monthly.isNotEmpty) {
+    final now = DateTime.now();
+    for (final m in monthly) {
+      if (m.year == now.year && m.month == now.month) {
+        pick = m;
+        break;
+      }
+    }
+    pick ??= monthly.last;
+  }
+  if (pick == null) return kpi;
+
+  final contract =
+      kpi.monthlyContract == 0 ? pick.contractAmount : kpi.monthlyContract;
+  final collection = kpi.monthlyCollection == 0
+      ? pick.collectionAmount
+      : kpi.monthlyCollection;
+  final cost =
+      kpi.monthlyCost == 0 ? pick.costAmount : kpi.monthlyCost;
+
+  if (contract == kpi.monthlyContract &&
+      collection == kpi.monthlyCollection &&
+      cost == kpi.monthlyCost) {
+    return kpi;
+  }
+  return DashboardKpiSnapshot(
+    year: kpi.year,
+    month: kpi.month,
+    monthlyContract: contract,
+    monthlyCollection: collection,
+    monthlyCost: cost,
+    inProgressPlaces: kpi.inProgressPlaces,
+    completedPlaces: kpi.completedPlaces,
+    outstandingReceivable: kpi.outstandingReceivable,
+    completedSitesInKpiMonth: kpi.completedSitesInKpiMonth,
+    completedContractMarginPct: kpi.completedContractMarginPct,
+    completedContractProfitTotal: kpi.completedContractProfitTotal,
+  );
 }
 
 Map<String, dynamic>? _asMap(Object? o) {

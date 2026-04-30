@@ -1,3 +1,4 @@
+import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
 import 'package:w0001/data/model/place_photo_group_model.dart';
@@ -14,6 +15,11 @@ abstract class PlaceRepository {
     String endDate,
   );
   Future<List<PlaceModel>> getIncompletePlaces();
+
+  /// 금액 추가 화면 등 — [CostPlacePickerFilter] 기준 목록.
+  Future<List<PlaceModel>> getPlacesForCostPicker({
+    required CostPlacePickerFilter filter,
+  });
   Future<List<TotalCostModel>> getTotalCostsForPlace(int pid);
   Future<List<Map<String, dynamic>>> getPlaceSummaryForCsv(int pid);
   Future<List<Map<String, dynamic>>> getPlaceTotalCostsForCsv(
@@ -32,5 +38,15 @@ abstract class PlaceRepository {
     required String title,
     required List<String> photoUrls,
   });
+
+  /// [`POST /uploads/image`] 후 [`POST /place-photos`] 로 이어 붙이는 기기 사진 등록.
+  Future<void> insertPlacePhotoGroupFromDeviceFiles({
+    required int pid,
+    required String photoDate,
+    required String photoType,
+    required String title,
+    required List<String> localFilePaths,
+  });
+
   Future<void> deletePlacePhotoGroup(int pgid);
 }

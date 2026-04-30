@@ -1,3 +1,5 @@
+import 'package:w0001/data/model/place_photo_entry.dart';
+
 class PlacePhotoGroupModel {
   final int pgid;
   final int pid;
@@ -6,8 +8,7 @@ class PlacePhotoGroupModel {
   final String title;
   final int sortOrder;
   final int createdAtMs;
-  final int photoCount;
-  final List<String> photoUrls;
+  final List<PlacePhotoEntry> photos;
 
   const PlacePhotoGroupModel({
     required this.pgid,
@@ -17,9 +18,13 @@ class PlacePhotoGroupModel {
     required this.title,
     required this.sortOrder,
     required this.createdAtMs,
-    required this.photoCount,
-    required this.photoUrls,
+    required this.photos,
   });
+
+  int get photoCount => photos.length;
+
+  /// 그리드·썸네일용 URL 목록 (WebP 등).
+  List<String> get photoUrls => photos.map((e) => e.displayUrl).toList();
 
   factory PlacePhotoGroupModel.fromMap(Map<String, Object?> map) {
     final rawUrls = (map['photoUrls'] as String?) ?? '';
@@ -38,8 +43,11 @@ class PlacePhotoGroupModel {
       title: (map['title'] as String?) ?? '',
       sortOrder: (map['sortOrder'] as int?) ?? 0,
       createdAtMs: (map['createdAtMs'] as int?) ?? 0,
-      photoCount: (map['photoCount'] as int?) ?? 0,
-      photoUrls: urls,
+      photos: urls
+          .map(
+            (u) => PlacePhotoEntry(phid: 0, displayUrl: u),
+          )
+          .toList(),
     );
   }
 }

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:w0001/data/datasources/local/dbhelper.dart';
-import 'package:w0001/data/datasources/local/human_local_data_source.dart';
-import 'package:w0001/data/datasources/local/place_local_data_source.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
 import 'package:w0001/data/repository/human_impl.dart';
@@ -12,6 +9,22 @@ import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/domain/use_case/human_use_case.dart';
 import 'package:w0001/domain/use_case/place_use_case.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
+import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
+
+/// 슬라이드로 '완료'로 바꿀 때 **기본**으로 쓰는 `pend` (다이얼로그 "기존 종료일" 표시에도 사용).
+/// `pend`가 비어 있거나 `0`이면 `pstart`로 보정한다.
+String pendWhenTogglingToComplete(PlaceInfoModel p) {
+  final pend = p.pend.trim();
+  if (pend.isNotEmpty && pend != '0') {
+    return pend;
+  }
+  final s = p.pstart.trim();
+  if (s.isNotEmpty && s != '0') {
+    return s;
+  }
+  return '0';
+}
 
 class PlaceListState {
   const PlaceListState({
@@ -137,10 +150,21 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     return list.where((p) => p.pcomplete == complete).toList();
   }
 
-  Future<void> updatePcomplete(int index) async {
+  /// [completionPend]: 완료(1)로 바꿀 때만 사용. `null`이면 [pendWhenTogglingToComplete]와 동일.
+  Future<void> updatePcomplete(
+    int index, {
+    String? completionPend,
+  }) async {
     final current = state.filteredPlaceList[index];
     final newComplete = current.pcomplete == 1 ? 0 : 1;
-    final endDate = newComplete == 1 ? DateTime.now().toString() : '0';
+    final String endDate;
+    if (newComplete == 0) {
+      /// 진행중으로 되돌릴 때 `pend`를 `'0'`으로 두면 목록·공정표에서 종료일이 비어
+      /// `시작일 ~ 시작일`처럼 보입니다. 현재 저장된 종료일(완료 시점에 찍힌 값)을 유지합니다.
+      endDate = pendWhenTogglingToComplete(current);
+    } else {
+      endDate = completionPend ?? pendWhenTogglingToComplete(current);
+    }
     await _useCase.updatePlaceCompletionStatus(
       current.pid!,
       newComplete,
@@ -161,8 +185,10 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     int prevenue,
     int pcontractTotal,
     DateTime? rangeStart,
-    DateTime? rangeEnd,
-  ) async {
+    DateTime? rangeEnd, {
+    /// 현장 수정 시 완료(1)·삭제(2) 등 상태 유지. 미지정 시 `0`(진행중).
+    int pcomplete = 0,
+  }) async {
     if (pname.isEmpty) {
       state = state.copyWith(updateText: '현장 이름을 입력해주세요.');
       return false;
@@ -182,7 +208,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
         pname: pname,
         prevenue: prevenue,
         pcontractTotal: pcontractTotal,
-        pcomplete: 0,
+        pcomplete: pcomplete,
         pstart: rangeStart.toIso8601String(),
         pend: end.toIso8601String(),
         paddress: paddress.trim(),
@@ -237,31 +263,32 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
       pcomplete: 0,
       pcontractDate: '',
     );
-    await _useCase.insertPlace(place);
-    await fetchAllPlace();
+    try {
+      await _useCase.insertPlace(place);
+      await fetchAllPlace();
+      state = state.copyWith(updateText: '');
+    } catch (e, st) {
+      debugPrint('insertPlace failed: $e\n$st');
+      state = state.copyWith(
+        updateText: '현장 추가에 실패했습니다. 네트워크를 확인해 주세요.',
+      );
+    }
   }
 }
 
-final dbHelperProvider = Provider<DbHelper>((ref) => DbHelper());
-
-final placeLocalDataSourceProvider = Provider<PlaceLocalDataSource>(
-  (ref) => PlaceLocalDataSourceImpl(ref.read(dbHelperProvider)),
-);
-
 final placeRepositoryProvider = Provider<PlaceRepository>(
-  (ref) => PlaceRepositoryImpl(ref.read(placeLocalDataSourceProvider)),
+  (ref) => PlaceRepositoryImpl(
+    ref.read(superAdminRemoteRepositoryProvider),
+    ref.read(dashboardRemoteRepositoryProvider),
+  ),
 );
 
 final placeUseCaseProvider = Provider<PlaceUseCase>(
   (ref) => PlaceUseCase(ref.read(placeRepositoryProvider)),
 );
 
-final humanLocalDataSourceProvider = Provider<HumanLocalDataSource>(
-  (ref) => HumanLocalDataSourceImpl(ref.read(dbHelperProvider)),
-);
-
 final humanRepositoryProvider = Provider<HumanRepository>(
-  (ref) => HumanRepositoryImpl(ref.read(humanLocalDataSourceProvider)),
+  (ref) => HumanRepositoryImpl(ref.read(superAdminRemoteRepositoryProvider)),
 );
 
 final humanUseCaseProvider = Provider<HumanUseCase>(

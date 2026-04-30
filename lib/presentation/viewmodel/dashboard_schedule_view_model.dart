@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:alarm/alarm.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/data/mappers/remote_mappers.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
-import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
-    show dbHelperProvider;
+import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/util/widget_data_manager.dart';
 
 DateTime scheduleDateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -151,6 +151,33 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   static const int weekPageCount =
       weekPagePastCount + weekPageFutureCount + 1;
 
+  Future<List<ScheduleMemoModel>> _memosBetween(String from, String to) async {
+    final r = ref.read(superAdminRemoteRepositoryProvider);
+    final all = await r.scheduleMemosList();
+    final filtered = all
+        .where(
+          (m) =>
+              m.taskdate.compareTo(from) >= 0 && m.taskdate.compareTo(to) <= 0,
+        )
+        .toList();
+    filtered.sort((a, b) {
+      final c = a.taskdate.compareTo(b.taskdate);
+      if (c != 0) return c;
+      final s = a.sortorder.compareTo(b.sortorder);
+      if (s != 0) return s;
+      return a.sid.compareTo(b.sid);
+    });
+    return filtered.map(scheduleMemoReadToModel).toList();
+  }
+
+  Future<int> _nextSortOrder(String taskDate) async {
+    final r = ref.read(superAdminRemoteRepositoryProvider);
+    final all = await r.scheduleMemosList();
+    final same = all.where((x) => x.taskdate == taskDate).toList();
+    if (same.isEmpty) return 0;
+    return same.map((e) => e.sortorder).reduce((a, b) => a > b ? a : b) + 1;
+  }
+
   DateTime _anchorMonday() {
     final today = scheduleDateOnly(DateTime.now());
     final thisMon = scheduleStartOfWeekMonday(today);
@@ -181,10 +208,9 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   Future<void> _reloadWeek() async {
     state = state.copyWith(isWeekLoading: true);
     try {
-      final db = ref.read(dbHelperProvider);
       final from = scheduleDateKey(state.weekStart);
       final to = scheduleDateKey(state.weekStart.add(const Duration(days: 6)));
-      final list = await db.getScheduleMemosBetween(from, to);
+      final list = await _memosBetween(from, to);
       final key = scheduleDateKey(scheduleDateOnly(state.weekStart));
       final map = Map<String, List<ScheduleMemoModel>>.from(
         state.weekMemosByWeekKey,
@@ -207,7 +233,6 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   Future<void> _reloadFullMemos() async {
     state = state.copyWith(isFullLoading: true);
     try {
-      final db = ref.read(dbHelperProvider);
       final today = scheduleDateOnly(DateTime.now());
       final firstMonday = scheduleStartOfWeekMonday(
         today.subtract(const Duration(days: _rangeHalfDays)),
@@ -217,7 +242,7 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
       );
       final from = scheduleDateKey(firstMonday);
       final to = scheduleDateKey(lastMonday.add(const Duration(days: 6)));
-      final list = await db.getScheduleMemosBetween(from, to);
+      final list = await _memosBetween(from, to);
       state = state.copyWith(fullMemos: list);
     } catch (e, st) {
       debugPrint('DashboardSchedule full reload failed: $e\n$st');
@@ -295,16 +320,15 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
 
   Future<void> _updateWidgetData() async {
     try {
-      final db = ref.read(dbHelperProvider);
       final thisMon = scheduleStartOfWeekMonday(DateTime.now());
       final poolFrom = scheduleDateKey(thisMon.subtract(const Duration(days: 7 * 52)));
       final poolTo = scheduleDateKey(thisMon.add(const Duration(days: 7 * 52 + 6)));
-      final poolList = await db.getScheduleMemosBetween(poolFrom, poolTo);
+      final poolList = await _memosBetween(poolFrom, poolTo);
       await WidgetDataManager.saveSchedulePool(poolList);
 
       final from = scheduleDateKey(thisMon);
       final to = scheduleDateKey(thisMon.add(const Duration(days: 6)));
-      final list = await db.getScheduleMemosBetween(from, to);
+      final list = await _memosBetween(from, to);
       await WidgetDataManager.updateScheduleWidget(list);
     } catch (e) {
       debugPrint('Widget sync failed: $e');
@@ -315,15 +339,15 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     final updates = await WidgetDataManager.consumePendingDoneUpdates();
     if (updates.isEmpty) return;
 
-    final db = ref.read(dbHelperProvider);
+    final r = ref.read(superAdminRemoteRepositoryProvider);
     var changed = false;
     for (final u in updates) {
       final sid = u.sid;
       if (sid == null) continue;
-      final current = await db.getScheduleMemoBySid(sid);
-      if (current == null || current.done == u.done) continue;
+      final current = scheduleMemoReadToModel(await r.scheduleMemoGet(sid));
+      if (current.done == u.done) continue;
       final updated = current.copyWith(done: u.done);
-      await db.updateScheduleMemo(updated);
+      await r.scheduleMemoPatch(sid, <String, dynamic>{'done': u.done});
       await _safeSyncAlarmForMemo(updated);
       changed = true;
     }
@@ -343,9 +367,9 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   Future<void> setDone(int sid, bool done) async {
     final found = _findMemoBySid(sid);
     if (found == null) return;
-    final db = ref.read(dbHelperProvider);
+    final r = ref.read(superAdminRemoteRepositoryProvider);
     final updated = found.copyWith(done: done);
-    await db.updateScheduleMemo(updated);
+    await r.scheduleMemoPatch(sid, <String, dynamic>{'done': done});
     await _safeSyncAlarmForMemo(updated);
     _replaceMemoInState(updated);
     await _updateWidgetData();
@@ -381,20 +405,24 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   }) async {
     final t = title.trim();
     if (t.isEmpty) return;
-    final db = ref.read(dbHelperProvider);
+    final r = ref.read(superAdminRemoteRepositoryProvider);
+    final taskDateKey0 = scheduleDateKey(scheduleDateOnly(date));
+    final sort = await _nextSortOrder(taskDateKey0);
+    final ms = DateTime.now().millisecondsSinceEpoch;
     final draft = ScheduleMemoModel(
-      taskDate: scheduleDateKey(scheduleDateOnly(date)),
+      taskDate: taskDateKey0,
       taskTime: taskTime.trim(),
       title: t,
       memo: memo.trim(),
       done: false,
       alarmEnabled: alarmEnabled,
       alarmOffsetMinutes: alarmOffsetMinutes,
-      sortOrder: 0,
-      createdAtMs: 0,
+      sortOrder: sort,
+      createdAtMs: ms,
     );
-    final sid = await db.insertScheduleMemo(draft);
-    await _safeSyncAlarmForMemo(draft.copyWith(sid: sid));
+    final created = await r.scheduleMemoCreate(scheduleMemoToCreateBody(draft));
+    final withSid = scheduleMemoReadToModel(created);
+    await _safeSyncAlarmForMemo(withSid);
     await _afterMutation();
   }
 
@@ -402,16 +430,19 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     if (m.sid == null) return;
     final t = m.title.trim();
     if (t.isEmpty) return;
-    final db = ref.read(dbHelperProvider);
+    final r = ref.read(superAdminRemoteRepositoryProvider);
     final updated = m.copyWith(title: t, memo: m.memo.trim());
-    await db.updateScheduleMemo(updated);
+    await r.scheduleMemoPatch(
+      m.sid!,
+      scheduleMemoToPatchBody(updated),
+    );
     await _safeSyncAlarmForMemo(updated);
     await _afterMutation();
   }
 
   Future<void> deleteMemo(int sid) async {
-    final db = ref.read(dbHelperProvider);
-    await db.deleteScheduleMemo(sid);
+    final r = ref.read(superAdminRemoteRepositoryProvider);
+    await r.scheduleMemoDelete(sid);
     try {
       await Alarm.stop(sid);
     } catch (e, st) {

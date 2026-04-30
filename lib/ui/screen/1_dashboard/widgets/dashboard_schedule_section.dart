@@ -4,11 +4,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:dio/dio.dart';
+import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
+import 'package:w0001/domain/user_role_capabilities.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
-import 'package:w0001/presentation/viewmodel/place_list_view_model.dart' show dbHelperProvider;
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_editor_sheet.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -1327,13 +1330,30 @@ Future<void> openDashboardMemoEditor(
       : (initialDateOverride ?? st.selectedDay);
   final initialTime =
       existing != null ? _parseTaskTime(existing.taskTime) : null;
-  List<PlaceInfoModel> places;
-  try {
-    places = await ref.read(dashboardRemoteUseCaseProvider).placesInfo();
-  } catch (e, st) {
-    debugPrint('placesInfo failed, fallback local: $e\n$st');
-    places = await ref.read(dbHelperProvider).getAllPlaces();
+
+  List<PlaceInfoModel> places = const [];
+  final me = ref.read(authSessionProvider).maybeWhen(
+        data: (u) => u,
+        orElse: () => null,
+      );
+  if (me != null && me.role.canAccessDashboardPlacesInfo) {
+    try {
+      places = await ref.read(dashboardRemoteUseCaseProvider).placesInfo();
+    } on DioException catch (e) {
+      final code = e.response?.statusCode ?? e.httpClientError?.statusCode;
+      places = const [];
+      if (context.mounted && code == 403) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '현장 목록을 불러올 권한이 없습니다. 제목·메모는 그대로 입력할 수 있습니다.',
+            ),
+          ),
+        );
+      }
+    }
   }
+  if (!context.mounted) return;
   places.sort((a, b) => (b.pid ?? 0).compareTo(a.pid ?? 0)); // 최근 등록 순
   final seen = <String>{};
   final placeNameSuggestions = <String>[];

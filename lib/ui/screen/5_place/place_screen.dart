@@ -33,6 +33,222 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
   }
 }
 
+String _formatYmdKorean(DateTime d) =>
+    '${d.year}년 ${d.month}월 ${d.day}일';
+
+String _formatPendLineForDialog(String iso) {
+  final d = DateTime.tryParse(iso);
+  if (d == null) {
+    return iso.isEmpty ? '—' : iso;
+  }
+  return _formatYmdKorean(DateTime(d.year, d.month, d.day));
+}
+
+/// 완료 슬라이드 시 저장할 `pend`(ISO). 취소면 null.
+Future<String?> _showCompletePendChoiceDialog(
+  BuildContext context,
+  PlaceInfoModel element,
+) async {
+  final existingIso = pendWhenTogglingToComplete(element);
+  final now = DateTime.now();
+  final todayIso = now.toIso8601String();
+
+  DateTime firstSelectableDay() {
+    try {
+      if (element.pstart.trim().isEmpty) return DateTime(2000);
+      final s = DateTime.parse(element.pstart);
+      return DateTime(s.year, s.month, s.day);
+    } catch (_) {
+      return DateTime(2000);
+    }
+  }
+
+  Future<void> pickCustomEnd(BuildContext ctx) async {
+    final lo = firstSelectableDay();
+    final anchor = DateTime.tryParse(existingIso) ??
+        DateTime(now.year, now.month, now.day);
+    final initialDay =
+        DateTime(anchor.year, anchor.month, anchor.day).isBefore(lo)
+            ? lo
+            : DateTime(anchor.year, anchor.month, anchor.day);
+
+    final picked = await showDialog<DateTime?>(
+      context: ctx,
+      builder: (_) => _PickCompletionEndDialog(
+        firstSelectableDay: lo,
+        initialSelectedDay: initialDay,
+      ),
+    );
+    if (picked != null && ctx.mounted) {
+      Navigator.of(ctx).pop(
+        DateTime(picked.year, picked.month, picked.day).toIso8601String(),
+      );
+    }
+  }
+
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('완료 처리'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '공사 종료일을 선택합니다. 완료 후에도 진행중으로 바꿀 때 종료일 값은 유지됩니다.',
+                style: Theme.of(ctx).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(ctx).pop(existingIso),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    '기존 종료일로 저장\n(${_formatPendLineForDialog(existingIso)})',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(todayIso),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    '오늘 종료로 저장\n(${_formatYmdKorean(DateTime(now.year, now.month, now.day))})',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => pickCustomEnd(ctx),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    '직접 선택…',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(ctx).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// 완료 처리에서 「직접 선택」 시 사용 — 앱 공통 [ScrollableCalendarWidget] 단일일 선택.
+class _PickCompletionEndDialog extends StatefulWidget {
+  const _PickCompletionEndDialog({
+    required this.firstSelectableDay,
+    required this.initialSelectedDay,
+  });
+
+  final DateTime firstSelectableDay;
+  final DateTime initialSelectedDay;
+
+  @override
+  State<_PickCompletionEndDialog> createState() =>
+      _PickCompletionEndDialogState();
+}
+
+class _PickCompletionEndDialogState extends State<_PickCompletionEndDialog> {
+  late DateTime _pickedDay;
+  bool _readyForUserInput = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final i = widget.initialSelectedDay;
+    _pickedDay = DateTime(i.year, i.month, i.day);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _readyForUserInput = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenH = MediaQuery.sizeOf(context).height;
+    final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
+    final lo = widget.firstSelectableDay;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 14, 10, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '종료일 선택',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: calHeight,
+                width: double.infinity,
+                child: ScrollableCalendarWidget(
+                  height: calHeight,
+                  initialRangeStart: lo,
+                  initialRangeEnd: lo,
+                  initialSelectedDay: _pickedDay,
+                  useSingleDaySelection: true,
+                  showViewModeToggle: false,
+                  showRangeSummarySection: false,
+                  disableDateSelectionHighlight: true,
+                  onDayPicked: (d) {
+                    if (!_readyForUserInput) return;
+                    setState(() {
+                      _pickedDay = DateTime(d.year, d.month, d.day);
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(context).pop<DateTime?>(null),
+                    child: const Text(
+                      '취소',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(context).pop<DateTime>(_pickedDay),
+                    child: const Text('확인'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class PlaceScreen extends ConsumerWidget {
   const PlaceScreen({super.key});
 
@@ -447,11 +663,24 @@ class PlaceScreen extends ConsumerWidget {
                 ? Icons.autorenew_outlined
                 : Icons.check_circle,
             label: element.pcomplete == 1 ? '진행중으로 변경' : '완료',
-            onPressed: (context) {
-              viewModel.updatePcomplete(index).then((value) {
-                FetchData.fetchAllData();
-                ref.read(addCostProvider.notifier).clearSelectedPlace();
-              });
+            onPressed: (slidableCtx) async {
+              if (element.pcomplete == 1) {
+                await viewModel.updatePcomplete(index);
+              } else {
+                final pend = await _showCompletePendChoiceDialog(
+                  context,
+                  element,
+                );
+                if (!context.mounted) return;
+                if (pend == null) return;
+                await viewModel.updatePcomplete(
+                  index,
+                  completionPend: pend,
+                );
+              }
+              if (!context.mounted) return;
+              await FetchData.fetchAllData();
+              ref.read(addCostProvider.notifier).clearSelectedPlace();
             },
           ),
         ],
@@ -509,6 +738,7 @@ class PlaceScreen extends ConsumerWidget {
                       pcontractTotal,
                       rangeStart,
                       rangeEnd,
+                      pcomplete: element.pcomplete,
                     );
                     if (ok && dialogCtx.mounted) {
                       Navigator.of(dialogCtx).pop();

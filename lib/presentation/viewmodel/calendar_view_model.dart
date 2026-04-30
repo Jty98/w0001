@@ -1,7 +1,6 @@
 import 'package:date_picker_plus/date_picker_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:w0001/data/datasources/local/calendar_local_data_source.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
@@ -12,8 +11,7 @@ import 'package:w0001/enums.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
     show materialCostUseCaseProvider, workCostUseCaseProvider;
-import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
-    show dbHelperProvider;
+import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/util/fetch_data.dart' show rootProviderContainer;
 import 'package:w0001/util/funtions.dart';
@@ -80,12 +78,11 @@ class CalendarState {
   }
 }
 
-final calendarLocalDataSourceProvider = Provider<CalendarLocalDataSource>(
-  (ref) => CalendarLocalDataSourceImpl(ref.read(dbHelperProvider)),
-);
-
 final calendarRepositoryProvider = Provider<CalendarRepository>(
-  (ref) => CalendarRepositoryImpl(ref.read(calendarLocalDataSourceProvider)),
+  (ref) => CalendarRepositoryImpl(
+    ref.read(superAdminRemoteRepositoryProvider),
+    ref.read(dashboardRemoteRepositoryProvider),
+  ),
 );
 
 final calendarUseCaseProvider = Provider<CalendarUseCase>(
@@ -187,14 +184,8 @@ class CalendarViewModel extends Notifier<CalendarState> {
   }
 
   Future<void> fetchAllEvents() async {
-    try {
-      final map = await ref.read(dashboardRemoteUseCaseProvider).calendarEvents();
-      state = state.copyWith(events: map);
-    } catch (e, st) {
-      debugPrint('Calendar events (remote) failed, fallback local: $e\n$st');
-      final map = await _calendarUseCase.getAllEvents();
-      state = state.copyWith(events: map);
-    }
+    final map = await _calendarUseCase.getAllEvents();
+    state = state.copyWith(events: map);
   }
 
   List<String> getEventsForDay(DateTime day) {

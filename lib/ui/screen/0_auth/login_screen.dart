@@ -4,9 +4,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
+import 'package:w0001/ui/screen/0_auth/login_auth_dialogs.dart';
 import 'package:w0001/ui/widget/round_text_field.dart';
+import 'package:w0001/util/auth_dio_user_message.dart';
 import 'package:w0001/util/login_preferences.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -83,8 +84,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context.go('/dashboard');
     } on DioException catch (e) {
       if (!mounted) return;
-      final msg = e.httpClientError?.message ?? e.message ?? '로그인에 실패했습니다.';
-      _toast(context, msg);
+      final restricted =
+          await showLoginAccountRestrictedDialogIfApplicable(context, e);
+      if (!mounted) return;
+      if (!restricted) {
+        _toast(context, dioAuthRelatedUserMessage(e));
+      }
     } catch (e) {
       if (!mounted) return;
       _toast(context, e.toString());
@@ -315,7 +320,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _submitting
+                            ? null
+                            : () => context.push('/signup'),
+                        child: Text(
+                          '계정이 없으신가요? 회원가입',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),

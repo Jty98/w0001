@@ -8,6 +8,11 @@ import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_legend.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_line_charts.dart';
 import 'package:w0001/util/funtions.dart';
 
+/// 영업이익(선·면) — 청록 / 이익률(선) — 딥퍼플 (primary·indigo와 겹쳐 보이지 않게 구분)
+/// 영업이익 차트: 막대·범례용(밝은 배경에서도 식별 용이)
+const Color _kProfitMoneyChartColor = Color(0xFF00897B);
+const Color _kProfitMarginChartColor = Color(0xFF8E24AA);
+
 /// 요약 카드에서 열 수 있는 지표별 차트 종류.
 enum DashboardMetricKind {
   /// 공사금액(총액) 추이 — 데이터상 `contract` 집계와 동일.
@@ -90,11 +95,6 @@ class _DashboardMetricChartSheetBodyState
     return (w * 0.52).clamp(240.0, 380.0);
   }
 
-  double _marginChartHeight(BuildContext context) {
-    final w = MediaQuery.sizeOf(context).width;
-    return (w * 0.32).clamp(152.0, 220.0);
-  }
-
   String get _titleBase {
     switch (widget.kind) {
       case DashboardMetricKind.construction:
@@ -117,7 +117,6 @@ class _DashboardMetricChartSheetBodyState
     final m = widget.monthly;
     final y = widget.yearly;
     final h = _chartHeight(context);
-    final hMargin = _marginChartHeight(context);
 
     if (_period == _SheetPeriod.monthly) {
       switch (widget.kind) {
@@ -200,48 +199,25 @@ class _DashboardMetricChartSheetBodyState
               items: [
                 DashboardLegendItem(
                   label: '영업이익',
-                  color: cs.primary,
+                  color: _kProfitMoneyChartColor,
+                ),
+                DashboardLegendItem(
+                  label: '이익률',
+                  color: _kProfitMarginChartColor,
                 ),
               ],
             ),
             const SizedBox(height: 8),
             SizedBox(
               height: h,
-              child: DashboardLineChart(
+              child: DashboardLineChartMoneyAndPercent(
                 bottomLabels: monthLabels,
-                series: [
-                  DashboardLineSeries(
-                    label: '영업이익',
-                    color: cs.primary,
-                    values: m
-                        .map((e) => e.completedProfitAmount.toDouble())
-                        .toList(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            DashboardLegend(
-              items: [
-                DashboardLegendItem(
-                  label: '이익률',
-                  color: Colors.indigo[700]!,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: hMargin,
-              child: DashboardLineChart(
-                bottomLabels: monthLabels,
-                yAxisIsPercent: true,
-                series: [
-                  DashboardLineSeries(
-                    label: '이익률',
-                    color: Colors.indigo[700]!,
-                    values: m.map((e) => e.completedContractMarginPct).toList(),
-                  ),
-                ],
+                moneyValues:
+                    m.map((e) => e.completedProfitAmount.toDouble()).toList(),
+                percentValues:
+                    m.map((e) => e.completedContractMarginPct).toList(),
+                moneyColor: _kProfitMoneyChartColor,
+                percentColor: _kProfitMarginChartColor,
               ),
             ),
           ];
@@ -369,47 +345,24 @@ class _DashboardMetricChartSheetBodyState
             items: [
               DashboardLegendItem(
                 label: '영업이익',
-                color: cs.primary,
+                color: _kProfitMoneyChartColor,
+              ),
+              DashboardLegendItem(
+                label: '이익률',
+                color: _kProfitMarginChartColor,
               ),
             ],
           ),
           const SizedBox(height: 8),
           SizedBox(
             height: h,
-            child: DashboardLineChart(
+            child: DashboardLineChartMoneyAndPercent(
               bottomLabels: yearLabels,
-              series: [
-                DashboardLineSeries(
-                  label: '영업이익',
-                  color: cs.primary,
-                  values:
-                      y.map((e) => e.completedProfitTotal.toDouble()).toList(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          DashboardLegend(
-            items: [
-              DashboardLegendItem(
-                label: '이익률',
-                color: Colors.indigo[700]!,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: hMargin,
-            child: DashboardLineChart(
-              bottomLabels: yearLabels,
-              yAxisIsPercent: true,
-              series: [
-                DashboardLineSeries(
-                  label: '이익률',
-                  color: Colors.indigo[700]!,
-                  values: y.map((e) => e.completedContractMarginPct).toList(),
-                ),
-              ],
+              moneyValues:
+                  y.map((e) => e.completedProfitTotal.toDouble()).toList(),
+              percentValues: y.map((e) => e.completedContractMarginPct).toList(),
+              moneyColor: _kProfitMoneyChartColor,
+              percentColor: _kProfitMarginChartColor,
             ),
           ),
         ];
@@ -666,6 +619,27 @@ class _DashboardMetricChartSheetBodyState
     }
   }
 
+  /// 차트·범례와 동일한 톤으로 부제목 줄 앞 점 색을 맞춤.
+  Color _subtitleBulletColor(ColorScheme cs, String lineText) {
+    final t = lineText.trim();
+    if (t.startsWith('이익률')) return _kProfitMarginChartColor;
+    if (t.startsWith('영업이익')) return _kProfitMoneyChartColor;
+    if (t.startsWith('원가')) return Colors.orange[700]!;
+    if (t.startsWith('공사')) return cs.tertiary;
+    switch (widget.kind) {
+      case DashboardMetricKind.construction:
+        return cs.tertiary;
+      case DashboardMetricKind.cost:
+        return Colors.orange[700]!;
+      case DashboardMetricKind.profitAndMargin:
+        return _kProfitMoneyChartColor;
+      case DashboardMetricKind.siteCounts:
+        return cs.tertiary;
+      case DashboardMetricKind.collection:
+        return cs.primary;
+    }
+  }
+
   Widget _rowSubtitleWidget(DashboardPlaceRow row, ColorScheme cs) {
     if (widget.kind != DashboardMetricKind.collection) {
       final items = _rowSubtitle(row)
@@ -700,7 +674,7 @@ class _DashboardMetricChartSheetBodyState
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: cs.primary,
+                      color: _subtitleBulletColor(cs, text),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),

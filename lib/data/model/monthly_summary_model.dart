@@ -1,3 +1,5 @@
+import 'package:w0001/data/model/dashboard_json_helpers.dart';
+
 class MonthlySummaryModel {
   final int year;
   final int month; // 1-12
@@ -17,10 +19,10 @@ class MonthlySummaryModel {
   /// 해당 월에 공사완료 처리된 현장 건수(pend 월 기준).
   final int completedProjectCount;
 
-  /// 그 달 **완료된 현장만**: Σ(공사금액−현장원가) / Σ(공사금액) × 100. 완료 현장이 없으면 0.
+  /// 그 달 pend 기준 **완료** 현장만: Σ(이익) ÷ Σ(공사금액) × 100. (`completedContractMarginPct`)
   final double completedContractMarginPct;
 
-  /// 그 달 **완료 처리된 현장만**(pend 월 기준): Σ(공사금액 − 현장 원가).
+  /// 그 달 **완료** 현장만, DB 기준 Σ(수금−원가) (pend 월, `completedProfitAmount`).
   final int completedProfitAmount;
 
   const MonthlySummaryModel({
@@ -44,19 +46,18 @@ class MonthlySummaryModel {
   String get ymKey =>
       '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}';
 
-  /// 서버 [response_model] camelCase JSON.
+  /// 서버: `response_model_by_alias=True` → JSON 키는 camelCase.
   factory MonthlySummaryModel.fromJson(Map<String, dynamic> j) {
     return MonthlySummaryModel(
-      year: (j['year'] as num?)?.toInt() ?? 0,
-      month: (j['month'] as num?)?.toInt() ?? 1,
-      contractAmount: (j['contractAmount'] as num?)?.toInt() ?? 0,
-      collectionAmount: (j['collectionAmount'] as num?)?.toInt() ?? 0,
-      costAmount: (j['costAmount'] as num?)?.toInt() ?? 0,
-      newProjectCount: (j['newProjectCount'] as num?)?.toInt() ?? 0,
-      completedProjectCount: (j['completedProjectCount'] as num?)?.toInt() ?? 0,
-      completedContractMarginPct:
-          (j['completedContractMarginPct'] as num?)?.toDouble() ?? 0,
-      completedProfitAmount: (j['completedProfitAmount'] as num?)?.toInt() ?? 0,
+      year: dashReadInt(j, 'year'),
+      month: dashReadInt(j, 'month').clamp(1, 12),
+      contractAmount: dashReadInt(j, 'contractAmount'),
+      collectionAmount: dashReadInt(j, 'collectionAmount'),
+      costAmount: dashReadInt(j, 'costAmount'),
+      newProjectCount: dashReadInt(j, 'newProjectCount'),
+      completedProjectCount: dashReadInt(j, 'completedProjectCount'),
+      completedContractMarginPct: dashReadDouble(j, 'completedContractMarginPct'),
+      completedProfitAmount: dashReadInt(j, 'completedProfitAmount'),
     );
   }
 }

@@ -15,7 +15,7 @@ class PlaceDetailScreen extends StatelessWidget {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _BranchCardButton(
               title: '현장 금액관리',
@@ -32,7 +32,18 @@ class PlaceDetailScreen extends StatelessWidget {
               icon: Icons.photo_library_outlined,
               startColor: cs.secondaryContainer,
               endColor: cs.secondary.withValues(alpha: 0.22),
-              onTap: () => context.push('/place/detail/images', extra: placeInfo),
+              onTap: () =>
+                  context.push('/place/detail/images', extra: placeInfo),
+            ),
+            const SizedBox(height: 14),
+            _BranchCardButton(
+              title: '인테리어 공정표',
+              subtitle: '날짜·공정 매트릭스로 일정 조회',
+              icon: Icons.view_timeline_outlined,
+              startColor: cs.tertiaryContainer,
+              endColor: cs.tertiary.withValues(alpha: 0.22),
+              onTap: () => context.push('/place/detail/process-schedule',
+                  extra: placeInfo),
             ),
           ],
         ),

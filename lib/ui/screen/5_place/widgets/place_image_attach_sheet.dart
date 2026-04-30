@@ -34,6 +34,7 @@ class PlaceImageAttachSheet extends StatelessWidget {
     required this.onRemoveDraft,
     required this.onSubmit,
     required this.isPickingImages,
+    this.isSubmitting = false,
   });
 
   final TextEditingController titleController;
@@ -45,8 +46,10 @@ class PlaceImageAttachSheet extends StatelessWidget {
   final VoidCallback onPickCamera;
   final VoidCallback onPickGallery;
   final ValueChanged<int> onRemoveDraft;
-  final VoidCallback onSubmit;
+  final Future<void> Function() onSubmit;
   final bool isPickingImages;
+  /// 서버 업로드·등록 중일 때 **등록** 버튼 비활성 등에 사용.
+  final bool isSubmitting;
 
   @override
   Widget build(BuildContext context) {
@@ -223,9 +226,19 @@ class PlaceImageAttachSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: draftImages.isEmpty ? null : onSubmit,
-              icon: const Icon(Icons.upload_file_outlined),
-              label: const Text('등록'),
+              onPressed: draftImages.isEmpty || isSubmitting
+                  ? null
+                  : () async {
+                      await onSubmit();
+                    },
+              icon: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.upload_file_outlined),
+              label: Text(isSubmitting ? '등록 중…' : '등록'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, formControlHeight),
                 shape: formControlShape,

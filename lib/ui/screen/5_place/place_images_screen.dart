@@ -5,6 +5,8 @@ import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_image_attach_sheet.dart';
+import 'package:w0001/ui/screen/5_place/widgets/place_photo_gallery_sheet.dart';
+import 'package:w0001/util/place_photo/share_place_photo_originals.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 
@@ -22,7 +24,7 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   PlaceImageTabType _tabType = PlaceImageTabType.site;
   bool _isPickingImages = false;
-  bool _seedChecked = false;
+  bool _scheduledInitialPhotoFetch = false;
   DateTimeRange? _photoFilterRange;
 
   String get _currentPhotoType =>
@@ -33,12 +35,11 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
     final placeInfo = widget.placeInfo;
     final state = ref.watch(placeDetailProvider(placeInfo.pid!));
     final vm = ref.read(placeDetailProvider(placeInfo.pid!).notifier);
-    if (!_seedChecked) {
-      _seedChecked = true;
-      Future.microtask(() async {
-        await vm.seedPhotoDummyDataIfEmpty();
-        await vm.fetchPlacePhotoGroups(photoType: _currentPhotoType);
-      });
+    if (!_scheduledInitialPhotoFetch) {
+      _scheduledInitialPhotoFetch = true;
+      Future.microtask(
+        () => vm.fetchPlacePhotoGroups(photoType: _currentPhotoType),
+      );
     }
     final grouped = <String, List<PlacePhotoGroupModel>>{};
     for (final g in state.photoGroupList) {
@@ -138,6 +139,7 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
   ) async {
     var selectedType = _tabType;
     var selectedDate = ref.read(placeDetailProvider(widget.placeInfo.pid!)).photoPickedDay;
+    var uploadingPhotos = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -185,19 +187,51 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
                 setSheetState(() {});
               },
               isPickingImages: _isPickingImages,
+              isSubmitting: uploadingPhotos,
               onSubmit: () async {
-                vm.setPhotoPickedDay(selectedDate);
-                vm.photoUrlsController.text =
-                    _draftImages.map((e) => e.virtualUrl).join('\n');
+                final paths = _draftImages
+                    .map((e) => e.localPath)
+                    .whereType<String>()
+                    .where((p) => p.isNotEmpty)
+                    .toList();
+                if (paths.isEmpty) {
+                  if (sheetCtx.mounted) {
+                    ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                      const SnackBar(content: Text('기기에 저장된 이미지 경로가 없습니다.')),
+                    );
+                  }
+                  return;
+                }
                 final typeKey =
                     selectedType == PlaceImageTabType.site ? 'site' : 'drawing';
-                await vm.addPlacePhotoGroup(photoType: typeKey);
-                if (mounted) {
-                  setState(() => _draftImages.clear());
-                  if (_tabType != selectedType) {
-                    setState(() => _tabType = selectedType);
+                setSheetState(() => uploadingPhotos = true);
+                try {
+                  vm.setPhotoPickedDay(selectedDate);
+                  final err = await vm.addPlacePhotoGroupFromDeviceFiles(
+                    photoType: typeKey,
+                    photoDate: selectedDate,
+                    localPaths: paths,
+                  );
+                  if (!mounted) return;
+                  if (err != null) {
+                    if (sheetCtx.mounted) {
+                      ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                        SnackBar(content: Text(err)),
+                      );
+                    }
+                    return;
                   }
-                  Navigator.of(sheetCtx).pop();
+                  setState(() {
+                    _draftImages.clear();
+                    if (_tabType != selectedType) {
+                      _tabType = selectedType;
+                    }
+                  });
+                  if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+                } finally {
+                  if (sheetCtx.mounted) {
+                    setSheetState(() => uploadingPhotos = false);
+                  }
                 }
               },
             ),
@@ -438,11 +472,12 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
   ) {
     final firstUrl = group.photoUrls.isNotEmpty ? group.photoUrls.first : '';
     final remain = group.photoUrls.length - 1;
+    final thumbRemote = _isHttpUrl(firstUrl);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _showGroupImages(context, group),
+        onTap: () => showPlacePhotoGroupGallerySheet(context, group),
         child: Padding(
           padding: const EdgeInsets.all(11),
           child: Row(
@@ -454,16 +489,29 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
                     SizedBox(
                       width: 86,
                       height: 86,
-                      child: Container(
-                        color: Colors.grey.shade200,
-                        child: Icon(
-                          firstUrl.startsWith('local://camera')
-                              ? Icons.photo_camera
-                              : Icons.image_outlined,
-                          color: Colors.grey.shade600,
-                          size: 28,
-                        ),
-                      ),
+                      child: thumbRemote
+                          ? Image.network(
+                              firstUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Colors.grey.shade200,
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  color: Colors.grey.shade600,
+                                  size: 28,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              color: Colors.grey.shade200,
+                              child: Icon(
+                                firstUrl.startsWith('local://camera')
+                                    ? Icons.photo_camera
+                                    : Icons.image_outlined,
+                                color: Colors.grey.shade600,
+                                size: 28,
+                              ),
+                            ),
                     ),
                     if (remain > 0)
                       Positioned(
@@ -508,6 +556,30 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
                 ),
               ),
               IconButton(
+                tooltip: '사진 공유',
+                onPressed:
+                    group.photos.any((e) => e.canFetchOriginalViaApi)
+                        ? () => sharePlacePhotoOriginalEntries(
+                              context,
+                              group.photos,
+                            )
+                        : () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('공유 가능한 사진이 없습니다'),
+                              ),
+                            );
+                          },
+                icon: Icon(
+                  Icons.share_outlined,
+                  color:
+                      group.photos.any((e) => e.canFetchOriginalViaApi)
+                          ? Colors.blueGrey
+                          : Colors.grey.shade400,
+                ),
+              ),
+              IconButton(
                 tooltip: '작업 삭제',
                 onPressed: () => showDialog<void>(
                   context: context,
@@ -526,53 +598,6 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showGroupImages(
-    BuildContext context,
-    PlacePhotoGroupModel group,
-  ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.72,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Text(
-                '${group.photoDate} · ${group.title}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.builder(
-                itemCount: group.photoUrls.length,
-                itemBuilder: (_, i) {
-                  final url = group.photoUrls[i];
-                  return ListTile(
-                    leading: Icon(
-                      url.startsWith('local://camera')
-                          ? Icons.photo_camera
-                          : Icons.image_outlined,
-                    ),
-                    title: Text(
-                      url,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -643,5 +668,9 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
     final idx = normalized.lastIndexOf('/');
     if (idx < 0 || idx == normalized.length - 1) return 'image.jpg';
     return normalized.substring(idx + 1);
+  }
+
+  bool _isHttpUrl(String s) {
+    return s.startsWith('http://') || s.startsWith('https://');
   }
 }

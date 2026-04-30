@@ -1,3 +1,4 @@
+import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
@@ -31,6 +32,12 @@ class PlaceUseCase {
 
   Future<List<PlaceModel>> getIncompletePlaces() {
     return _repository.getIncompletePlaces();
+  }
+
+  Future<List<PlaceModel>> getPlacesForCostPicker({
+    required CostPlacePickerFilter filter,
+  }) {
+    return _repository.getPlacesForCostPicker(filter: filter);
   }
 
   Future<List<TotalCostModel>> getTotalCostsForPlace(int pid) {
@@ -69,6 +76,22 @@ class PlaceUseCase {
       photoType: photoType,
       title: title,
       photoUrls: photoUrls,
+    );
+  }
+
+  Future<void> insertPlacePhotoGroupFromDeviceFiles({
+    required int pid,
+    required String photoDate,
+    required String photoType,
+    required String title,
+    required List<String> localFilePaths,
+  }) {
+    return _repository.insertPlacePhotoGroupFromDeviceFiles(
+      pid: pid,
+      photoDate: photoDate,
+      photoType: photoType,
+      title: title,
+      localFilePaths: localFilePaths,
     );
   }
 

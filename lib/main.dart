@@ -7,16 +7,15 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:w0001/data/datasources/local/dbhelper.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/router/app_router.dart';
 import 'package:w0001/ui/widget/alarm_ringing_overlay.dart';
 import 'package:w0001/util/alarm_permission_helper.dart';
+import 'package:w0001/util/auth_bootstrap.dart';
 import 'package:w0001/util/fetch_data.dart';
 
-final GoRouter _appRouter = createAppRouter();
+late final GoRouter _appRouter;
 
 Future<void> _initAlarmServicesSafely() async {
   try {
@@ -34,6 +33,16 @@ void main() async {
   await dotenv.load(fileName: '.env');
   await AppHttpClient.I.init();
   unawaited(_initAlarmServicesSafely());
+
+  final container = ProviderContainer();
+  rootProviderContainer = container;
+
+  final restored =
+      await tryRestoreSessionIfAutoLoginEnabled(container);
+  _appRouter = createAppRouter(
+    initialLocation: restored ? '/dashboard' : '/login',
+  );
+
   // landscpae 막기
   SystemChrome.setPreferredOrientations(
     [
@@ -41,11 +50,6 @@ void main() async {
       DeviceOrientation.portraitDown,
     ],
   );
-  DbHelper helper = DbHelper();
-  helper.initializeDB();
-  debugPrint(await getDatabasesPath());
-  final container = ProviderContainer();
-  rootProviderContainer = container;
   runApp(
     UncontrolledProviderScope(
       container: container,

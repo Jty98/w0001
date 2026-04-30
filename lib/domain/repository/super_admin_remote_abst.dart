@@ -12,6 +12,28 @@ abstract class SuperAdminRemoteRepository {
   Future<UserRead> userPatch(String uid, Map<String, dynamic> body);
   Future<void> userDelete(String uid);
 
+  /// 승인·활동·역할 (super_admin 전용)
+  Future<List<UserRead>> usersPendingList({String? q});
+  Future<List<UserRead>> usersSearch({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+  });
+  Future<void> userApprove(String uid, {String? note});
+  Future<void> userReject(String uid, {String? note});
+  Future<void> userSuspend(
+    String uid, {
+    String? reason,
+    required String adminActionToken,
+  });
+  Future<void> userActivate(String uid);
+  Future<UserRead> userChangeRole(
+    String uid,
+    UserRole role, {
+    required String adminActionToken,
+  });
+
   // Places
   Future<List<PlaceRead>> placesList();
   Future<PlaceRead> placeGet(int pid);

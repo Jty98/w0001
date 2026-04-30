@@ -4,6 +4,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/data/model/place_model.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
@@ -59,8 +60,22 @@ bool _placeModelSame(PlaceModel a, PlaceModel b) {
   return identical(a, b);
 }
 
-Widget _placeDropdownEmptyBuilder(BuildContext context, String searchEntry) {
-  return const Center(child: Text('진행중인 현장이 없습니다.'));
+String _placePickerDisplayLabel(PlaceModel item, AddCostState state) {
+  if (state.costPlacePickerFilter != CostPlacePickerFilter.all) {
+    return item.pname;
+  }
+  return item.pcomplete == 1 ? '${item.pname} (완료)' : item.pname;
+}
+
+String _placePickerEmptyMessage(AddCostState state) {
+  switch (state.costPlacePickerFilter) {
+    case CostPlacePickerFilter.all:
+      return '등록된 현장이 없습니다.';
+    case CostPlacePickerFilter.inProgress:
+      return '진행중인 현장이 없습니다.';
+    case CostPlacePickerFilter.completed:
+      return '완료된 현장이 없습니다.';
+  }
 }
 
 class AddScreen extends ConsumerStatefulWidget {
@@ -285,15 +300,12 @@ class _AddScreenState extends ConsumerState<AddScreen>
                 bottom: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-                  child: SizedBox(
-                    height: 54,
-                    child: placeDropdown(
-                      ref,
-                      vm,
-                      state,
-                      context,
-                      openPopupAbove: false,
-                    ),
+                  child: placeDropdown(
+                    ref,
+                    vm,
+                    state,
+                    context,
+                    openPopupAbove: false,
                   ),
                 ),
               ),
@@ -386,86 +398,136 @@ Widget placeDropdown(
   final cs = theme.colorScheme;
   final borderRadius = BorderRadius.circular(10);
 
-  return SizedBox(
-    height: 54,
-    child: DropdownSearch<PlaceModel>(
-      compareFn: _placeModelSame,
-      asyncItems: (text) =>
-          ref.read(placeUseCaseProvider).getIncompletePlaces(),
-      itemAsString: (item) => item.pname,
-      popupProps: PopupProps.menu(
-        menuProps: MenuProps(
-          positionCallback: openPopupAbove
-              ? _placeMenuAbovePosition
-              : _placeMenuBelowPosition,
-        ),
-        searchDelay: Duration.zero,
-        emptyBuilder: _placeDropdownEmptyBuilder,
-      ),
-      dropdownButtonProps: DropdownButtonProps(
-        icon: Icon(
-          openPopupAbove ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-          size: 24,
-        ),
-      ),
-      dropdownDecoratorProps: DropDownDecoratorProps(
-        textAlign: TextAlign.center,
-        baseStyle: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w500,
-          color: cs.onSurface,
-        ),
-        dropdownSearchDecoration: InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
-          filled: true,
-          fillColor: cs.surfaceContainerLow,
-          prefixIcon: Icon(
-            Icons.home_work_outlined,
-            size: 20,
-            color: cs.onSurfaceVariant,
-          ),
-          hintStyle: TextStyle(
-            color: cs.outline,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-          helperStyle: TextStyle(
-            fontSize: 11,
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
-          helperMaxLines: 1,
-          border: OutlineInputBorder(
-            borderRadius: borderRadius,
-            borderSide: BorderSide(
-              color: cs.outlineVariant,
-              width: 1.0,
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Align(
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<CostPlacePickerFilter>(
+            segments: const [
+              ButtonSegment<CostPlacePickerFilter>(
+                value: CostPlacePickerFilter.all,
+                label: Text('전체'),
+                tooltip: '진행중·완료',
+              ),
+              ButtonSegment<CostPlacePickerFilter>(
+                value: CostPlacePickerFilter.inProgress,
+                label: Text('진행중'),
+              ),
+              ButtonSegment<CostPlacePickerFilter>(
+                value: CostPlacePickerFilter.completed,
+                label: Text('완료'),
+              ),
+            ],
+            selected: {state.costPlacePickerFilter},
+            showSelectedIcon: false,
+            onSelectionChanged: (next) {
+              if (next.isEmpty) return;
+              vm.setCostPlacePickerFilter(next.first);
+            },
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: borderRadius,
-            borderSide: BorderSide(
-              color: cs.outlineVariant,
-              width: 1.0,
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: borderRadius,
-            borderSide: BorderSide(
-              color: cs.primary,
-              width: 1.4,
-            ),
-          ),
-          hintText: '현장을 선택해 주세요',
         ),
       ),
-      onChanged: (value) => vm.placeChangeAction(context, value!),
-      selectedItem: state.selectedPlace,
-    ),
+      const SizedBox(height: 8),
+      SizedBox(
+        height: 54,
+        child: DropdownSearch<PlaceModel>(
+          key: ValueKey<Object>(
+            'place_dd_${state.costPlacePickerFilter}_${state.selectedPlace?.pid}',
+          ),
+          compareFn: _placeModelSame,
+          asyncItems: (text) =>
+              ref.read(placeUseCaseProvider).getPlacesForCostPicker(
+                    filter: state.costPlacePickerFilter,
+                  ),
+          itemAsString: (item) => _placePickerDisplayLabel(item, state),
+          popupProps: PopupProps.menu(
+            menuProps: MenuProps(
+              positionCallback: openPopupAbove
+                  ? _placeMenuAbovePosition
+                  : _placeMenuBelowPosition,
+            ),
+            searchDelay: Duration.zero,
+            emptyBuilder: (popupCtx, searchEntry) => Center(
+              child: Text(_placePickerEmptyMessage(state)),
+            ),
+          ),
+          dropdownButtonProps: DropdownButtonProps(
+            icon: Icon(
+              openPopupAbove ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+              size: 24,
+            ),
+          ),
+          dropdownDecoratorProps: DropDownDecoratorProps(
+            textAlign: TextAlign.center,
+            baseStyle: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurface,
+            ),
+            dropdownSearchDecoration: InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              filled: true,
+              fillColor: cs.surfaceContainerLow,
+              prefixIcon: Icon(
+                Icons.home_work_outlined,
+                size: 20,
+                color: cs.onSurfaceVariant,
+              ),
+              hintStyle: TextStyle(
+                color: cs.outline,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+              helperStyle: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+              helperMaxLines: 1,
+              border: OutlineInputBorder(
+                borderRadius: borderRadius,
+                borderSide: BorderSide(
+                  color: cs.outlineVariant,
+                  width: 1.0,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: borderRadius,
+                borderSide: BorderSide(
+                  color: cs.outlineVariant,
+                  width: 1.0,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: borderRadius,
+                borderSide: BorderSide(
+                  color: cs.primary,
+                  width: 1.4,
+                ),
+              ),
+              hintText: '현장을 선택해 주세요',
+            ),
+          ),
+          onChanged: (value) => vm.placeChangeAction(context, value!),
+          selectedItem: state.selectedPlace,
+        ),
+      ),
+    ],
   );
 }
 

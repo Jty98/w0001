@@ -12,4 +12,11 @@ abstract class AuthRepository {
 
   /// 서버 로그아웃 시도 후 로컬 토큰은 항상 삭제한다.
   Future<void> logout();
+
+  /// `POST /auth/signup` (role 없음, 승인 전까지 로그인 불가)
+  Future<void> signup({
+    required String uid,
+    required String upw,
+    required String uname,
+  });
 }

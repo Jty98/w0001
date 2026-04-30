@@ -18,6 +18,42 @@ class SuperAdminRemoteUseCase {
       _repository.userPatch(uid, body);
   Future<void> userDelete(String uid) => _repository.userDelete(uid);
 
+  Future<List<UserRead>> usersPendingList({String? q}) =>
+      _repository.usersPendingList(q: q);
+  Future<List<UserRead>> usersSearch({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+  }) =>
+      _repository.usersSearch(
+        role: role,
+        approvalStatus: approvalStatus,
+        isActive: isActive,
+        q: q,
+      );
+  Future<void> userApprove(String uid, {String? note}) =>
+      _repository.userApprove(uid, note: note);
+  Future<void> userReject(String uid, {String? note}) =>
+      _repository.userReject(uid, note: note);
+  Future<void> userSuspend(
+    String uid, {
+    String? reason,
+    required String adminActionToken,
+  }) =>
+      _repository.userSuspend(
+        uid,
+        reason: reason,
+        adminActionToken: adminActionToken,
+      );
+  Future<void> userActivate(String uid) => _repository.userActivate(uid);
+  Future<UserRead> userChangeRole(
+    String uid,
+    UserRole role, {
+    required String adminActionToken,
+  }) =>
+      _repository.userChangeRole(uid, role, adminActionToken: adminActionToken);
+
   // Places
   Future<List<PlaceRead>> placesList() => _repository.placesList();
   Future<PlaceRead> placeGet(int pid) => _repository.placeGet(pid);

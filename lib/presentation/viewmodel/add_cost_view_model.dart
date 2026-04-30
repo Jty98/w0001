@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/place_model.dart';
@@ -22,6 +23,7 @@ class AddCostState {
     required this.selectDay,
     required this.alertText,
     required this.selectedPlace,
+    required this.costPlacePickerFilter,
     required this.selectedWorker,
     required this.selectedWorkers,
     required this.placeRecentWorkers,
@@ -34,6 +36,8 @@ class AddCostState {
   final DateTime selectDay;
   final String alertText;
   final PlaceModel? selectedPlace;
+  /// 금액 추가 화면 현장 목록 분류.
+  final CostPlacePickerFilter costPlacePickerFilter;
   /// 하위 호환(기존 코드). 현재 UI에서는 `selectedWorkers`가 메인이며,
   /// 이 값은 마지막 선택(또는 1명 선택 시) 용도로 유지한다.
   final HumanModel? selectedWorker;
@@ -56,6 +60,7 @@ class AddCostState {
         })(),
         alertText: '',
         selectedPlace: null,
+        costPlacePickerFilter: CostPlacePickerFilter.inProgress,
         selectedWorker: null,
         selectedWorkers: const [],
         placeRecentWorkers: const [],
@@ -70,6 +75,7 @@ class AddCostState {
     String? alertText,
     PlaceModel? selectedPlace,
     bool clearSelectedPlace = false,
+    CostPlacePickerFilter? costPlacePickerFilter,
     HumanModel? selectedWorker,
     bool clearSelectedWorker = false,
     List<HumanModel>? selectedWorkers,
@@ -88,6 +94,8 @@ class AddCostState {
       alertText: alertText ?? this.alertText,
       selectedPlace:
           clearSelectedPlace ? null : (selectedPlace ?? this.selectedPlace),
+      costPlacePickerFilter:
+          costPlacePickerFilter ?? this.costPlacePickerFilter,
       selectedWorker:
           clearSelectedWorker ? null : (selectedWorker ?? this.selectedWorker),
       selectedWorkers: clearSelectedWorkers
@@ -151,6 +159,37 @@ class AddCostViewModel extends Notifier<AddCostState> {
     if (s.isEmpty) return false;
     if (s.length >= 10) return s.substring(0, 10) == key;
     return s == key;
+  }
+
+  /// 금액 추가 화면 현장 목록 — 전체 / 진행중 / 완료. 필터와 맞지 않는 선택은 초기화.
+  void setCostPlacePickerFilter(CostPlacePickerFilter filter) {
+    final sp = state.selectedPlace;
+    var dropSelection = false;
+    if (sp != null) {
+      switch (filter) {
+        case CostPlacePickerFilter.all:
+          break;
+        case CostPlacePickerFilter.inProgress:
+          dropSelection = sp.pcomplete != 0;
+          break;
+        case CostPlacePickerFilter.completed:
+          dropSelection = sp.pcomplete != 1;
+          break;
+      }
+    }
+    if (dropSelection) {
+      state = state.copyWith(
+        costPlacePickerFilter: filter,
+        clearSelectedPlace: true,
+        materialCostList: const [],
+        workCostList: const [],
+        clearPlaceRecentWorkers: true,
+        clearSelectedWorkers: true,
+        clearSelectedWorker: true,
+      );
+      return;
+    }
+    state = state.copyWith(costPlacePickerFilter: filter);
   }
 
   void clearSelectedPlace() {

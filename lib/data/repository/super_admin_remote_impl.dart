@@ -21,6 +21,46 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<void> userDelete(String uid) => _api.userDelete(uid);
 
   @override
+  Future<List<UserRead>> usersPendingList({String? q}) =>
+      _api.usersPendingList(q: q);
+
+  @override
+  Future<List<UserRead>> usersSearch({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+  }) =>
+      _api.usersSearch(
+        role: role,
+        approvalStatus: approvalStatus,
+        isActive: isActive,
+        q: q,
+      );
+  @override
+  Future<void> userApprove(String uid, {String? note}) =>
+      _api.userApprove(uid, note: note);
+  @override
+  Future<void> userReject(String uid, {String? note}) =>
+      _api.userReject(uid, note: note);
+  @override
+  Future<void> userSuspend(
+    String uid, {
+    String? reason,
+    required String adminActionToken,
+  }) =>
+      _api.userSuspend(uid, reason: reason, adminActionToken: adminActionToken);
+  @override
+  Future<void> userActivate(String uid) => _api.userActivate(uid);
+  @override
+  Future<UserRead> userChangeRole(
+    String uid,
+    UserRole role, {
+    required String adminActionToken,
+  }) =>
+      _api.userChangeRole(uid, role, adminActionToken: adminActionToken);
+
+  @override
   Future<List<PlaceRead>> placesList() => _api.placesList();
   @override
   Future<PlaceRead> placeGet(int pid) => _api.placeGet(pid);

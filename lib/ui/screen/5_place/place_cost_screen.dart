@@ -49,7 +49,7 @@ class PlaceCostScreen extends ConsumerWidget {
               // when current location isn't exactly `/place/detail`.
               await context.push('/place/detail/revenue', extra: placeInfo);
               if (!context.mounted) return;
-              vm.resetRevenueTextController();
+              vm.clearRevenuePickedOnLeaveRevenueScreen();
             },
             icon: Image.asset(
               'assets/images/add_money.png',

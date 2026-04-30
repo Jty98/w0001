@@ -6,6 +6,7 @@ import 'package:w0001/data/model/remote/super_admin_json.dart';
 // ---------------------------------------------------------------------------
 
 class UserCreateBody {
+  /// 슈퍼관리자 `POST /users` 직접 생성 용도. 공개 회원가입은 [signupRequestBody]·`/auth/signup`.
   const UserCreateBody({
     required this.uid,
     required this.upw,
@@ -16,7 +17,7 @@ class UserCreateBody {
   final String uid;
   final String upw;
   final String uname;
-  /// `"super_admin" | "admin" | "worker"`, 기본 worker 는 서버 처리
+  /// 서버가 허용할 때만 (선택).
   final String? role;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -409,10 +410,18 @@ class PlacePhotoRead {
   final int createdatms;
 
   factory PlacePhotoRead.fromJson(Map<String, dynamic> m) {
+    final displayUrl = saString(m['display_url']);
+    final originalUrl = saString(m['original_url']);
+    final legacyPhoto = saString(m['photourl']) ?? '';
+    final resolved = (displayUrl != null && displayUrl.isNotEmpty)
+        ? displayUrl
+        : (legacyPhoto.isNotEmpty
+            ? legacyPhoto
+            : (originalUrl ?? ''));
     return PlacePhotoRead(
       phid: saInt(m['phid']) ?? 0,
       pgid: saInt(m['pgid']) ?? 0,
-      photourl: saString(m['photourl']) ?? '',
+      photourl: resolved,
       originalname: saString(m['originalname']),
       sortorder: saInt(m['sortorder']) ?? 0,
       createdatms: saInt(m['createdatms']) ?? 0,
