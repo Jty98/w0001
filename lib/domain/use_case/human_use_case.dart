@@ -38,4 +38,3 @@ class HumanUseCase {
     return _repository.deletePlaceWorkerRecent(pid, hid);
   }
 }
-

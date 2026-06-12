@@ -24,7 +24,8 @@ final class HumansRemoteApi {
   }
 
   Future<HumanRead> patch(int hid, Map<String, dynamic> body) async {
-    final r = await _http.patch<dynamic>(ApiEndpoint.humansHid(hid), data: body);
+    final r =
+        await _http.patch<dynamic>(ApiEndpoint.humansHid(hid), data: body);
     return HumanRead.fromJson(saParseObject(r.data));
   }
 

@@ -7,6 +7,7 @@ class WorkCostModel {
   final int wcomplete;
   final int wprice;
   final int wpid;
+
   /// 현장 투입 역할(전기·목수 등)
   final String wrole;
 
@@ -65,7 +66,10 @@ class WorkCost2Model {
   final String pname;
 
   WorkCost2Model(
-      {required this.wdate, required this.wprice, required this.pname, required this.wcomplete});
+      {required this.wdate,
+      required this.wprice,
+      required this.pname,
+      required this.wcomplete});
 
   WorkCost2Model.fromMap(Map<String, dynamic> res)
       : wdate = res['wdate'],

@@ -14,12 +14,14 @@ final class PlaceWorkerRecentsRemoteApi {
   }
 
   Future<PlaceWorkerRecentRead> get(int pid, int hid) async {
-    final r = await _http.get<dynamic>(ApiEndpoint.placeWorkerRecentsPair(pid, hid));
+    final r =
+        await _http.get<dynamic>(ApiEndpoint.placeWorkerRecentsPair(pid, hid));
     return PlaceWorkerRecentRead.fromJson(saParseObject(r.data));
   }
 
   Future<PlaceWorkerRecentRead> create(Map<String, dynamic> body) async {
-    final r = await _http.post<dynamic>(ApiEndpoint.placeWorkerRecents, data: body);
+    final r =
+        await _http.post<dynamic>(ApiEndpoint.placeWorkerRecents, data: body);
     return PlaceWorkerRecentRead.fromJson(saParseObject(r.data));
   }
 

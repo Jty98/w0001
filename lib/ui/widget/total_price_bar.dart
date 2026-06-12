@@ -2,9 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 typedef CategoryTapCallback = void Function(String category);
+
+/// 합계 바 카테고리 금액 색 (타이포는 [TextTheme], 색만 고정 토큰).
+const Color _workCostAmountColor = Color(0xFF1976D2);
+const Color _materialCostAmountColor = Color(0xFF388E3C);
+
+TextStyle? _categoryAmountStyle(
+  TextTheme tt,
+  Color color, {
+  required bool compact,
+}) {
+  final base = compact ? tt.labelLarge : tt.titleMedium ?? tt.bodyLarge;
+  return base?.copyWith(fontWeight: FontWeight.bold, color: color);
+}
 const placeCategory = ['인건비', '미지급', '자재비', '전체', ...categoryList];
 
 class TotalPriceBar extends StatelessWidget {
@@ -12,31 +25,57 @@ class TotalPriceBar extends StatelessWidget {
     super.key,
     required this.totalCostList,
     required this.categoryTapCallbacks,
+    this.compact = false,
   });
 
   final List<TotalCostModel> totalCostList;
   final Map<String, CategoryTapCallback> categoryTapCallbacks;
 
+  /// 캘린더 탭 등 — 라벨·금액·패딩을 줄인 레이아웃.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dividerH = compact ? 1.0 : 3.0;
+    final dividerT = compact ? 1.0 : 2.0;
     return Container(
-      color: Colors.blueGrey.withValues(alpha: 0.15),
+      color: cs.secondary.withValues(alpha: compact ? 0.14 : 0.18),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Divider(height: 3, thickness: 2),
+          Divider(height: dividerH, thickness: dividerT),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: _buildCategoryRows(context),
             ),
           ),
-          const Divider(height: 0, thickness: 2),
+          Divider(height: compact ? 0 : 0, thickness: dividerT),
         ],
       ),
     );
   }
 
   List<Widget> _buildCategoryRows(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final labelStyle = compact ? tt.labelMedium : tt.bodyMedium;
+    final priceStyle = (compact ? tt.labelLarge : tt.titleMedium ?? tt.bodyLarge)
+        ?.copyWith(fontWeight: FontWeight.bold);
+    final itemPadding = compact
+        ? ResponsiveLayout.symmetric(context, vertical: 5, horizontal: 8)
+        : ResponsiveLayout.symmetric(context, vertical: 10, horizontal: 10);
+    final firstPadding = compact
+        ? ResponsiveLayout.only(context, left: 14, top: 5, right: 8, bottom: 5)
+        : ResponsiveLayout.only(
+            context,
+            left: 20,
+            top: 10,
+            right: 10,
+            bottom: 10,
+          );
+    final minW = context.rs(compact ? 60 : 70);
+
     // 위젯 담을 List
     List<Widget> categoryRows = [];
 
@@ -65,14 +104,16 @@ class TotalPriceBar extends StatelessWidget {
       InkWell(
         onTap: totalTapCallback != null ? () => totalTapCallback('전체') : null,
         child: Container(
-          constraints: const BoxConstraints(minWidth: 70),
-          padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
+          constraints: BoxConstraints(minWidth: minW),
+          padding: firstPadding,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('전체', style: mediumStyle),
-              Text(getPrice(price: workCost + materialCost),
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold)),
+              Text('전체', style: labelStyle),
+              Text(
+                getPrice(price: workCost + materialCost),
+                style: priceStyle,
+              ),
             ],
           ),
         ),
@@ -83,12 +124,20 @@ class TotalPriceBar extends StatelessWidget {
       InkWell(
         onTap: workTapCallback != null ? () => workTapCallback('인건비') : null,
         child: Container(
-          constraints: const BoxConstraints(minWidth: 70),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+          constraints: BoxConstraints(minWidth: minW),
+          padding: itemPadding,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('인건비', style: mediumStyle),
-              Text(getPrice(price: workCost), style: workerStyle),
+              Text('인건비', style: labelStyle),
+              Text(
+                getPrice(price: workCost),
+                style: _categoryAmountStyle(
+                  tt,
+                  _workCostAmountColor,
+                  compact: compact,
+                ),
+              ),
             ],
           ),
         ),
@@ -100,12 +149,20 @@ class TotalPriceBar extends StatelessWidget {
             ? () => materialTapCallback('자재비')
             : null,
         child: Container(
-          constraints: const BoxConstraints(minWidth: 70),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+          constraints: BoxConstraints(minWidth: minW),
+          padding: itemPadding,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('자재비', style: mediumStyle),
-              Text(getPrice(price: materialCost), style: materialStyle),
+              Text('자재비', style: labelStyle),
+              Text(
+                getPrice(price: materialCost),
+                style: _categoryAmountStyle(
+                  tt,
+                  _materialCostAmountColor,
+                  compact: compact,
+                ),
+              ),
             ],
           ),
         ),
@@ -116,12 +173,20 @@ class TotalPriceBar extends StatelessWidget {
         onTap:
             notPayTapCallback != null ? () => notPayTapCallback('미지급') : null,
         child: Container(
-          constraints: const BoxConstraints(minWidth: 70),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+          constraints: BoxConstraints(minWidth: minW),
+          padding: itemPadding,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('미지급', style: mediumStyle),
-              Text(getPrice(price: notPayCost), style: paymentStyle),
+              Text('미지급', style: labelStyle),
+              Text(
+                getPrice(price: notPayCost),
+                style: _categoryAmountStyle(
+                  tt,
+                  Theme.of(context).colorScheme.error,
+                  compact: compact,
+                ),
+              ),
             ],
           ),
         ),
@@ -129,20 +194,28 @@ class TotalPriceBar extends StatelessWidget {
     );
 
     categoryRows.add(IconButton(
+        iconSize: context.rsi(compact ? 20 : 24),
+        padding: compact ? EdgeInsets.all(context.rs(4)) : null,
+        constraints: compact
+            ? BoxConstraints(
+                minWidth: context.rs(32),
+                minHeight: context.rs(32),
+              )
+            : null,
         onPressed: () => showModalBottomSheet<void>(
               context: context,
               elevation: 0,
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
               builder: (sheetContext) => Column(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
+                  Padding(
+                    padding: ResponsiveLayout.symmetric(context, vertical: 10),
                     child: Text(
                       '카테고리 선택',
-                      style: bigStyle,
+                      style: tt.titleMedium,
                     ),
                   ),
                   Expanded(
@@ -150,7 +223,7 @@ class TotalPriceBar extends StatelessWidget {
                     shrinkWrap: true,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(5.0),
+                        padding: EdgeInsets.all(context.rs(5)),
                         child: Builder(
                           builder: (ctx) {
                             List<Map<String, dynamic>> sortedList = [];
@@ -196,13 +269,15 @@ class TotalPriceBar extends StatelessWidget {
                                         children: [
                                           Text(
                                             category,
-                                            style: normalStyle,
+                                            style: tt.bodyMedium,
                                           ),
                                           Text(
                                             getPrice(price: price),
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.black54),
+                                            style: tt.labelSmall?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
                                           ),
                                         ],
                                       ),

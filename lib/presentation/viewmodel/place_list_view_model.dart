@@ -1,5 +1,8 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_model.dart';
 import 'package:w0001/data/repository/human_impl.dart';
@@ -8,7 +11,11 @@ import 'package:w0001/domain/repository/human_abst.dart';
 import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/domain/use_case/human_use_case.dart';
 import 'package:w0001/domain/use_case/place_use_case.dart';
+import 'package:w0001/domain/place_list_display.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/datasources/remote/http_client.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 
@@ -33,6 +40,10 @@ class PlaceListState {
     required this.placeState,
     required this.updateText,
     required this.isLoading,
+    required this.hasLoadedOnce,
+    required this.loadError,
+    required this.searchQuery,
+    required this.sortMode,
   });
 
   final List<PlaceInfoModel> placeList;
@@ -41,13 +52,25 @@ class PlaceListState {
   final String updateText;
   final bool isLoading;
 
-  factory PlaceListState.initial() => const PlaceListState(
-        placeList: [],
-        filteredPlaceList: [],
+  /// 최초 API 조회가 끝났는지(실패 포함). false면 스켈레톤 유지.
+  final bool hasLoadedOnce;
+  final String? loadError;
+  final String searchQuery;
+  final PlaceListSortMode sortMode;
+
+  factory PlaceListState.initial() => PlaceListState(
+        placeList: const [],
+        filteredPlaceList: const [],
         placeState: PlaceState.incomplete,
         updateText: '',
-        isLoading: false,
+        isLoading: true,
+        hasLoadedOnce: false,
+        loadError: null,
+        searchQuery: '',
+        sortMode: PlaceListSortMode.defaultFor(PlaceState.incomplete),
       );
+
+  int get tabPlaceCount => countPlacesForTab(placeList, placeState);
 
   PlaceListState copyWith({
     List<PlaceInfoModel>? placeList,
@@ -55,6 +78,11 @@ class PlaceListState {
     PlaceState? placeState,
     String? updateText,
     bool? isLoading,
+    bool? hasLoadedOnce,
+    String? loadError,
+    bool clearLoadError = false,
+    String? searchQuery,
+    PlaceListSortMode? sortMode,
   }) {
     return PlaceListState(
       placeList: placeList ?? this.placeList,
@@ -62,13 +90,19 @@ class PlaceListState {
       placeState: placeState ?? this.placeState,
       updateText: updateText ?? this.updateText,
       isLoading: isLoading ?? this.isLoading,
+      hasLoadedOnce: hasLoadedOnce ?? this.hasLoadedOnce,
+      loadError: clearLoadError ? null : (loadError ?? this.loadError),
+      searchQuery: searchQuery ?? this.searchQuery,
+      sortMode: sortMode ?? this.sortMode,
     );
   }
 }
 
 class PlaceListViewModel extends Notifier<PlaceListState> {
-  late final PlaceUseCase _useCase;
-  bool _initialized = false;
+  /// [build]가 재호출될 때 `late final`·초기 state 리셋으로 크래시/빈 화면이 나지 않도록 한다.
+  var _lifecycleAttached = false;
+
+  PlaceUseCase get _useCase => ref.read(placeUseCaseProvider);
 
   /// 현장 추가 다이얼로그에서 캘린더로 고른 기간 (날짜만, 시간 제거).
   DateTime? _placeDialogRangeStart;
@@ -81,36 +115,71 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
       TextEditingController(text: '0');
   final TextEditingController placeAddressController = TextEditingController();
 
-  @override
-  PlaceListState build() {
-    _useCase = ref.read(placeUseCaseProvider);
-    ref.onDispose(() {
-      placeNameController.dispose();
-      placeRevenueController.dispose();
-      placeContractTotalController.dispose();
-      placeAddressController.dispose();
+  void _onAuthSessionForPlaceList(
+    AsyncValue<UserRead?>? prev,
+    AsyncValue<UserRead?> next,
+  ) {
+    final u = next.asData?.value;
+    if (u == null) return;
+    final prevUid = prev?.asData?.value?.uid;
+    if (prevUid == u.uid && state.hasLoadedOnce) return;
+    Future.microtask(() {
+      if (!ref.mounted) return;
+      unawaited(fetchAllPlace());
     });
-    if (!_initialized) {
-      _initialized = true;
-      // state가 초기화된 이후에 실행되도록 마이크로태스크로 예약
-      Future.microtask(fetchAllPlace);
-    }
-    return PlaceListState.initial();
   }
 
-  Future<void> fetchAllPlace() async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final list = await _useCase.getAllPlaces();
-      final filtered = _filterByState(list, state.placeState);
-      state = state.copyWith(
-        placeList: list,
-        filteredPlaceList: filtered,
+  void _disposeControllers() {
+    placeNameController.dispose();
+    placeRevenueController.dispose();
+    placeContractTotalController.dispose();
+    placeAddressController.dispose();
+  }
+
+  @override
+  PlaceListState build() {
+    if (!_lifecycleAttached) {
+      _lifecycleAttached = true;
+      ref.listen<AsyncValue<UserRead?>>(
+        authSessionProvider,
+        _onAuthSessionForPlaceList,
+        fireImmediately: true,
       );
+      ref.onDispose(_disposeControllers);
+      return PlaceListState.initial();
+    }
+    return state;
+  }
+
+  Future<void> fetchAllPlace({bool force = false}) async {
+    final user = ref.read(authSessionProvider).asData?.value;
+    if (user == null) return;
+
+    final hadList = !force && state.placeList.isNotEmpty;
+    state = state.copyWith(
+      isLoading: true,
+      clearLoadError: true,
+    );
+    try {
+      final list = await _useCase.getAllPlaces(
+        managementPlacesInfoFirst: user.isManagementRole,
+        role: user.role,
+      );
+      state = state.copyWith(placeList: list);
+      _rebuildFilteredList();
     } catch (e, st) {
       debugPrint('Place list fetch failed: $e\n$st');
+      final hErr = unwrapHttpClientException(e);
+      state = state.copyWith(
+        loadError: hadList
+            ? state.loadError
+            : (hErr?.message ?? '현장 목록을 불러오지 못했습니다.'),
+      );
     } finally {
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(
+        isLoading: false,
+        hasLoadedOnce: true,
+      );
     }
   }
 
@@ -134,20 +203,41 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
   }
 
   void stateValueChanged(PlaceState? value) {
-    if (value == null) return;
-    final filtered = _filterByState(state.placeList, value);
+    if (value == null || value == state.placeState) return;
     state = state.copyWith(
       placeState: value,
-      filteredPlaceList: filtered,
+      sortMode: PlaceListSortMode.defaultFor(value),
     );
+    _rebuildFilteredList();
   }
 
-  List<PlaceInfoModel> _filterByState(
-    List<PlaceInfoModel> list,
-    PlaceState placeState,
-  ) {
-    final complete = placeState == PlaceState.complete ? 1 : 0;
-    return list.where((p) => p.pcomplete == complete).toList();
+  void setSearchQuery(String query) {
+    final next = query;
+    if (next == state.searchQuery) return;
+    state = state.copyWith(searchQuery: next);
+    _rebuildFilteredList();
+  }
+
+  void clearSearchQuery() {
+    if (state.searchQuery.isEmpty) return;
+    state = state.copyWith(searchQuery: '');
+    _rebuildFilteredList();
+  }
+
+  void setSortMode(PlaceListSortMode mode) {
+    if (mode == state.sortMode) return;
+    state = state.copyWith(sortMode: mode);
+    _rebuildFilteredList();
+  }
+
+  void _rebuildFilteredList() {
+    final filtered = applyPlaceListDisplay(
+      all: state.placeList,
+      tab: state.placeState,
+      searchQuery: state.searchQuery,
+      sortMode: state.sortMode,
+    );
+    state = state.copyWith(filteredPlaceList: filtered);
   }
 
   /// [completionPend]: 완료(1)로 바꿀 때만 사용. `null`이면 [pendWhenTogglingToComplete]와 동일.
@@ -174,8 +264,16 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
   }
 
   Future<void> deletePlace(int pid) async {
-    await _useCase.updatePlaceCompletionStatus(pid, 2, '0');
-    await fetchAllPlace();
+    try {
+      await _useCase.deletePlace(pid);
+      await fetchAllPlace();
+    } catch (e, st) {
+      debugPrint('deletePlace failed: $e\n$st');
+      state = state.copyWith(
+        updateText: '현장 삭제에 실패했습니다. 네트워크를 확인해 주세요.',
+      );
+      rethrow;
+    }
   }
 
   Future<bool> updatePlace(
@@ -295,8 +393,6 @@ final humanUseCaseProvider = Provider<HumanUseCase>(
   (ref) => HumanUseCase(ref.read(humanRepositoryProvider)),
 );
 
-final placeListProvider =
-    NotifierProvider<PlaceListViewModel, PlaceListState>(
+final placeListProvider = NotifierProvider<PlaceListViewModel, PlaceListState>(
   PlaceListViewModel.new,
 );
-

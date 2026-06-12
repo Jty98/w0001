@@ -5,18 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:go_router/go_router.dart';
 import 'package:grouped_list/grouped_list.dart';
-import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
+import 'package:w0001/access/user_role_capabilities.dart';
+import 'package:w0001/enums.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/work_cost_delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/total_cost_card.dart';
 import 'package:w0001/ui/widget/total_price_bar.dart';
 import 'package:w0001/ui/widget/segment_widget.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 
 class PlaceCostScreen extends ConsumerWidget {
@@ -25,55 +28,74 @@ class PlaceCostScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final readOnly = ref.watch(authSessionProvider).maybeWhen(
+          data: (u) => u != null && !u.role.canEditPlaceLedger,
+          orElse: () => false,
+        );
     final state = ref.watch(placeDetailProvider(placeInfo.pid!));
     final vm = ref.read(placeDetailProvider(placeInfo.pid!).notifier);
     return Scaffold(
       appBar: AppBar(
-        title: Text(placeInfo.pname),
+        title:
+            readOnly ? Text('${placeInfo.pname} · 조회') : Text(placeInfo.pname),
         centerTitle: true,
         actions: [
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed: () =>
-                vm.exportAndSharePlaceInfoToExcel(placeInfo.pname),
-            icon: Image.asset(
-              'assets/images/excel_logo.png',
-              height: 28,
-              width: 28,
+          if (!readOnly) ...[
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () =>
+                  vm.exportAndSharePlaceInfoToExcel(placeInfo.pname),
+              icon: Image.asset(
+                'assets/images/excel_logo.png',
+                height: context.rs(28),
+                width: context.rs(28),
+              ),
             ),
-          ),
-          IconButton(
-            // visualDensity: VisualDensity.comfortable,
-            onPressed: () async {
-              // Always push absolute nested route to avoid "page not found"
-              // when current location isn't exactly `/place/detail`.
-              await context.push('/place/detail/revenue', extra: placeInfo);
-              if (!context.mounted) return;
-              vm.clearRevenuePickedOnLeaveRevenueScreen();
-            },
-            icon: Image.asset(
-              'assets/images/add_money.png',
-              height: 28,
-              width: 28,
+            IconButton(
+              // visualDensity: VisualDensity.comfortable,
+              onPressed: () async {
+                // Always push absolute nested route to avoid "page not found"
+                // when current location isn't exactly `/place/detail`.
+                await context.push('/place/detail/revenue', extra: placeInfo);
+                if (!context.mounted) return;
+                vm.clearRevenuePickedOnLeaveRevenueScreen();
+              },
+              icon: Image.asset(
+                'assets/images/add_money.png',
+                height: context.rs(28),
+                width: context.rs(28),
+              ),
             ),
-          ),
+          ],
         ],
         bottom: PreferredSize(
-          preferredSize: Size(MediaQuery.of(context).size.width, 45),
+          preferredSize: Size(MediaQuery.of(context).size.width, context.rs(45)),
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 10, left: 10, right: 10),
+            padding: EdgeInsets.only(
+              bottom: context.rsi(10),
+              left: context.rsi(10),
+              right: context.rsi(10),
+            ),
             child: Column(
               children: [
                 Text(
-                  formatDateTimeRangeToString(state.dateTimeRange),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey,
+                  formatDateTimeRangeToString(
+                    state.dateTimeRange,
+                    periodType: state.selectedDayType,
+                  ),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                SizedBox(height: context.rsi(5)),
+                IgnorePointer(
+                  ignoring: readOnly,
+                  child: Opacity(
+                    opacity: readOnly ? 0.65 : 1,
+                    child: _selectDurationButtons(context, state, vm),
                   ),
                 ),
-                const SizedBox(height: 5),
-                _selectDurationButtons(context, state, vm),
               ],
             ),
           ),
@@ -89,13 +111,13 @@ class PlaceCostScreen extends ConsumerWidget {
             },
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: EdgeInsets.symmetric(vertical: context.rsi(10)),
             child: Text(
               '${state.selectedFilterType.category} ${getPrice(price: vm.selectedPrice)}',
-              style: const TextStyle(fontSize: 17),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
-          Expanded(child: expenseList(context, state, vm)),
+          Expanded(child: expenseList(context, state, vm, readOnly)),
         ],
       ),
     );
@@ -106,16 +128,19 @@ class PlaceCostScreen extends ConsumerWidget {
     PlaceDetailState state,
     PlaceDetailViewModel vm,
   ) {
+    final tt = Theme.of(context).textTheme;
+    final toggleW =
+        (MediaQuery.sizeOf(context).width - context.rs(25)) / 3;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         SizedBox(
-          height: 30,
+          height: context.rs(30),
           child: ToggleButtons(
             borderWidth: 1,
             borderColor: const Color.fromARGB(255, 177, 176, 176),
             selectedBorderColor: const Color.fromARGB(255, 177, 176, 176),
-            textStyle: bold14Style,
+            textStyle: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
             borderRadius: BorderRadius.circular(5),
             isSelected: state.toggleState,
             onPressed: (index) {
@@ -123,8 +148,8 @@ class PlaceCostScreen extends ConsumerWidget {
             },
             children: [
               toggleWidget(
-                width: (MediaQuery.of(context).size.width - 25) / 3,
-                height: 24,
+                width: toggleW,
+                height: context.rs(24),
                 child: const Text('기간 선택'),
                 icon: Icon(
                   Icons.calendar_month,
@@ -134,13 +159,13 @@ class PlaceCostScreen extends ConsumerWidget {
                 ),
               ),
               toggleWidget(
-                height: 24,
-                width: (MediaQuery.of(context).size.width - 25) / 3,
+                height: context.rs(24),
+                width: toggleW,
                 child: const Text('전체 기간'),
               ),
               toggleWidget(
-                height: 24,
-                width: (MediaQuery.of(context).size.width - 25) / 3,
+                height: context.rs(24),
+                width: toggleW,
                 child: const Text('이번 달'),
               ),
             ],
@@ -150,10 +175,20 @@ class PlaceCostScreen extends ConsumerWidget {
     );
   }
 
-  Widget expenseList(context, PlaceDetailState state, PlaceDetailViewModel vm) {
+  Widget expenseList(
+    BuildContext context,
+    PlaceDetailState state,
+    PlaceDetailViewModel vm,
+    bool readOnly,
+  ) {
     final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(12),
+        0,
+        context.rsi(12),
+        context.rsi(10),
+      ),
       child: vm.filteredTotalCostList.isEmpty
           ? const Center(child: Text('지출 내역이 없습니다.'))
           : GroupedListView(
@@ -165,31 +200,47 @@ class PlaceCostScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+                    padding: EdgeInsets.fromLTRB(
+                      context.rsi(4),
+                      context.rsi(14),
+                      context.rsi(4),
+                      context.rsi(6),
+                    ),
                     child: Text(
                       value,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: cs.onSurfaceVariant,
-                      ),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: cs.onSurfaceVariant,
+                          ),
                     ),
                   ),
                 ],
               ),
               itemBuilder: (context, element) =>
-                  paymentList(context, element, state, vm),
+                  paymentList(context, element, state, vm, readOnly),
             ),
     );
   }
 
   Widget paymentList(
-    context,
+    BuildContext context,
     TotalCostModel element,
     PlaceDetailState state,
     PlaceDetailViewModel vm,
+    bool readOnly,
   ) {
     final cs = Theme.of(context).colorScheme;
+    if (readOnly) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: context.rsi(8)),
+        child: TotalCostCard(
+          category: element.category,
+          name: element.name,
+          price: element.price,
+          wcomplete: element.wcomplete,
+        ),
+      );
+    }
     return Slidable(
       closeOnScroll: true,
       startActionPane: element.category == 'w'
@@ -201,7 +252,7 @@ class PlaceCostScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(10),
                   backgroundColor: element.wcomplete == 1
                       ? (cs.primaryContainer)
-                      : (Colors.green[600] ?? Colors.green),
+                      : cs.tertiary,
                   icon: element.wcomplete == 1
                       ? Icons.autorenew_outlined
                       : Icons.check_circle,
@@ -209,15 +260,15 @@ class PlaceCostScreen extends ConsumerWidget {
                   onPressed: (slidableCtx) => vm
                       .updateWComplete(element.wcomplete, element.id)
                       .then((_) {
-                        if (!slidableCtx.mounted) return;
-                        showDialog<void>(
-                          context: slidableCtx,
-                          builder: (_) => saveDialog(
-                            text:
-                                '${element.wcomplete == 1 ? '미지급으로' : '완료로'} 변경되었습니다.',
-                          ),
-                        );
-                      }),
+                    if (!slidableCtx.mounted) return;
+                    showDialog<void>(
+                      context: slidableCtx,
+                      builder: (_) => saveDialog(
+                        text:
+                            '${element.wcomplete == 1 ? '미지급으로' : '완료로'} 변경되었습니다.',
+                      ),
+                    );
+                  }),
                 ),
               ],
             )
@@ -228,20 +279,46 @@ class PlaceCostScreen extends ConsumerWidget {
           SlidableAction(
             autoClose: true,
             borderRadius: BorderRadius.circular(10),
-            backgroundColor: Colors.red,
+            backgroundColor: cs.error,
             icon: Icons.delete,
             label: '삭제',
-            onPressed: (slidableCtx) => showDialog<void>(
-              context: slidableCtx,
-              builder: (dialogCtx) => deleteDialog(
-                onPressed: () => vm
-                    .deleteCost(element.category, element.id)
-                    .then((value) {
-                  FetchData.fetchAllData();
-                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-                }),
-              ),
-            ),
+            onPressed: (slidableCtx) async {
+              if (element.category == 'w') {
+                final pwdid = await vm.placeWorkDayPwdidForWorkCost(element);
+                if (!slidableCtx.mounted) return;
+                final choice = await showWorkCostDeleteDialog(
+                  slidableCtx,
+                  placeName: element.pname,
+                  workerName: element.name,
+                  dateLabel: element.getDay,
+                  hasLinkedWorkDay: pwdid != null,
+                  workrole: element.workrole,
+                );
+                if (choice == null ||
+                    choice == WorkCostDeleteChoice.cancel ||
+                    !slidableCtx.mounted) {
+                  return;
+                }
+                await vm.deleteWorkCostLinked(
+                  wid: element.id,
+                  pwdid: choice == WorkCostDeleteChoice.costAndWorkDay
+                      ? pwdid
+                      : null,
+                );
+                await FetchData.fetchAllData();
+                return;
+              }
+              await showDialog<void>(
+                context: slidableCtx,
+                builder: (dialogCtx) => deleteDialog(
+                  onPressed: () =>
+                      vm.deleteCost(element.category, element.id).then((_) {
+                    FetchData.fetchAllData();
+                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                  }),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -262,12 +339,12 @@ class PlaceCostScreen extends ConsumerWidget {
               );
             },
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.only(bottom: context.rsi(8)),
               child: TotalCostCard(
-              category: element.category,
-              name: element.name,
-              price: element.price,
-              wcomplete: element.wcomplete,
+                category: element.category,
+                name: element.name,
+                price: element.price,
+                wcomplete: element.wcomplete,
               ),
             ),
           );
@@ -278,119 +355,131 @@ class PlaceCostScreen extends ConsumerWidget {
 
   Dialog editCostDialog(
     TotalCostModel element,
-    context,
+    BuildContext context,
     PlaceDetailState state,
     PlaceDetailViewModel vm,
   ) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Dialog(
       child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: const Color.fromARGB(255, 243, 243, 243),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 15),
-                child: Text(
-                  '수정',
-                  style: bigStyle,
-                ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(context.rsi(10)),
+          color: cs.surfaceContainerHigh,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: context.rsi(15)),
+              child: Text(
+                '수정',
+                style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w500),
               ),
-              TextButton.icon(
-                onPressed: () async {
-                  final picked = await showDatePickerDialog(
-                        context: context,
-                        minDate: DateTime(2000),
-                        maxDate: DateTime(2099),
-                      ) ?? state.dialogDateTime;
-                  vm.setDialogDateTime(picked);
-                },
-                icon: const Icon(
-                  Icons.date_range_outlined,
-                  color: Color.fromARGB(255, 117, 154, 193),
-                ),
-                label: Text(
-                  formatDateTimeWeekDayToString(state.dialogDateTime),
-                  style: smalldateStyle,
-                ),
+            ),
+            TextButton.icon(
+              onPressed: () async {
+                final picked = await showDatePickerDialog(
+                      context: context,
+                      minDate: DateTime(2000),
+                      maxDate: DateTime(2099),
+                    ) ??
+                    state.dialogDateTime;
+                vm.setDialogDateTime(picked);
+              },
+              icon: Icon(
+                Icons.date_range_outlined,
+                color: Theme.of(context).colorScheme.primary,
               ),
-              Visibility(
-                visible: element.category == 'w' ? false : true,
-                child: SizedBox(
-                  height: 60,
-                  width: 230,
-                  child: DropdownSearch(
-                      items: categoryList,
-                      onChanged: (value) =>
-                          vm.dropDownCategoryChangeAction(value!),
-                      selectedItem: element.category,
-                      dropdownDecoratorProps: DropDownDecoratorProps(
-                        dropdownSearchDecoration: InputDecoration(
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                ),
+              label: Text(
+                formatDateTimeWeekDayToString(state.dialogDateTime),
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 10, bottom: 3),
-                child: AddTextField(
-                  tController: vm.mNameController,
-                  labelText: '항목',
-                  isPrice: false,
-                  height: 60,
-                  keyboardType: TextInputType.text,
-                  readOnly: element.category == 'w' ? true : false,
-                  onChanged: (value) {},
-                ),
-              ),
-              AddTextField(
-                tController: vm.mPriceController,
-                labelText: '금액',
-                isPrice: true,
+            ),
+            Visibility(
+              visible: element.category == 'w' ? false : true,
+              child: SizedBox(
                 height: 60,
-                keyboardType: TextInputType.number,
-                readOnly: false,
+                width: 230,
+                child: DropdownSearch(
+                  items: categoryList,
+                  onChanged: (value) => vm.dropDownCategoryChangeAction(value!),
+                  selectedItem: element.category,
+                  dropdownDecoratorProps: DropDownDecoratorProps(
+                    dropdownSearchDecoration: InputDecoration(
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(
+                top: context.rsi(10),
+                bottom: context.rsi(3),
+              ),
+              child: AddTextField(
+                tController: vm.mNameController,
+                labelText: '항목',
+                isPrice: false,
+                height: 60,
+                keyboardType: TextInputType.text,
+                readOnly: element.category == 'w' ? true : false,
                 onChanged: (value) {},
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Text(
-                  state.alertText,
-                  style: const TextStyle(color: Colors.red),
+            ),
+            AddTextField(
+              tController: vm.mPriceController,
+              labelText: '금액',
+              isPrice: true,
+              height: 60,
+              keyboardType: TextInputType.number,
+              readOnly: false,
+              onChanged: (value) {},
+            ),
+            Padding(
+              padding: EdgeInsets.only(top: context.rsi(5)),
+              child: Text(
+                state.alertText,
+                style: tt.bodySmall?.copyWith(
+                  color: cs.error,
                 ),
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text(
-                      '취소',
-                      style: TextStyle(color: Colors.red),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(
+                    '취소',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => vm
-                        .updateCost(
-                          element.category,
-                          element.id,
-                          state.dialogDateTime.toString(),
-                        )
-                        .then((value) => FetchData.fetchAllData()),
-                    child: const Text('수정'),
-                  ),
-                ],
-              )
-            ],
-          ),
+                ),
+                TextButton(
+                  onPressed: () => vm
+                      .updateCost(
+                        element.category,
+                        element.id,
+                        state.dialogDateTime.toString(),
+                      )
+                      .then((value) {
+                    FetchData.fetchAllData();
+                    if (context.mounted) Navigator.of(context).pop();
+                  }),
+                  child: const Text('수정'),
+                ),
+              ],
+            )
+          ],
         ),
+      ),
     );
   }
 }

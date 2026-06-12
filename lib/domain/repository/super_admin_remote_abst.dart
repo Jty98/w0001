@@ -69,7 +69,8 @@ abstract class SuperAdminRemoteRepository {
   Future<List<MaterialCostRead>> materialCostsList();
   Future<MaterialCostRead> materialCostGet(int mid);
   Future<MaterialCostRead> materialCostCreate(Map<String, dynamic> body);
-  Future<MaterialCostRead> materialCostPatch(int mid, Map<String, dynamic> body);
+  Future<MaterialCostRead> materialCostPatch(
+      int mid, Map<String, dynamic> body);
   Future<void> materialCostDelete(int mid);
 
   // Place revenues
@@ -133,4 +134,24 @@ abstract class SuperAdminRemoteRepository {
   Future<PlacePhotoRead> placePhotoCreate(Map<String, dynamic> body);
   Future<PlacePhotoRead> placePhotoPatch(int phid, Map<String, dynamic> body);
   Future<void> placePhotoDelete(int phid);
+
+  // Worker management (super_admin)
+  Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid);
+  Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
+    required int workerHid,
+    required String noteType,
+    required String memo,
+    int? rating,
+  });
+  Future<List<WorkerMgmtConflictRead>> workerMgmtConflictsList({
+    bool activeOnly = true,
+  });
+  Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
+    required int workerAHid,
+    required int workerBHid,
+    int severity = 2,
+    String note = '',
+    bool active = true,
+  });
+  Future<void> workerMgmtConflictDelete(int pairId);
 }

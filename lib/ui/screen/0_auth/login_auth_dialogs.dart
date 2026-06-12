@@ -35,9 +35,7 @@ Future<bool> showLoginAccountRestrictedDialogIfApplicable(
     httpStatusCode: e.response?.statusCode,
     responseData: e.response?.data,
   );
-  final text = body.trim().isNotEmpty
-      ? body
-      : dioAuthRelatedUserMessage(e);
+  final text = body.trim().isNotEmpty ? body : dioAuthRelatedUserMessage(e);
 
   final rejected = d.code == AuthApiErrorCodes.accountRejected;
 
@@ -47,13 +45,16 @@ Future<bool> showLoginAccountRestrictedDialogIfApplicable(
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
       return AuthDialogChrome(
-        icon: rejected ? Icons.cancel_outlined : Icons.pause_circle_outline_rounded,
+        icon: rejected
+            ? Icons.cancel_outlined
+            : Icons.pause_circle_outline_rounded,
         iconForegroundColor: rejected ? cs.error : cs.tertiary,
         iconBackgroundColor: rejected
             ? cs.errorContainer.withValues(alpha: 0.55)
             : cs.tertiaryContainer.withValues(alpha: 0.52),
         title: Text(rejected ? '가입 거절' : '계정 정지'),
-        content: SingleChildScrollView(child: Text(text, style: _bodyStyle(ctx))),
+        content:
+            SingleChildScrollView(child: Text(text, style: _bodyStyle(ctx))),
         actions: AuthDialogActionsSingle(
           label: '확인',
           onPressed: () => Navigator.of(ctx).pop(),

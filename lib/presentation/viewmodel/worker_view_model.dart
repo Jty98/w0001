@@ -56,6 +56,7 @@ class WorkCostData {
     required this.filteredList,
     this.hdailyWage = 0,
     this.hdefaultRole = '',
+    this.human,
   });
 
   final String hname;
@@ -66,10 +67,15 @@ class WorkCostData {
   final int pcomplete;
   final int incompletePrice;
   final List<TotalWorkCostModel> filteredList;
+
   /// `workerInfoList`에서 병합한 일당(사람 관리와 동일 출처).
   final int hdailyWage;
+
   /// `workerInfoList`에서 병합한 기본 역할.
   final String hdefaultRole;
+
+  /// 스킬 표시용 — [workerInfoList]와 매칭된 인력.
+  final HumanModel? human;
 }
 
 class WorkerState {
@@ -88,6 +94,7 @@ class WorkerState {
     required this.totalWorkCostList,
     required this.filteredTotalWorkCostList,
     required this.checkboxStates,
+    required this.expandedWorkerKeys,
   });
 
   final DateTimeRange dateTimeRange;
@@ -96,6 +103,7 @@ class WorkerState {
   final List<HumanModel> workerInfoList;
   final List<HumanModel> filteredWorkerList;
   final bool isEditing;
+
   /// 사람 관리 폼: 역할 칩 선택(`직접입력` 포함). null이면 아직 선택 없음.
   final String? humanFormWorkRole;
   final TaxState taxState;
@@ -105,6 +113,9 @@ class WorkerState {
   final List<TotalWorkCostModel> totalWorkCostList;
   final List<TotalWorkCostModel> filteredTotalWorkCostList;
   final Map<int, CheckboxData> checkboxStates;
+
+  /// 전체·미지급 필터별 펼침 상태(`getUniqueHuman` 키).
+  final Map<CompleteState, Set<String>> expandedWorkerKeys;
 
   bool get isTaxApply => taxState == TaxState.taxOn;
   bool get isIncomplete => completeState == CompleteState.incomplete;
@@ -127,12 +138,16 @@ class WorkerState {
       isEditing: false,
       humanFormWorkRole: null,
       taxState: TaxState.taxOff,
-      dayState: DayTpye.whole,
+      dayState: DayTpye.month,
       completeState: CompleteState.whole,
       selectedIndex: -1,
       totalWorkCostList: const [],
       filteredTotalWorkCostList: const [],
       checkboxStates: const {},
+      expandedWorkerKeys: {
+        CompleteState.whole: {},
+        CompleteState.incomplete: {},
+      },
     );
   }
 
@@ -152,6 +167,7 @@ class WorkerState {
     List<TotalWorkCostModel>? totalWorkCostList,
     List<TotalWorkCostModel>? filteredTotalWorkCostList,
     Map<int, CheckboxData>? checkboxStates,
+    Map<CompleteState, Set<String>>? expandedWorkerKeys,
   }) {
     return WorkerState(
       dateTimeRange: dateTimeRange ?? this.dateTimeRange,
@@ -171,6 +187,15 @@ class WorkerState {
       filteredTotalWorkCostList:
           filteredTotalWorkCostList ?? this.filteredTotalWorkCostList,
       checkboxStates: checkboxStates ?? this.checkboxStates,
+      expandedWorkerKeys: expandedWorkerKeys != null
+          ? {
+              for (final s in CompleteState.values)
+                s: Set<String>.from(expandedWorkerKeys[s] ?? {}),
+            }
+          : {
+              for (final s in CompleteState.values)
+                s: Set<String>.from(this.expandedWorkerKeys[s] ?? {}),
+            },
     );
   }
 }
@@ -180,7 +205,8 @@ final workerProvider =
 
 class WorkerViewModel extends Notifier<WorkerState> {
   late final HumanUseCase _humanUseCase = ref.read(humanUseCaseProvider);
-  late final WorkCostUseCase _workCostUseCase = ref.read(workCostUseCaseProvider);
+  late final WorkCostUseCase _workCostUseCase =
+      ref.read(workCostUseCaseProvider);
 
   late final TextEditingController workerNameController =
       TextEditingController();
@@ -198,7 +224,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       TextEditingController();
 
   final List<BuildContext> slidableContexts = [];
-  final Map<int, ExpansionTileController> expansionTileControllerMap = {};
+  final Map<String, ExpansionTileController> expansionTileControllerMap = {};
 
   bool _initialized = false;
 
@@ -301,17 +327,23 @@ class WorkerViewModel extends Notifier<WorkerState> {
     return list.where((e) => e.hname.toLowerCase().contains(q)).toList();
   }
 
-  List<String> getUniqueHuman() {
-    final tempList = state.isIncomplete
-        ? state.filteredTotalWorkCostList
-            .where((e) => e.wcomplete == 0)
-            .toList()
-        : state.filteredTotalWorkCostList;
-    return tempList
+  /// 검색·기간 필터가 적용된 목록에서 전체/미지급 행만 고른다.
+  List<TotalWorkCostModel> workCostRowsFor(CompleteState filter) {
+    final base = state.filteredTotalWorkCostList;
+    if (filter == CompleteState.incomplete) {
+      return base.where((e) => e.wcomplete == 0).toList();
+    }
+    return base;
+  }
+
+  List<String> getUniqueHumanFor(CompleteState filter) {
+    return workCostRowsFor(filter)
         .map((m) => 'name:${m.hname}#number:${m.hnumber}')
         .toSet()
         .toList();
   }
+
+  List<String> getUniqueHuman() => getUniqueHumanFor(state.completeState);
 
   Future<DateTimeRange?> _pickRangeWithScrollableCalendar(
     BuildContext context,
@@ -407,6 +439,34 @@ class WorkerViewModel extends Notifier<WorkerState> {
     await FetchData.fetchAllData();
   }
 
+  Future<void> updateWorkCostPrice(int wid, int newPrice) async {
+    await _workCostUseCase.updateWorkCostPrice(wid, newPrice);
+    await FetchData.fetchAllData();
+  }
+
+  Future<void> deleteWorkCost(int wid) async {
+    await _workCostUseCase.deleteWorkCost(wid);
+    await FetchData.fetchAllData();
+  }
+
+  Future<int?> placeWorkDayPwdidFor(TotalWorkCostModel item) {
+    final dateKey =
+        item.date.length >= 10 ? item.date.substring(0, 10) : item.date;
+    return _workCostUseCase.findPlaceWorkDayPwdid(
+      pid: item.wpid,
+      hid: item.hid,
+      dateKey: dateKey,
+    );
+  }
+
+  Future<void> deleteWorkCostLinked({
+    required int wid,
+    int? pwdid,
+  }) async {
+    await _workCostUseCase.deleteWorkCostLinked(wid: wid, pwdid: pwdid);
+    await FetchData.fetchAllData();
+  }
+
   Future<void> changeDateTime(BuildContext context) async {
     final picked = await showDatePickerDialog(
       context: context,
@@ -440,24 +500,29 @@ class WorkerViewModel extends Notifier<WorkerState> {
     List<bool> nextToggle;
     DateTimeRange nextRange = state.dateTimeRange;
 
+    DayTpye nextDayState = state.dayState;
     if (index == 0) {
       nextToggle = [true, false, false];
+      nextDayState = DayTpye.range;
       final picked = await _pickRangeWithScrollableCalendar(context);
       nextRange = picked ?? nextRange;
     } else if (index == 1) {
       nextToggle = [false, true, false];
+      nextDayState = DayTpye.whole;
       nextRange = DateTimeRange(
         start: DateTime(2000),
         end: DateTime(2099, 12, 31),
       );
     } else {
       nextToggle = [false, false, true];
+      nextDayState = DayTpye.month;
       nextRange = getMonthDateRange(DateTime.now());
     }
 
     state = state.copyWith(
       toggleState: nextToggle,
       dateTimeRange: nextRange,
+      dayState: nextDayState,
       checkboxStates: {},
     );
     await fetchWorkCost();
@@ -482,6 +547,12 @@ class WorkerViewModel extends Notifier<WorkerState> {
       workerInfoList: list,
       filteredWorkerList: list,
     );
+  }
+
+  /// 인력 관리 화면 진입 시 검색 초기화 + 목록 갱신.
+  Future<void> prepareHumanManagementScreen() async {
+    searchWorkerDetailTextContoller.clear();
+    await fetchWorkerInfo();
   }
 
   void searchWokerInfo(String value) {
@@ -556,6 +627,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     }
 
     final worker = HumanModel(
+      uid: null,
       hname: hname,
       hnumber: hnumber,
       hdailyWage: hdailyWage,
@@ -642,6 +714,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
 
     final updated = HumanModel(
       hid: state.filteredWorkerList[index].hid,
+      uid: state.filteredWorkerList[index].uid,
       hname: hname,
       hnumber: hnumber,
       hdailyWage: hdailyWage,
@@ -791,7 +864,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
 
     final appDocDir = await getApplicationDocumentsDirectory();
     final excelFilePath =
-        '${appDocDir.path}/인건비 총계 (${formatDateTimeRangeToString(r)}).xlsx';
+        '${appDocDir.path}/인건비 총계 (${formatDateTimeRangeToString(r, periodType: state.dayState)}).xlsx';
 
     final bytes = excel.encode();
     final excelFile = File(excelFilePath);
@@ -800,7 +873,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     try {
       final result = await Share.shareXFiles(
         [XFile(excelFile.path)],
-        subject: '인건비 총계 (${formatDateTimeRangeToString(r)})',
+        subject: '인건비 총계 (${formatDateTimeRangeToString(r, periodType: state.dayState)})',
       );
       if (result.status == ShareResultStatus.success && context.mounted) {
         await showDialog<void>(
@@ -812,14 +885,16 @@ class WorkerViewModel extends Notifier<WorkerState> {
       if (context.mounted) {
         await showDialog<void>(
           context: context,
-          builder: (_) =>
-              saveDialog(text: '공유에 실패했습니다.\n다시 시도해주세요.'),
+          builder: (_) => saveDialog(text: '공유에 실패했습니다.\n다시 시도해주세요.'),
         );
       }
     }
   }
 
-  WorkCostData processWorkCostData(String uniqueHuman) {
+  WorkCostData processWorkCostDataFor(
+    CompleteState filter,
+    String uniqueHuman,
+  ) {
     final splitHuman = uniqueHuman.split('#');
     final hname = splitHuman[0].split(':')[1];
     final hnumber = splitHuman[1].split(':')[1];
@@ -836,11 +911,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
       return null;
     }
 
-    final tempList = state.isIncomplete
-        ? state.totalWorkCostList.where((e) => e.wcomplete == 0).toList()
-        : state.totalWorkCostList;
-
-    final filteredList = tempList
+    final filteredList = workCostRowsFor(filter)
         .where(
           (e) => 'name:${e.hname}#number:${e.hnumber}' == uniqueHuman,
         )
@@ -859,6 +930,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
         filteredList: [],
         hdailyWage: human?.hdailyWage ?? 0,
         hdefaultRole: human?.hdefaultRole ?? '',
+        human: human,
       );
     }
 
@@ -881,8 +953,12 @@ class WorkerViewModel extends Notifier<WorkerState> {
       filteredList: filteredList,
       hdailyWage: human?.hdailyWage ?? 0,
       hdefaultRole: human?.hdefaultRole ?? '',
+      human: human,
     );
   }
+
+  WorkCostData processWorkCostData(String uniqueHuman) =>
+      processWorkCostDataFor(state.completeState, uniqueHuman);
 
   void registerSlidable(BuildContext context) {
     if (!slidableContexts.contains(context)) {
@@ -890,8 +966,46 @@ class WorkerViewModel extends Notifier<WorkerState> {
     }
   }
 
-  void registerExpantionTile(int hid, ExpansionTileController controller) {
-    expansionTileControllerMap[hid] = controller;
+  String expansionControllerKey(CompleteState filter, String uniqueHuman) =>
+      '${filter.name}|$uniqueHuman';
+
+  bool isWorkerExpandedFor(CompleteState filter, String uniqueHuman) {
+    final set = state.expandedWorkerKeys[filter];
+    return set?.contains(uniqueHuman) ?? false;
+  }
+
+  bool isWorkerExpanded(String uniqueHuman) =>
+      isWorkerExpandedFor(state.completeState, uniqueHuman);
+
+  void setWorkerExpandedFor(
+    CompleteState filter,
+    String uniqueHuman,
+    bool expanded,
+  ) {
+    final next = {
+      for (final s in CompleteState.values)
+        s: Set<String>.from(state.expandedWorkerKeys[s] ?? {}),
+    };
+    final set = next[filter]!;
+    if (expanded) {
+      set.add(uniqueHuman);
+    } else {
+      set.remove(uniqueHuman);
+    }
+    next[filter] = set;
+    state = state.copyWith(expandedWorkerKeys: next);
+  }
+
+  void setWorkerExpanded(String uniqueHuman, bool expanded) =>
+      setWorkerExpandedFor(state.completeState, uniqueHuman, expanded);
+
+  void registerExpansionTile({
+    required CompleteState completeState,
+    required String uniqueHuman,
+    required ExpansionTileController controller,
+  }) {
+    expansionTileControllerMap[
+        expansionControllerKey(completeState, uniqueHuman)] = controller;
   }
 
   void closeAllSliders() {
@@ -909,5 +1023,11 @@ class WorkerViewModel extends Notifier<WorkerState> {
         c.collapse();
       } catch (_) {}
     }
+    state = state.copyWith(
+      expandedWorkerKeys: {
+        CompleteState.whole: {},
+        CompleteState.incomplete: {},
+      },
+    );
   }
 }

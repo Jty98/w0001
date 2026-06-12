@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class DashboardLegendItem {
   final String label;
@@ -13,34 +14,38 @@ class DashboardLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: context.rsi(8),
+      runSpacing: context.rsi(8),
       children: items.map((e) {
         return DecoratedBox(
           decoration: BoxDecoration(
             color: e.color.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
+            border:
+                Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: context.rsi(10),
+              vertical: context.rsi(6),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: context.rs(8),
+                  height: context.rs(8),
                   decoration: BoxDecoration(
                     color: e.color,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: context.rsi(8)),
                 Text(
                   e.label,
-                  style: TextStyle(
-                    fontSize: 11,
+                  style: tt.labelSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: cs.onSurface,
                     height: 1.0,
@@ -54,4 +59,3 @@ class DashboardLegend extends StatelessWidget {
     );
   }
 }
-

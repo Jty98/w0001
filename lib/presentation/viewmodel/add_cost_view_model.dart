@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/data/datasources/remote/http_client.dart';
+import 'package:w0001/util/auth_dio_user_message.dart';
 import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
@@ -9,12 +11,30 @@ import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
     show materialCostUseCaseProvider, workCostUseCaseProvider;
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
     show humanUseCaseProvider;
+import 'package:w0001/domain/process_schedule/process_schedule_editor.dart';
+import 'package:w0001/presentation/viewmodel/place_process_schedule_notifier.dart';
+import 'package:w0001/ui/screen/2_add/work_role_suggestions.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
-import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/ui/screen/2_add/add_cost_date_picker_dialog.dart';
 import 'package:w0001/util/fetch_data.dart';
+import 'package:w0001/util/funtions.dart';
+
+/// 금액 추가 탭에서 현장이 선택된 상태의 **시스템 뒤로가기** — 선택 해제 후 `true`.
+///
+/// 탭 전환에는 호출하지 않는다. ([GoRoute.onExit]에 두면 다른 탭으로 나갈 때
+/// 현장만 초기화되고 쉘 인덱스와 탭바가 어긋날 수 있음.)
+///
+/// [go_router] 쉘 루트에서는 [PopScope]만으로 Android 뒤로가기가 앱 종료로 이어질 수
+/// 있어 [BackButtonListener]와 함께 사용한다.
+bool consumeAddCostBackNavigation() {
+  final c = rootProviderContainer;
+  if (c == null) return false;
+  if (c.read(addCostProvider).selectedPlace == null) return false;
+  c.read(addCostProvider.notifier).clearSelectedPlace();
+  return true;
+}
 
 class AddCostState {
   const AddCostState({
@@ -28,7 +48,9 @@ class AddCostState {
     required this.selectedWorkers,
     required this.placeRecentWorkers,
     required this.selectedCategory,
-    this.selectedWorkRole,
+    required this.isSaving,
+    required this.processTasksOnSelectDay,
+    required this.processTasksLoading,
   });
 
   final List<MaterialCostModel> materialCostList;
@@ -36,18 +58,28 @@ class AddCostState {
   final DateTime selectDay;
   final String alertText;
   final PlaceModel? selectedPlace;
+
   /// 금액 추가 화면 현장 목록 분류.
   final CostPlacePickerFilter costPlacePickerFilter;
+
   /// 하위 호환(기존 코드). 현재 UI에서는 `selectedWorkers`가 메인이며,
   /// 이 값은 마지막 선택(또는 1명 선택 시) 용도로 유지한다.
   final HumanModel? selectedWorker;
+
   /// 드롭다운 선택 상태(현재 날짜·현장의 미저장 목록과 동기화).
   final List<HumanModel> selectedWorkers;
+
   /// 선택된 현장에서 예전에 투입했던 인원(최근 순, DB).
   final List<HumanModel> placeRecentWorkers;
   final String? selectedCategory;
-  /// 인건비 추가 시 선택한 역할 프리셋(또는 '직접입력').
-  final String? selectedWorkRole;
+
+  /// 선택 현장·날짜의 공정표에 잡힌 공정 이름.
+  final List<String> processTasksOnSelectDay;
+
+  final bool processTasksLoading;
+
+  /// 저장 중 여부 (중복 저장 방지용)
+  final bool isSaving;
 
   bool get isAllEmpty => workCostList.isEmpty && materialCostList.isEmpty;
 
@@ -65,7 +97,9 @@ class AddCostState {
         selectedWorkers: const [],
         placeRecentWorkers: const [],
         selectedCategory: null,
-        selectedWorkRole: null,
+        processTasksOnSelectDay: const [],
+        processTasksLoading: false,
+        isSaving: false,
       );
 
   AddCostState copyWith({
@@ -84,8 +118,9 @@ class AddCostState {
     bool clearPlaceRecentWorkers = false,
     String? selectedCategory,
     bool clearSelectedCategory = false,
-    String? selectedWorkRole,
-    bool clearSelectedWorkRole = false,
+    List<String>? processTasksOnSelectDay,
+    bool? processTasksLoading,
+    bool? isSaving,
   }) {
     return AddCostState(
       materialCostList: materialCostList ?? this.materialCostList,
@@ -107,9 +142,10 @@ class AddCostState {
       selectedCategory: clearSelectedCategory
           ? null
           : (selectedCategory ?? this.selectedCategory),
-      selectedWorkRole: clearSelectedWorkRole
-          ? null
-          : (selectedWorkRole ?? this.selectedWorkRole),
+      processTasksOnSelectDay:
+          processTasksOnSelectDay ?? this.processTasksOnSelectDay,
+      processTasksLoading: processTasksLoading ?? this.processTasksLoading,
+      isSaving: isSaving ?? this.isSaving,
     );
   }
 }
@@ -125,15 +161,11 @@ class AddCostViewModel extends Notifier<AddCostState> {
   final TextEditingController hNameController = TextEditingController();
   final TextEditingController hNumController = TextEditingController();
   final TextEditingController hMemoController = TextEditingController();
-  final TextEditingController hDailyWageController =
-      TextEditingController();
+  final TextEditingController hDailyWageController = TextEditingController();
   final TextEditingController mNameController = TextEditingController();
   final FocusNode mNameFocus = FocusNode();
   final TextEditingController mPriceController = TextEditingController();
   final FocusNode mPriceFocus = FocusNode();
-  final TextEditingController workRoleCustomController =
-      TextEditingController();
-
   @override
   AddCostState build() {
     ref.onDispose(() {
@@ -145,7 +177,6 @@ class AddCostViewModel extends Notifier<AddCostState> {
       mNameFocus.dispose();
       mPriceController.dispose();
       mPriceFocus.dispose();
-      workRoleCustomController.dispose();
     });
     return AddCostState.initial();
   }
@@ -192,6 +223,7 @@ class AddCostViewModel extends Notifier<AddCostState> {
     state = state.copyWith(costPlacePickerFilter: filter);
   }
 
+  /// 현장 선택 화면으로 되돌릴 때(뒤로가기·헤더 버튼).
   void clearSelectedPlace() {
     state = state.copyWith(
       clearSelectedPlace: true,
@@ -200,6 +232,8 @@ class AddCostViewModel extends Notifier<AddCostState> {
       materialCostList: const [],
       clearSelectedWorkers: true,
       clearSelectedWorker: true,
+      processTasksOnSelectDay: const [],
+      processTasksLoading: false,
     );
   }
 
@@ -208,7 +242,8 @@ class AddCostViewModel extends Notifier<AddCostState> {
   }
 
   void clearSelectedWorkers() {
-    state = state.copyWith(clearSelectedWorkers: true, clearSelectedWorker: true);
+    state =
+        state.copyWith(clearSelectedWorkers: true, clearSelectedWorker: true);
   }
 
   void placeChangeAction(BuildContext context, PlaceModel value) {
@@ -218,20 +253,60 @@ class AddCostViewModel extends Notifier<AddCostState> {
       workCostList: const [],
       clearSelectedWorkers: true,
       clearSelectedWorker: true,
-      clearSelectedWorkRole: true,
     );
-    workRoleCustomController.clear();
     try {
       FocusScope.of(context).unfocus();
     } catch (_) {}
     Future<void>.microtask(() async {
       await refreshPlaceRecentWorkers();
+      await refreshProcessTasksOnSelectedDay();
     });
   }
 
   void workerChangeAction(HumanModel value) {
     state = state.copyWith(selectedWorker: value);
-    applyDefaultRoleFromPersistedString(value.hdefaultRole);
+  }
+
+  /// 선택 현장·날짜의 공정표에서 해당 일 공정 이름을 불러옵니다.
+  Future<void> refreshProcessTasksOnSelectedDay() async {
+    final place = state.selectedPlace;
+    if (place == null || place.pid == null) {
+      state = state.copyWith(
+        processTasksOnSelectDay: const [],
+        processTasksLoading: false,
+      );
+      return;
+    }
+    state = state.copyWith(processTasksLoading: true);
+    final pid = place.pid!;
+    try {
+      final repo = ref.read(processScheduleRepositoryProvider);
+      final start =
+          PlaceProcessScheduleNotifier.gridStartFromPlacePstart(place.pstart);
+      final dc = PlaceProcessScheduleNotifier.defaultDayCountFromPlacePeriod(
+        place.pstart,
+        place.pend,
+      );
+      final raw = await repo.fetchForPlace(
+        placeId: pid,
+        gridStartFallback: start,
+        dayCount: dc,
+      );
+      final aligned = ProcessScheduleEditor.remapToNewGrid(raw, start, dc);
+      final names = processTaskNamesForPlaceDay(
+        schedule: aligned,
+        day: state.selectDay,
+      );
+      state = state.copyWith(
+        processTasksOnSelectDay: names,
+        processTasksLoading: false,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        processTasksOnSelectDay: const [],
+        processTasksLoading: false,
+      );
+    }
   }
 
   /// 드롭다운 선택이 바뀔 때마다, 오늘·현재 현장의 미저장 인건비 행을 통째로 맞춘다.
@@ -241,12 +316,10 @@ class AddCostViewModel extends Notifier<AddCostState> {
     final dayKey = _dateKey(state.selectDay);
 
     final list = List<WorkCostModel>.from(state.workCostList);
-    final rest = list
-        .where((w) {
-          final sameDay = _dateStringMatchesKey(w.wdate, dayKey);
-          return !(w.wpid == pid && sameDay && w.whid != null);
-        })
-        .toList();
+    final rest = list.where((w) {
+      final sameDay = _dateStringMatchesKey(w.wdate, dayKey);
+      return !(w.wpid == pid && sameDay && w.whid != null);
+    }).toList();
 
     final newRows = <WorkCostModel>[];
     // 드롭다운 목록 자체는 중복 선택이 없어야 하지만, 안전하게 hid 기준으로 한번 더 정규화한다.
@@ -265,9 +338,57 @@ class AddCostViewModel extends Notifier<AddCostState> {
       selectedWorkers: byHid.values.toList(),
       selectedWorker: byHid.isEmpty ? null : byHid.values.last,
       clearSelectedWorker: byHid.isEmpty,
-      clearSelectedWorkRole: true,
     );
-    workRoleCustomController.clear();
+  }
+
+  Future<void> mergePendingFromPlaceWorkforceRegister({
+    required PlaceModel place,
+    required DateTime workDate,
+    required List<({HumanModel human, int wprice, String wrole})> items,
+  }) async {
+    final pid = place.pid;
+    if (pid == null || items.isEmpty) return;
+    final dayKey = _dateKey(workDate);
+    final dateStr = formatDateTimeToIsoDate(_dateOnly(workDate));
+    final list = List<WorkCostModel>.from(state.workCostList);
+
+    for (final it in items) {
+      final h = it.human;
+      if (h.hid == null) continue;
+      try {
+        await _humanUseCase.rememberPlaceWorker(pid, h.hid!);
+      } catch (_) {}
+      final idx = list.indexWhere(
+        (w) =>
+            w.wpid == pid &&
+            w.whid == h.hid &&
+            _dateStringMatchesKey(w.wdate, dayKey),
+      );
+      final row = WorkCostModel(
+        wcomplete: 0,
+        wdate: dateStr,
+        hname: h.hname,
+        wprice: it.wprice,
+        wpid: pid,
+        whid: h.hid,
+        pname: place.pname,
+        wrole: it.wrole,
+      );
+      if (idx >= 0) {
+        final old = list[idx];
+        list[idx] = row.copyWith(wid: old.wid);
+      } else {
+        list.add(row);
+      }
+    }
+
+    state = state.copyWith(
+      workCostList: list,
+      selectDay: _dateOnly(workDate),
+      selectedPlace: place,
+    );
+    await _rebuildSelectedWorkersFromGrid();
+    await refreshPlaceRecentWorkers();
   }
 
   WorkCostModel _pendingWorkCostForHuman(HumanModel w) {
@@ -279,14 +400,15 @@ class AddCostViewModel extends Notifier<AddCostState> {
       wpid: state.selectedPlace!.pid!,
       whid: w.hid,
       pname: state.selectedPlace!.pname,
-      wrole: w.hdefaultRole.trim(),
+      wrole: defaultWorkRoleForHuman(w),
     );
   }
 
   Future<void> _rebuildSelectedWorkersFromGrid() async {
     final pid = state.selectedPlace?.pid;
     if (pid == null) {
-      state = state.copyWith(clearSelectedWorkers: true, clearSelectedWorker: true);
+      state =
+          state.copyWith(clearSelectedWorkers: true, clearSelectedWorker: true);
       return;
     }
     final dayKey = _dateKey(state.selectDay);
@@ -300,7 +422,10 @@ class AddCostViewModel extends Notifier<AddCostState> {
       }
     }
     final all = await _humanUseCase.getAllWorkers();
-    final byHid = {for (final h in all) if (h.hid != null) h.hid!: h};
+    final byHid = {
+      for (final h in all)
+        if (h.hid != null) h.hid!: h
+    };
     final workers = <HumanModel>[];
     for (final id in orderedHids) {
       final h = byHid[id];
@@ -321,7 +446,10 @@ class AddCostViewModel extends Notifier<AddCostState> {
     }
     final hids = await _humanUseCase.getPlaceWorkerRecentHids(pid);
     final all = await _humanUseCase.getAllWorkers();
-    final byHid = {for (final h in all) if (h.hid != null) h.hid!: h};
+    final byHid = {
+      for (final h in all)
+        if (h.hid != null) h.hid!: h
+    };
     final list = <HumanModel>[];
     for (final id in hids) {
       final h = byHid[id];
@@ -363,39 +491,6 @@ class AddCostViewModel extends Notifier<AddCostState> {
     FocusScope.of(context).unfocus();
   }
 
-  void selectWorkRole(String role) {
-    state = state.copyWith(selectedWorkRole: role);
-    if (role != '직접입력') {
-      workRoleCustomController.clear();
-    }
-  }
-
-  /// `selectedWorkRole`이 프리셋 목록에 없으면(예: 예전 데이터·목록 변경) 직접입력 모드로 바꾸고 텍스트필드에 반영.
-  void syncNonPresetWorkRoleToCustomField() {
-    final r = state.selectedWorkRole;
-    if (r == null || r == '직접입력') return;
-    if (isWorkRoleInPresetList(r)) return;
-    workRoleCustomController.text = r;
-    state = state.copyWith(selectedWorkRole: '직접입력');
-  }
-
-  /// Human.hdefaultRole에 저장된 문자열을 인건비 탭 칩/직접입력 필드에 반영.
-  void applyDefaultRoleFromPersistedString(String persisted) {
-    final resolved = persisted.trim();
-    if (resolved.isEmpty) {
-      state = state.copyWith(clearSelectedWorkRole: true);
-      workRoleCustomController.clear();
-      return;
-    }
-    final fixed = kWorkRolePresets.where((e) => e != '직접입력').toSet();
-    if (fixed.contains(resolved)) {
-      selectWorkRole(resolved);
-      return;
-    }
-    state = state.copyWith(selectedWorkRole: '직접입력');
-    workRoleCustomController.text = resolved;
-  }
-
   void categoryChangeAction(String value) {
     state = state.copyWith(selectedCategory: value);
     mNameController.text = value;
@@ -422,9 +517,8 @@ class AddCostViewModel extends Notifier<AddCostState> {
     final hNum = hNumController.text.trim();
     final hMemo =
         hMemoController.text.isEmpty ? null : hMemoController.text.trim();
-    final wageText = hDailyWageController.text
-        .trim()
-        .replaceAll(RegExp(r'[,원\s]'), '');
+    final wageText =
+        hDailyWageController.text.trim().replaceAll(RegExp(r'[,원\s]'), '');
     final hdailyWage = int.tryParse(wageText) ?? 0;
     final workerInfoList = await _humanUseCase.getAllWorkers();
 
@@ -493,6 +587,7 @@ class AddCostViewModel extends Notifier<AddCostState> {
     final picked = await showDialog<DateTime?>(
       context: context,
       builder: (_) => AddCostDatePickerDialog(
+        place: place,
         initialRangeStart: rangeStart,
         initialRangeEnd: rangeEnd,
         initialSelectedDay: DateTime.now(),
@@ -511,12 +606,9 @@ class AddCostViewModel extends Notifier<AddCostState> {
       workCostList: prevKey == nextKey ? state.workCostList : const [],
       clearSelectedWorkers: prevKey == nextKey,
       clearSelectedWorker: prevKey != nextKey,
-      clearSelectedWorkRole: prevKey != nextKey,
     );
-    if (prevKey != nextKey) {
-      workRoleCustomController.clear();
-    }
     await _rebuildSelectedWorkersFromGrid();
+    await refreshProcessTasksOnSelectedDay();
   }
 
   void addMaterialCostList(BuildContext context) {
@@ -583,10 +675,17 @@ class AddCostViewModel extends Notifier<AddCostState> {
   }
 
   Future<void> insertCostLists(BuildContext context) async {
-    var isMaterialCostSuccess = false;
-    var isWorkCostSuccess = false;
-    final selectedPid = state.selectedPlace?.pid;
-    final dateKey = _dateKey(state.selectDay);
+    // 이미 저장 중이면 중복 실행 방지
+    if (state.isSaving) return;
+    
+    // 저장 시작
+    state = state.copyWith(isSaving: true);
+    
+    try {
+      var isMaterialCostSuccess = false;
+      var isWorkCostSuccess = false;
+      final selectedPid = state.selectedPlace?.pid;
+      final dateKey = _dateKey(state.selectDay);
 
     final materialToSave = state.materialCostList
         .where((m) => m.mdate.length >= 10
@@ -610,7 +709,8 @@ class AddCostViewModel extends Notifier<AddCostState> {
       if (hid == null) continue;
       hidCounts[hid] = (hidCounts[hid] ?? 0) + 1;
     }
-    final dupHids = hidCounts.entries.where((e) => e.value > 1).map((e) => e.key).toList();
+    final dupHids =
+        hidCounts.entries.where((e) => e.value > 1).map((e) => e.key).toList();
     if (dupHids.isNotEmpty) {
       final names = workToSave
           .where((e) => e.whid != null && dupHids.contains(e.whid))
@@ -645,10 +745,8 @@ class AddCostViewModel extends Notifier<AddCostState> {
         dateKey: dateKey,
       ))
           .toSet();
-      final pendingHids = workToSave
-          .where((e) => e.whid != null)
-          .map((e) => e.whid!)
-          .toSet();
+      final pendingHids =
+          workToSave.where((e) => e.whid != null).map((e) => e.whid!).toSet();
       final dup = pendingHids.intersection(savedHids);
       if (dup.isNotEmpty) {
         final dupNames = workToSave
@@ -685,8 +783,62 @@ class AddCostViewModel extends Notifier<AddCostState> {
     }
 
     if (workToSave.isNotEmpty) {
-      isWorkCostSuccess =
-          await _workCostUseCase.addWorkCosts(workToSave);
+      try {
+        isWorkCostSuccess = await _workCostUseCase.addWorkCosts(workToSave);
+      } catch (e) {
+        if (!context.mounted) return;
+        if (isWorkerTroublePairConflictError(e)) {
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('트러블 페어'),
+              content: const Text(
+                '선택한 인력에 트러블 페어로 묶인 조합이 포함되어 있어, 기본적으로는 같은 날 함께 투입할 수 없습니다.\n\n'
+                '그래도 투입을 진행할까요?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('투입 진행'),
+                ),
+              ],
+            ),
+          );
+          if (proceed == true && context.mounted) {
+            try {
+              isWorkCostSuccess = await _workCostUseCase.addWorkCosts(
+                workToSave,
+                acknowledgeTroublePair: true,
+              );
+            } catch (e2) {
+              if (!context.mounted) return;
+              final msg = snackMessageForHttpFailure(e2);
+              if (msg != null && msg.isNotEmpty) {
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(msg)),
+                );
+              }
+              return;
+            }
+          } else {
+            return;
+          }
+        } else {
+          final msg = snackMessageForHttpFailure(e);
+          if (msg != null && msg.isNotEmpty) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(msg)),
+            );
+          }
+          return;
+        }
+      }
     }
 
     if (!isMaterialCostSuccess && !isWorkCostSuccess) {
@@ -725,17 +877,19 @@ class AddCostViewModel extends Notifier<AddCostState> {
       builder: (_) => saveDialog(text: message),
     );
     clearAllLists();
+    } finally {
+      // 저장 완료 (성공/실패 관계없이)
+      state = state.copyWith(isSaving: false);
+    }
   }
 
   void clearAllLists() {
     state = state.copyWith(
       materialCostList: const [],
       workCostList: const [],
-      clearSelectedWorkRole: true,
       clearSelectedWorkers: true,
       clearSelectedWorker: true,
     );
-    workRoleCustomController.clear();
   }
 
   void showClearDialog(BuildContext context) {

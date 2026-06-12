@@ -9,7 +9,7 @@ import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/model/place_dropdown_model.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class WorkCostDetailScreen extends ConsumerWidget {
   const WorkCostDetailScreen({
@@ -26,6 +26,7 @@ class WorkCostDetailScreen extends ConsumerWidget {
     final workerState = ref.watch(workerProvider);
     final detailState = ref.watch(humanWorkDetailProvider(hid));
     final detailVm = ref.read(humanWorkDetailProvider(hid).notifier);
+    final tt = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -33,8 +34,13 @@ class WorkCostDetailScreen extends ConsumerWidget {
           children: [
             Text(hname),
             Text(
-              formatDateTimeRangeToString(workerState.dateTimeRange),
-              style: smalldateStyle,
+              formatDateTimeRangeToString(
+                workerState.dateTimeRange,
+                periodType: workerState.dayState,
+              ),
+              style: tt.labelMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -42,26 +48,33 @@ class WorkCostDetailScreen extends ConsumerWidget {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+            padding: EdgeInsets.fromLTRB(
+              context.rsi(10),
+              context.rsi(10),
+              context.rsi(10),
+              0,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildCompleteSegmentControl(ref, detailVm, detailState),
-                _buildTaxSegmentControl(ref, detailVm, detailState),
+                _buildCompleteSegmentControl(
+                    context, ref, detailVm, detailState),
+                _buildTaxSegmentControl(context, ref, detailVm, detailState),
               ],
             ),
           ),
-          _buildPlaceDropdownSearch(ref, detailVm),
-          _buildPriceTextBar(detailState),
+          _buildPlaceDropdownSearch(context, ref, detailVm),
+          _buildPriceTextBar(context, detailState),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: EdgeInsets.symmetric(horizontal: context.rsi(10)),
               child: detailState.filteredWorkCostList.isEmpty
                   ? const Center(child: Text('조회된 인건비가 없습니다.'))
                   : ListView.separated(
                       separatorBuilder: (context, index) => const Divider(),
                       itemCount: detailState.filteredWorkCostList.length,
                       itemBuilder: (context, index) => workCostCard(
+                        context,
                         detailState,
                         index,
                       ),
@@ -73,17 +86,16 @@ class WorkCostDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPlaceDropdownSearch(WidgetRef ref, HumanWorkDetailViewModel vm) {
+  Widget _buildPlaceDropdownSearch(BuildContext context, WidgetRef ref, HumanWorkDetailViewModel vm) {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: EdgeInsets.all(context.rsi(8)),
       child: DropdownSearch<PlaceDropDownModel>(
         asyncItems: (text) =>
             ref.read(workCostUseCaseProvider).getPlacesForWorkCost(hid),
         itemAsString: (item) => item.pname,
         selectedItem: PlaceDropDownModel(pname: '전체 현장', pid: 0),
         dropdownDecoratorProps: const DropDownDecoratorProps(
-          dropdownSearchDecoration:
-              InputDecoration(hintText: '현장을 선택해주세요.'),
+          dropdownSearchDecoration: InputDecoration(hintText: '현장을 선택해주세요.'),
         ),
         onChanged: (value) {
           if (value == null) return;
@@ -93,24 +105,33 @@ class WorkCostDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPriceTextBar(HumanWorkDetailState state) {
+  Widget _buildPriceTextBar(BuildContext context, HumanWorkDetailState state) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Container(
-      height: 40,
-      padding: const EdgeInsets.fromLTRB(10, 10, 20, 10),
-      decoration: const BoxDecoration(
-        color: Color.fromARGB(255, 243, 242, 246),
+      height: context.rs(40),
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(10),
+        context.rsi(10),
+        context.rsi(20),
+        context.rsi(10),
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Text(
             state.isTaxApply ? '세 후 :  ' : '세 전 :  ',
-            style: state.isTaxApply ? afterTaxStyle : beforeTaxStyle,
+            style: tt.labelMedium?.copyWith(
+              color: state.isTaxApply ? cs.error : cs.primary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           Text(
-            getPrice(
-                price: state.totalPrice, isTaxApply: state.isTaxApply),
-            style: normalStyle,
+            getPrice(price: state.totalPrice, isTaxApply: state.isTaxApply),
+            style: tt.bodyMedium,
           ),
         ],
       ),
@@ -118,14 +139,16 @@ class WorkCostDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildTaxSegmentControl(
+    BuildContext context,
     WidgetRef ref,
     HumanWorkDetailViewModel vm,
     HumanWorkDetailState state,
   ) {
+    final cs = Theme.of(context).colorScheme;
     return CupertinoSlidingSegmentedControl<TaxState>(
       thumbColor: state.isTaxApply
-          ? const Color.fromARGB(255, 248, 213, 210)
-          : const Color.fromARGB(255, 171, 202, 251),
+          ? cs.errorContainer.withValues(alpha: 0.65)
+          : cs.primaryContainer.withValues(alpha: 0.65),
       groupValue: state.taxState,
       children: const {
         TaxState.taxOff: Text('세전'),
@@ -136,39 +159,47 @@ class WorkCostDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildCompleteSegmentControl(
+    BuildContext context,
     WidgetRef ref,
     HumanWorkDetailViewModel vm,
     HumanWorkDetailState state,
   ) {
+    final segStyle = Theme.of(context).textTheme.labelMedium;
     return CupertinoSlidingSegmentedControl<CompleteState>(
       groupValue: state.completeState,
-      children: const {
-        CompleteState.whole: Text('전체', style: smallStyle),
-        CompleteState.incomplete: Text('미지급', style: smallStyle),
+      children: {
+        CompleteState.whole: Text('전체', style: segStyle),
+        CompleteState.incomplete: Text('미지급', style: segStyle),
       },
       onValueChanged: vm.completeStateValueChanged,
     );
   }
 
-  Widget workCostCard(HumanWorkDetailState state, int index) {
+  Widget workCostCard(
+    BuildContext context,
+    HumanWorkDetailState state,
+    int index,
+  ) {
     final element = state.filteredWorkCostList[index];
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return ListTile(
       title: Text(
         element.pname,
-        style: normalStyle,
+        style: tt.bodyLarge,
       ),
       subtitle: Text(
         formatDateTimeToStringBySlash(
           DateTime.parse(element.wdate),
         ),
-        style: const TextStyle(color: Colors.grey),
+        style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
       ),
       trailing: Text(
         getPrice(price: element.wprice, isTaxApply: state.isTaxApply),
-        style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: element.wcomplete == 0 ? Colors.red : null),
+        style: tt.titleSmall?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: element.wcomplete == 0 ? cs.error : null,
+        ),
       ),
     );
   }

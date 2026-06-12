@@ -4,11 +4,20 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
+import 'package:w0001/theme/app_colors.dart';
 import 'package:w0001/ui/screen/0_auth/login_auth_dialogs.dart';
+import 'package:w0001/ui/widget/keyboard_aware.dart';
+import 'package:w0001/ui/widget/responsive_page_shell.dart';
 import 'package:w0001/ui/widget/round_text_field.dart';
+import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/util/auth_dio_user_message.dart';
+import 'package:w0001/util/fcm/fcm_push_router.dart';
+import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/login_preferences.dart';
+import 'package:w0001/util/clear_user_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -71,17 +80,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         saveId: _saveId,
         currentUid: uid,
       );
-      await ref.read(authSessionProvider.notifier).loadCurrentUser();
+      
+      // 이전 계정 캐시 제거 후 세션·역할별 데이터를 UI 진입 전에 채운다.
+      _clearAllProviders(ref);
+
+      await ref
+          .read(authSessionProvider.notifier)
+          .loadCurrentUser(awaitWarmUp: true);
       if (!mounted) return;
-      final me = ref.read(authSessionProvider);
-      if (me.hasError) {
+      final session = ref.read(authSessionProvider);
+      if (session.hasError) {
         _toast(
           context,
           '로그인은 완료되었으나 내 정보를 불러오지 못했습니다. 프로필에서 다시 시도하세요.',
         );
       }
       if (!mounted) return;
-      context.go('/dashboard');
+      final user = ref.read(authSessionProvider).asData?.value;
+      if (user?.isPendingApproval == true) {
+        context.go('/pending-approval');
+      } else {
+        context.go('/dashboard');
+      }
+      if (!session.hasError) {
+        final root = rootProviderContainer;
+        if (root != null) {
+          unawaited(tryConsumePendingPostAuthFcmNavigation(root));
+        }
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       final restricted =
@@ -100,9 +126,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  /// 로그인 시 모든 provider 초기화 (이전 사용자의 캐시된 데이터 제거)
+  void _clearAllProviders(WidgetRef ref) {
+    clearAllUserProvidersWithRef(ref);
+  }
+
   void _toast(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+
+  Widget _passwordVisibilitySuffix(ColorScheme cs) {
+    return IconButton(
+      tooltip: _obscurePassword ? '비밀번호 표시' : '비밀번호 숨기기',
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: BoxConstraints(
+        minWidth: context.rs(36),
+        maxWidth: context.rs(36),
+        minHeight: context.rs(36),
+        maxHeight: context.rs(36),
+      ),
+      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+      icon: Icon(
+        _obscurePassword
+            ? Icons.visibility_outlined
+            : Icons.visibility_off_outlined,
+        size: context.rs(20),
+        color: cs.onSurfaceVariant,
+      ),
     );
   }
 
@@ -110,8 +163,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -120,79 +175,102 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  cs.primaryContainer.withValues(alpha: 0.45),
-                  cs.surface,
-                  cs.tertiaryContainer.withValues(alpha: 0.2),
-                ],
-                stops: const [0.0, 0.45, 1.0],
+                colors: isDark
+                    ? [
+                        cs.surface,
+                        cs.surfaceContainerLow,
+                        cs.surfaceContainer,
+                      ]
+                    : [
+                        AppColors.primaryColor.withValues(alpha: 0.22),
+                        AppColors.backgroundColor,
+                        AppColors.accentColor.withValues(alpha: 0.35),
+                      ],
+                stops: const [0.0, 0.42, 1.0],
               ),
             ),
           ),
           SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                child: AutofillGroup(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 8),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return KeyboardAwareScrollView(
+                  autoScrollOnFocus: false,
+                  child: ResponsivePageShell(
+                    padding: ResponsiveLayout.symmetric(
+                      context,
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: AutofillGroup(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                      rsV(context, 8),
                       Container(
-                        width: 88,
-                        height: 88,
+                        width: context.rs(88),
+                        height: context.rs(88),
                         decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(context.rs(24)),
                           boxShadow: [
                             BoxShadow(
-                              color: cs.primary.withValues(alpha: 0.15),
+                              color: isDark
+                                  ? Colors.black.withValues(alpha: 0.5)
+                                  : AppColors.primaryColor.withValues(alpha: 0.18),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
                           ],
                         ),
-                        child: Icon(
-                          Icons.home_repair_service_rounded,
-                          size: 44,
-                          color: cs.primary,
+                        clipBehavior: Clip.antiAlias,
+                        child: Image.asset(
+                          'assets/images/app_icon.png',
+                          fit: BoxFit.cover,
+                          width: context.rs(88),
+                          height: context.rs(88),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      rsV(context, 28),
                       Text(
-                        '인테리어 정산',
+                        '현장좋아',
                         textAlign: TextAlign.center,
                         style: textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
+                          color: cs.onSurface,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '현장·인건비·자재를 한곳에서 정리하세요',
-                        textAlign: TextAlign.center,
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 36),
+                      rsV(context, 36),
                       Material(
-                        color: cs.surface,
+                        color: isDark ? cs.surfaceContainerHigh : cs.surface,
                         elevation: 0,
                         shadowColor: Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(context.rs(20)),
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+                          padding: ResponsiveLayout.only(
+                            context,
+                            left: 22,
+                            top: 26,
+                            right: 22,
+                            bottom: 22,
+                          ),
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(context.rs(20)),
                             border: Border.all(
-                              color: cs.outlineVariant.withValues(alpha: 0.5),
+                              color: isDark
+                                  ? cs.outline.withValues(alpha: 0.3)
+                                  : cs.outlineVariant.withValues(alpha: 0.5),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: cs.shadow.withValues(alpha: 0.06),
+                                color: isDark
+                                    ? Colors.black.withValues(alpha: 0.3)
+                                    : cs.shadow.withValues(alpha: 0.06),
                                 blurRadius: 32,
                                 offset: const Offset(0, 12),
                               ),
@@ -206,34 +284,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 keyboardType: TextInputType.text,
                                 onChanged: (_) {},
                                 labelText: '아이디',
-                                autofillHints: const [AutofillHints.username],
+                                showClearButton: true,
+                                scrollPaddingExtra: 24,
+                                autofillHints: const [
+                                  AutofillHints.username,
+                                ],
                               ),
-                              const SizedBox(height: 4),
+                              rsV(context, 4),
                               RoundTextField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
                                 onChanged: (_) {},
                                 labelText: '비밀번호',
+                                showClearButton: true,
+                                scrollPaddingExtra: 24,
                                 autofillHints: const [AutofillHints.password],
-                                suffixIcon: IconButton(
-                                  tooltip: _obscurePassword ? '비밀번호 표시' : '비밀번호 숨기기',
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
+                                suffixIcon: _passwordVisibilitySuffix(cs),
                               ),
-                              const SizedBox(height: 6),
+                              rsV(context, 6),
                               LayoutBuilder(
                                 builder: (context, constraints) {
-                                  final narrow = constraints.maxWidth < 340;
+                                  final narrow =
+                                      constraints.maxWidth < context.rs(340);
                                   final saveIdTile = _optionCheckbox(
                                     textTheme: textTheme,
                                     cs: cs,
@@ -262,7 +334,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           CrossAxisAlignment.stretch,
                                       children: [
                                         saveIdTile,
-                                        const SizedBox(height: 2),
+                                        rsV(context, 2),
                                         autoLoginTile,
                                       ],
                                     );
@@ -272,9 +344,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     children: [
                                       Expanded(child: saveIdTile),
                                       Padding(
-                                        padding: const EdgeInsets.only(top: 10),
+                                        padding: EdgeInsets.only(
+                                          top: context.rs(10),
+                                        ),
                                         child: SizedBox(
-                                          height: 22,
+                                          height: context.rs(22),
                                           child: VerticalDivider(
                                             width: 1,
                                             thickness: 1,
@@ -288,39 +362,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   );
                                 },
                               ),
-                              const SizedBox(height: 20),
+                              rsV(context, 20),
                               FilledButton(
                                 onPressed: _submitting ? null : _onLogin,
                                 style: FilledButton.styleFrom(
-                                  minimumSize: const Size.fromHeight(52),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  backgroundColor: cs.primary,
+                                  foregroundColor: cs.onPrimary,
+                                  minimumSize: Size.fromHeight(context.rs(52)),
+                                  padding: ResponsiveLayout.symmetric(
+                                    context,
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius:
+                                        BorderRadius.circular(context.rs(12)),
                                   ),
                                   elevation: 0,
                                 ),
-                                child: _submitting
-                                    ? SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: cs.onPrimary,
-                                        ),
-                                      )
-                                    : Text(
-                                        '로그인',
-                                        style: textTheme.titleMedium?.copyWith(
-                                          color: cs.onPrimary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
+                                child: Skeletonizer(
+                                  enabled: _submitting,
+                                  child: Text(
+                                    '로그인',
+                                    style: textTheme.titleMedium?.copyWith(
+                                      color: cs.onPrimary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      rsV(context, 12),
                       TextButton(
                         onPressed: _submitting
                             ? null
@@ -333,11 +407,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                    ],
+                      rsV(context, 16),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -361,12 +438,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: ResponsiveLayout.symmetric(context, vertical: 4),
         child: Row(
           children: [
             SizedBox(
-              width: 40,
-              height: 40,
+              width: context.rs(40),
+              height: context.rs(40),
               child: Checkbox(
                 value: value,
                 onChanged: onChanged,

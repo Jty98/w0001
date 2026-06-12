@@ -5,7 +5,8 @@ final class ProcessScheduleTask {
     required this.name,
     required List<int> scheduledDayIndices,
     required this.paletteIndex,
-  }) : scheduledDayIndices = List.unmodifiable(_dedupeSort(scheduledDayIndices));
+  }) : scheduledDayIndices =
+            List.unmodifiable(_dedupeSort(scheduledDayIndices));
 
   final String? serverId;
   final String name;
@@ -30,8 +31,7 @@ final class ProcessScheduleTask {
     return ProcessScheduleTask(
       serverId: serverId ?? this.serverId,
       name: name ?? this.name,
-      scheduledDayIndices:
-          scheduledDayIndices ?? this.scheduledDayIndices,
+      scheduledDayIndices: scheduledDayIndices ?? this.scheduledDayIndices,
       paletteIndex: paletteIndex ?? this.paletteIndex,
     );
   }

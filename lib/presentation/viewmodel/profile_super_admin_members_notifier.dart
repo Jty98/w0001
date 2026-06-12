@@ -4,6 +4,8 @@ import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/domain/use_case/super_admin_remote_use_case.dart';
 import 'package:w0001/presentation/viewmodel/profile_super_admin_members_state.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
+import 'package:w0001/presentation/viewmodel/worker_mgmt_view_model.dart';
+import 'package:w0001/ui/screen/0_auth/super_admin_profile/profile_super_admin_members_limits.dart';
 
 /// 슈퍼관리자 프로필의 회원 목록·검색어 반영 상태. UI는 검색만 컨트롤러로 두고 나머지는 여기서 갱신.
 final profileSuperAdminMembersProvider = NotifierProvider.autoDispose<
@@ -16,11 +18,10 @@ class ProfileSuperAdminMembersNotifier
   int _activeFetchGen = 0;
   var _scheduledBootstrap = false;
 
-  SuperAdminRemoteUseCase get _uc =>
-      ref.read(superAdminRemoteUseCaseProvider);
+  SuperAdminRemoteUseCase get _uc => ref.read(superAdminRemoteUseCaseProvider);
 
-  List<UserRead> _noSuper(List<UserRead> xs) =>
-      xs.where((u) => !isSuperAdminUser(u)).toList();
+  List<UserRead> _noProtectedAdmins(List<UserRead> xs) =>
+      xs.where((u) => !isProtectedAdminUser(u)).toList();
 
   @override
   ProfileSuperAdminMembersState build() {
@@ -32,32 +33,29 @@ class ProfileSuperAdminMembersNotifier
   }
 
   Future<void> _initialLoad() async {
-    await Future.wait([
-      fetchActiveMembers(''),
-      _fetchQueueBundle(),
-    ]);
-    if (ref.mounted) {
-      state = state.copyWith(bootstrapDone: true);
-    }
+    await reload(silent: false);
   }
 
-  /// 당김 새로고침 등.
-  Future<void> reload() async {
+  /// 당김 새로고침 등. [silent] 이면 헤더 스피너·큐 로딩 플래그를 올리지 않고 목록만 갱신합니다.
+  Future<void> reload({bool silent = false}) async {
     await Future.wait([
-      fetchActiveMembers(state.appliedActiveTrim),
-      _fetchQueueBundle(),
+      fetchActiveMembers(state.appliedActiveTrim, silent: silent),
+      _fetchQueueBundle(silent: silent),
     ]);
   }
 
-  Future<void> fetchActiveMembers(String trimForQuery) async {
+  Future<void> fetchActiveMembers(String trimForQuery,
+      {bool silent = false}) async {
     final gen = ++_activeFetchGen;
     final qTrim = trimForQuery.trim();
     final q = qTrim.isEmpty ? null : qTrim;
 
-    state = state.copyWith(
-      busyActive: true,
-      errorActive: null,
-    );
+    if (!silent) {
+      state = state.copyWith(
+        busyActive: true,
+        errorActive: null,
+      );
+    }
 
     try {
       final raw = await _uc.usersSearch(
@@ -67,27 +65,37 @@ class ProfileSuperAdminMembersNotifier
       );
       if (!ref.mounted || gen != _activeFetchGen) return;
       state = state.copyWith(
-        activeMembers: _noSuper(raw),
+        activeMembers: _noProtectedAdmins(raw),
         appliedActiveTrim: qTrim,
-        busyActive: false,
+        activeVisibleCount: ProfileSuperAdminMembersLimits.activePageSize,
+        busyActive: silent ? null : false,
+        errorActive: null,
       );
     } catch (e, st) {
       if (!ref.mounted || gen != _activeFetchGen) return;
       debugPrint('_fetchActiveMembers: $e\n$st');
       state = state.copyWith(
         errorActive: e,
-        busyActive: false,
+        busyActive: silent ? null : false,
       );
     }
   }
 
-  Future<void> _fetchQueueBundle() async {
-    state = state.copyWith(
-      busyQueue: true,
-      errorPending: null,
-      errorSuspended: null,
-      errorRejected: null,
-    );
+  Future<void> _fetchQueueBundle({bool silent = false}) async {
+    if (silent) {
+      state = state.copyWith(
+        errorPending: null,
+        errorSuspended: null,
+        errorRejected: null,
+      );
+    } else {
+      state = state.copyWith(
+        busyQueue: true,
+        errorPending: null,
+        errorSuspended: null,
+        errorRejected: null,
+      );
+    }
     try {
       await Future.wait([
         _loadPending(),
@@ -95,7 +103,7 @@ class ProfileSuperAdminMembersNotifier
         _loadRejected(),
       ]);
     } finally {
-      if (ref.mounted) {
+      if (ref.mounted && !silent) {
         state = state.copyWith(busyQueue: false);
       }
     }
@@ -105,7 +113,7 @@ class ProfileSuperAdminMembersNotifier
     try {
       final raw = await _uc.usersPendingList();
       if (!ref.mounted) return;
-      state = state.copyWith(pendingMembers: _noSuper(raw));
+      state = state.copyWith(pendingMembers: _noProtectedAdmins(raw));
     } catch (e, st) {
       debugPrint('_loadPending: $e\n$st');
       if (!ref.mounted) return;
@@ -120,7 +128,7 @@ class ProfileSuperAdminMembersNotifier
         isActive: false,
       );
       if (!ref.mounted) return;
-      state = state.copyWith(suspendedMembers: _noSuper(raw));
+      state = state.copyWith(suspendedMembers: _noProtectedAdmins(raw));
     } catch (e, st) {
       debugPrint('_loadSuspended: $e\n$st');
       if (!ref.mounted) return;
@@ -132,7 +140,7 @@ class ProfileSuperAdminMembersNotifier
     try {
       final raw = await _uc.usersSearch(approvalStatus: 'rejected');
       if (!ref.mounted) return;
-      state = state.copyWith(rejectedMembers: _noSuper(raw));
+      state = state.copyWith(rejectedMembers: _noProtectedAdmins(raw));
     } catch (e, st) {
       debugPrint('_loadRejected: $e\n$st');
       if (!ref.mounted) return;
@@ -142,12 +150,12 @@ class ProfileSuperAdminMembersNotifier
 
   Future<void> userApprove(String uid, {String? note}) async {
     await _uc.userApprove(uid, note: note);
-    await reload();
+    await reload(silent: true);
   }
 
   Future<void> userReject(String uid, {String? note}) async {
     await _uc.userReject(uid, note: note);
-    await reload();
+    await reload(silent: true);
   }
 
   Future<void> userSuspend(
@@ -160,12 +168,12 @@ class ProfileSuperAdminMembersNotifier
       reason: reason,
       adminActionToken: adminActionToken,
     );
-    await reload();
+    await reload(silent: true);
   }
 
   Future<void> userActivate(String uid) async {
     await _uc.userActivate(uid);
-    await reload();
+    await reload(silent: true);
   }
 
   Future<void> userChangeRole(
@@ -174,14 +182,28 @@ class ProfileSuperAdminMembersNotifier
     required String adminActionToken,
   }) async {
     await _uc.userChangeRole(uid, role, adminActionToken: adminActionToken);
-    await reload();
+    await reload(silent: true);
   }
 
   Future<void> userDelete(String uid) async {
     await _uc.userDelete(uid);
-    await reload();
+    await reload(silent: true);
+  }
+
+  void loadMoreActiveMembers() {
+    final total = state.activeMembers.length;
+    if (total <= state.activeVisibleCount) return;
+    final next = state.activeVisibleCount +
+        ProfileSuperAdminMembersLimits.activePageStep;
+    state = state.copyWith(
+      activeVisibleCount: next > total ? total : next,
+    );
   }
 }
 
-Future<void> reloadProfileSuperAdminMembers(WidgetRef ref) =>
-    ref.read(profileSuperAdminMembersProvider.notifier).reload();
+Future<void> reloadProfileSuperAdminMembers(WidgetRef ref) async {
+  await Future.wait<void>([
+    ref.read(profileSuperAdminMembersProvider.notifier).reload(),
+    ref.read(workerMgmtHumanDirectoryProvider.notifier).reload(blocking: false),
+  ]);
+}

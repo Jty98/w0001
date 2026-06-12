@@ -2,293 +2,98 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
+import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_sheet.dart'
+    show WorkerGroupedListSheetBody;
+import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_utils.dart';
+import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_person_tile.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
 
-const List<String> kKoreanInitialIndex = <String>[
-  'ㄱ',
-  'ㄴ',
-  'ㄷ',
-  'ㄹ',
-  'ㅁ',
-  'ㅂ',
-  'ㅅ',
-  'ㅇ',
-  'ㅈ',
-  'ㅊ',
-  'ㅋ',
-  'ㅌ',
-  'ㅍ',
-  'ㅎ',
-];
+export 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_utils.dart'
+    show initialIndexKeyForName, kKoreanInitialIndex;
 
-String initialIndexKeyForName(String name) {
-  final trimmed = name.trim();
-  if (trimmed.isEmpty) return '#';
-  final code = trimmed.runes.first;
-  // Hangul syllables: AC00..D7A3
-  if (code >= 0xAC00 && code <= 0xD7A3) {
-    final sIndex = code - 0xAC00;
-    final lIndex = sIndex ~/ 588; // 21*28
-    // 19 leading consonants
-    const leads = <String>[
-      'ㄱ',
-      'ㄲ',
-      'ㄴ',
-      'ㄷ',
-      'ㄸ',
-      'ㄹ',
-      'ㅁ',
-      'ㅂ',
-      'ㅃ',
-      'ㅅ',
-      'ㅆ',
-      'ㅇ',
-      'ㅈ',
-      'ㅉ',
-      'ㅊ',
-      'ㅋ',
-      'ㅌ',
-      'ㅍ',
-      'ㅎ',
-    ];
-    return leads[lIndex];
-  }
-  final ch = String.fromCharCode(code).toUpperCase();
-  final isAZ = ch.codeUnitAt(0) >= 65 && ch.codeUnitAt(0) <= 90;
-  return isAZ ? ch : '#';
-}
-
-Future<void> showPlaceRecentWorkersSheet({
+/// 금액추가·인력투입(작업지시) 공통 — 초성/역할 필터 바텀시트.
+Future<void> showPlaceRecentWorkersGroupedSheet({
   required BuildContext context,
-  required WidgetRef ref,
+  required List<HumanModel> initialWorkers,
+  required Future<void> Function(HumanModel human) onWorkerTap,
+  Future<void> Function(HumanModel human)? onRemoveFromList,
+  VoidCallback? onWorkersListChanged,
+  bool closeSheetOnWorkerTap = true,
 }) async {
-  final vm = ref.read(addCostProvider.notifier);
-  var all = ref.read(addCostProvider).placeRecentWorkers;
+  if (initialWorkers.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('이 현장에 기록된 인원이 없습니다.')),
+    );
+    return;
+  }
 
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (ctx) {
-      var groupMode = 0; // 0: 초성, 1: 역할
-
+    builder: (sheetCtx) {
       return DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.78,
         minChildSize: 0.5,
         maxChildSize: 0.95,
         builder: (ctx, scrollController) {
-          return StatefulBuilder(
-            builder: (ctx, setModalState) {
-              void syncAllFromState() {
-                all = ref.read(addCostProvider).placeRecentWorkers;
-              }
+          return _PlaceRecentWorkersGroupedLauncher(
+            sheetContext: sheetCtx,
+            parentContext: context,
+            initialWorkers: initialWorkers,
+            scrollController: scrollController,
+            onWorkerTap: onWorkerTap,
+            onRemoveFromList: onRemoveFromList,
+            onWorkersListChanged: onWorkersListChanged,
+            closeSheetOnWorkerTap: closeSheetOnWorkerTap,
+          );
+        },
+      );
+    },
+  );
+}
 
-              Map<String, List<HumanModel>> buildSections() {
-                final sections = <String, List<HumanModel>>{};
-                if (groupMode == 1) {
-                  for (final h in all) {
-                    final role = h.hdefaultRole.trim();
-                    final k = role.isEmpty ? '역할 미지정' : role;
-                    (sections[k] ??= <HumanModel>[]).add(h);
-                  }
-                } else {
-                  for (final h in all) {
-                    final k = initialIndexKeyForName(h.hname);
-                    (sections[k] ??= <HumanModel>[]).add(h);
-                  }
-                }
-                return sections;
-              }
+/// 금액추가 탭 — [addCostProvider] 목록을 구독해 갱신합니다.
+Future<void> showPlaceRecentWorkersSheet({
+  required BuildContext context,
+  required WidgetRef ref,
+}) async {
+  final vm = ref.read(addCostProvider.notifier);
+  final initial = ref.read(addCostProvider).placeRecentWorkers;
+  if (initial.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('이 현장에 기록된 인원이 없습니다.')),
+    );
+    return;
+  }
 
-              List<String> buildOrderedKeys(
-                Map<String, List<HumanModel>> sections,
-              ) {
-                if (groupMode == 1) {
-                  final keys = sections.keys.toList()..sort();
-                  if (keys.remove('역할 미지정')) keys.add('역할 미지정');
-                  return keys;
-                }
-                return <String>[
-                  ...kKoreanInitialIndex.where(sections.containsKey),
-                  ...sections.keys
-                      .where((k) => !kKoreanInitialIndex.contains(k) && k != '#')
-                      .toList()
-                    ..sort(),
-                  if (sections.containsKey('#')) '#',
-                ];
-              }
-
-              final sections = buildSections();
-              final orderedKeys = buildOrderedKeys(sections);
-              final headerKeys = {for (final k in orderedKeys) k: GlobalKey()};
-
-              Future<void> jumpTo(String key) async {
-                final k = headerKeys[key];
-                final c = k?.currentContext;
-                if (c == null) return;
-                await Scrollable.ensureVisible(
-                  c,
-                  alignment: 0,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                );
-              }
-
-              Widget personTile(HumanModel h) {
-                final cs = Theme.of(ctx).colorScheme;
-                final role = h.hdefaultRole.trim();
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.65),
-                    ),
-                  ),
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 2,
-                    ),
-                    title: Text(h.hname, style: bold14Style),
-                    subtitle: Text(
-                      [
-                        '일당 ${getPrice(price: h.hdailyWage)}',
-                        if (role.isNotEmpty) role,
-                      ].join(' · '),
-                      style: smallStyle,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.add_circle_outline),
-                        const SizedBox(width: 6),
-                        PopupMenuButton<String>(
-                          tooltip: '더보기',
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'remove',
-                              child: Text('이 목록에서 제거'),
-                            ),
-                          ],
-                          onSelected: (v) async {
-                            if (v != 'remove') return;
-                            final ok = await showDialog<bool>(
-                              context: ctx,
-                              builder: (dctx) => AlertDialog(
-                                title: const Text('목록에서 제거'),
-                                content: Text('${h.hname} 님을 이 현장 목록에서 제거할까요?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(dctx).pop(false),
-                                    child: const Text('취소'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.of(dctx).pop(true),
-                                    child: const Text(
-                                      '제거',
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (ok != true) return;
-                            final hid = h.hid;
-                            if (hid == null) return;
-                            await vm.deletePlaceRecentWorker(hid);
-                            if (!ctx.mounted) return;
-                            setModalState(() {
-                              syncAllFromState();
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    onTap: () async {
-                      await vm.tapPlaceRecentWorker(context, h);
-                      if (!ctx.mounted) return;
-                      Navigator.of(ctx).pop();
-                    },
-                  ),
-                );
-              }
-
-              return SafeArea(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '이 현장에서 일했던 인원 (${all.length})',
-                              style: Theme.of(ctx).textTheme.titleMedium,
-                            ),
-                          ),
-                          SegmentedButton<int>(
-                            segments: const [
-                              ButtonSegment(value: 0, label: Text('초성')),
-                              ButtonSegment(value: 1, label: Text('역할')),
-                            ],
-                            selected: {groupMode},
-                            onSelectionChanged: (s) => setModalState(() {
-                              groupMode = s.first;
-                            }),
-                            showSelectedIcon: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      height: 42,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: orderedKeys.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (_, i) {
-                          final k = orderedKeys[i];
-                          return ActionChip(
-                            label: Text(k),
-                            onPressed: () => jumpTo(k),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        itemCount: orderedKeys.length,
-                        itemBuilder: (_, i) {
-                          final key = orderedKeys[i];
-                          final list = sections[key] ?? const <HumanModel>[];
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Padding(
-                                key: headerKeys[key],
-                                padding: const EdgeInsets.only(top: 14, bottom: 6),
-                                child: Text(
-                                  key,
-                                  style: Theme.of(ctx).textTheme.labelLarge,
-                                ),
-                              ),
-                              for (final h in list) personTile(h),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetCtx) {
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.78,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (ctx, scrollController) {
+          return Consumer(
+            builder: (ctx, ref, _) {
+              final all = ref.watch(addCostProvider).placeRecentWorkers;
+              return _PlaceRecentWorkersGroupedLauncher(
+                sheetContext: sheetCtx,
+                parentContext: context,
+                initialWorkers: all,
+                scrollController: scrollController,
+                onWorkerTap: (h) => vm.tapPlaceRecentWorker(context, h),
+                onRemoveFromList: (h) async {
+                  final hid = h.hid;
+                  if (hid == null) return;
+                  await vm.deletePlaceRecentWorker(hid);
+                },
+                closeSheetOnWorkerTap: true,
               );
             },
           );
@@ -298,3 +103,164 @@ Future<void> showPlaceRecentWorkersSheet({
   );
 }
 
+class _PlaceRecentWorkersGroupedLauncher extends StatefulWidget {
+  const _PlaceRecentWorkersGroupedLauncher({
+    required this.sheetContext,
+    required this.parentContext,
+    required this.initialWorkers,
+    required this.scrollController,
+    required this.onWorkerTap,
+    this.onRemoveFromList,
+    this.onWorkersListChanged,
+    this.closeSheetOnWorkerTap = true,
+  });
+
+  final BuildContext sheetContext;
+  final BuildContext parentContext;
+  final List<HumanModel> initialWorkers;
+  final ScrollController scrollController;
+  final Future<void> Function(HumanModel human) onWorkerTap;
+  final Future<void> Function(HumanModel human)? onRemoveFromList;
+  final VoidCallback? onWorkersListChanged;
+  final bool closeSheetOnWorkerTap;
+
+  @override
+  State<_PlaceRecentWorkersGroupedLauncher> createState() =>
+      _PlaceRecentWorkersGroupedLauncherState();
+}
+
+class _PlaceRecentWorkersGroupedLauncherState
+    extends State<_PlaceRecentWorkersGroupedLauncher> {
+  late List<HumanModel> _workers;
+
+  @override
+  void initState() {
+    super.initState();
+    _workers = List<HumanModel>.from(widget.initialWorkers);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PlaceRecentWorkersGroupedLauncher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialWorkers != widget.initialWorkers) {
+      _workers = List<HumanModel>.from(widget.initialWorkers);
+    }
+  }
+
+  Future<void> _handleRemove(HumanModel h) async {
+    final remove = widget.onRemoveFromList;
+    if (remove == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('목록에서 제거'),
+        content: Text('${h.hname} 님을 이 현장 목록에서 제거할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: Text(
+              '제거',
+              style: TextStyle(color: Theme.of(dctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await remove(h);
+    if (!mounted) return;
+    setState(() {
+      _workers.removeWhere((x) => x.hid == h.hid);
+    });
+    widget.onWorkersListChanged?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_workers.isEmpty) {
+      return SafeArea(
+        child: Center(
+          child: Text(
+            '이 현장에 기록된 인원이 없습니다.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    return WorkerGroupedListSheetBody(
+      title: '이 현장에서 일했던 인원 (${_workers.length})',
+      workers: _workers,
+      scrollController: widget.scrollController,
+      onWorkerTap: (h) async {
+        await widget.onWorkerTap(h);
+        if (widget.closeSheetOnWorkerTap && widget.sheetContext.mounted) {
+          Navigator.of(widget.sheetContext).pop();
+        }
+      },
+      personTileBuilder: (tileCtx, h) => _PlaceRecentWorkerTile(
+        human: h,
+        onAdd: () async {
+          await widget.onWorkerTap(h);
+          if (widget.closeSheetOnWorkerTap && widget.sheetContext.mounted) {
+            Navigator.of(widget.sheetContext).pop();
+          }
+        },
+        onRemoveFromList:
+            widget.onRemoveFromList == null ? null : () => _handleRemove(h),
+      ),
+    );
+  }
+}
+
+class _PlaceRecentWorkerTile extends StatelessWidget {
+  const _PlaceRecentWorkerTile({
+    required this.human,
+    required this.onAdd,
+    this.onRemoveFromList,
+  });
+
+  final HumanModel human;
+  final VoidCallback onAdd;
+  final Future<void> Function()? onRemoveFromList;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final role = human.hdefaultRole.trim();
+    return WorkerGroupedPersonTile(
+      name: human.hname,
+      subtitle: formatWorkerGroupedPersonSubtitle(
+        wageLabel: '일당 ${getPrice(price: human.hdailyWage)}',
+        role: role,
+      ),
+      onTap: onAdd,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.add_circle_outline, color: cs.primary),
+          if (onRemoveFromList != null) ...[
+            const SizedBox(width: 2),
+            PopupMenuButton<String>(
+              tooltip: '더보기',
+              padding: EdgeInsets.zero,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'remove',
+                  child: Text('이 목록에서 제거'),
+                ),
+              ],
+              onSelected: (v) async {
+                if (v == 'remove') await onRemoveFromList!();
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}

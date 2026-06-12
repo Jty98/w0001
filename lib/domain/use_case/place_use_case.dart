@@ -1,3 +1,4 @@
+import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/data/model/place_info_model.dart';
@@ -10,8 +11,14 @@ class PlaceUseCase {
 
   final PlaceRepository _repository;
 
-  Future<List<PlaceInfoModel>> getAllPlaces() {
-    return _repository.getAllPlaces();
+  Future<List<PlaceInfoModel>> getAllPlaces({
+    bool managementPlacesInfoFirst = true,
+    UserRole? role,
+  }) {
+    return _repository.getAllPlaces(
+      managementPlacesInfoFirst: managementPlacesInfoFirst,
+      role: role,
+    );
   }
 
   Future<PlaceModel> insertPlace(PlaceModel place) {
@@ -28,6 +35,10 @@ class PlaceUseCase {
     String endDate,
   ) {
     return _repository.updatePlaceCompletionStatus(pid, pcomplete, endDate);
+  }
+
+  Future<void> deletePlace(int pid) {
+    return _repository.deletePlace(pid);
   }
 
   Future<List<PlaceModel>> getIncompletePlaces() {
@@ -85,6 +96,7 @@ class PlaceUseCase {
     required String photoType,
     required String title,
     required List<String> localFilePaths,
+    List<String>? memosPerFile,
   }) {
     return _repository.insertPlacePhotoGroupFromDeviceFiles(
       pid: pid,
@@ -92,11 +104,36 @@ class PlaceUseCase {
       photoType: photoType,
       title: title,
       localFilePaths: localFilePaths,
+      memosPerFile: memosPerFile,
     );
   }
 
-  Future<void> deletePlacePhotoGroup(int pgid) {
-    return _repository.deletePlacePhotoGroup(pgid);
+  Future<void> deletePlacePhotoGroup(int pgid, {int? pid}) {
+    return _repository.deletePlacePhotoGroup(pgid, pid: pid);
+  }
+
+  Future<void> patchPlacePhoto(
+    int phid, {
+    String? memo,
+    String? displayUrl,
+    String? originalUrl,
+    String? originalname,
+  }) {
+    return _repository.patchPlacePhoto(
+      phid,
+      memo: memo,
+      displayUrl: displayUrl,
+      originalUrl: originalUrl,
+      originalname: originalname,
+    );
+  }
+
+  Future<void> patchPlacePhotoGroupMeta(
+    int pgid, {
+    String? title,
+    String? photoDate,
+  }) {
+    return _repository.patchPlacePhotoGroupMeta(pgid,
+        title: title, photoDate: photoDate);
   }
 }
-

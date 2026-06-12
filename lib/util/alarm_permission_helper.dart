@@ -5,10 +5,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 class AlarmPermissionHelper {
   static Future<void> ensurePermissions() async {
-    if (kIsWeb || !Platform.isAndroid) return;
+    if (kIsWeb) return;
 
     await _requestIfNeeded(Permission.notification);
-    await _requestIfNeeded(Permission.scheduleExactAlarm);
+    if (Platform.isAndroid) {
+      await _requestIfNeeded(Permission.scheduleExactAlarm);
+    }
   }
 
   static Future<void> _requestIfNeeded(Permission permission) async {

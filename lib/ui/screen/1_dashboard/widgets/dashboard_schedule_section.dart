@@ -1,19 +1,22 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:dio/dio.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
-import 'package:w0001/domain/user_role_capabilities.dart';
+import 'package:w0001/access/user_role_capabilities.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_editor_sheet.dart';
+import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/schedule_memo_editor_shared.dart';
+import 'package:w0001/ui/widget/schedule_memo/schedule_memo_list_tile.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 part 'dashboard_schedule_full_screen.part.dart';
 
@@ -26,28 +29,84 @@ const _sundayRedOnAccent = Color(0xFFB71C1C);
 
 DateTime _parseTaskDateKey(String k) => scheduleDateFromTaskKey(k);
 
-String _alarmOffsetLabel(int minutes) {
-  switch (minutes) {
-    case 0:
-      return '정시';
-    case 30:
-      return '30분 전';
-    case 60:
-      return '1시간 전';
-    case 180:
-      return '3시간 전';
-    case 1440:
-      return '하루 전';
-    default:
-      if (minutes % 60 == 0) return '${minutes ~/ 60}시간 전';
-      return '$minutes분 전';
-  }
-}
-
 String _weekRangeLine(DateTime weekStart) {
   final end = weekStart.add(const Duration(days: 6));
   return '${weekStart.month}월 ${weekStart.day}일 - '
       '${end.month}월 ${end.day}일';
+}
+
+/// 주간 일정 영역 초기·로딩 시 스켈레톤 (스피너 대신).
+Widget _scheduleWeekPageSkeleton({
+  required BuildContext context,
+  required DateTime weekMonday,
+  required ColorScheme cs,
+  required double pageHeight,
+}) {
+  return Skeletonizer(
+    enabled: true,
+    child: SizedBox(
+      height: pageHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DashboardScheduleWeekCalendarStrip(
+            weekMonday: weekMonday,
+            showWeekRangeHeader: true,
+            useFullMemosForDots: false,
+          ),
+          Divider(
+            height: context.rs(20),
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.45),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: ResponsiveLayout.only(context, top: 4, bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < 4; i++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i < 3 ? context.rs(10) : 0,
+                      ),
+                      child: Material(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(context.rs(16)),
+                        child: Padding(
+                          padding: EdgeInsets.all(context.rs(14)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '일정 제목',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              rsV(context, 8),
+                              Text(
+                                '메모 본문이 여기에 표시됩니다.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(height: 1.35),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// 2주 보기: 첫째 주 월요일부터 14일간을 한 줄로.
@@ -137,20 +196,17 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final state = ref.watch(dashboardScheduleProvider);
     final vm = ref.read(dashboardScheduleProvider.notifier);
     final today = scheduleDateOnly(DateTime.now());
     final mon = scheduleDateOnly(scheduleStartOfWeekMonday(weekMonday));
 
-    final hdrFs = dense ? 10.0 : 12.0;
-    final hdrGap = dense ? 4.0 : 6.0;
-    final cellPadV = dense ? 4.0 : 8.0;
-    final wkFs = dense ? 9.0 : 10.0;
-    final dayFs = dense ? 13.0 : 15.0;
-    final dotSz = dense ? 4.0 : 5.0;
-    final gapAfterDay = dense ? 2.0 : 4.0;
-    final radius = dense ? 8.0 : 10.0;
-    final hzPad = dense ? 1.0 : 2.0;
+    final cellPadV = dense ? context.rs(4) : context.rs(8);
+    final dotSz = dense ? context.rs(4) : context.rs(5);
+    final gapAfterDay = dense ? context.rs(2) : context.rs(4);
+    final radius = dense ? context.rs(8) : context.rs(10);
+    final hzPad = dense ? context.rs(1) : context.rs(2);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -159,13 +215,12 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
           Text(
             _weekRangeLine(mon),
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: hdrFs,
+            style: (dense ? tt.labelSmall : tt.labelMedium)?.copyWith(
               fontWeight: FontWeight.w800,
               color: cs.onSurface,
             ),
           ),
-          SizedBox(height: hdrGap),
+          SizedBox(height: dense ? context.rs(4) : context.rs(6)),
         ],
         Row(
           children: List.generate(7, (i) {
@@ -221,17 +276,15 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
                         children: [
                           Text(
                             _weekdayKo[day.weekday - 1],
-                            style: TextStyle(
-                              fontSize: wkFs,
+                            style: (dense ? tt.labelSmall : tt.labelMedium)?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: weekdayLabelColor,
                             ),
                           ),
-                          SizedBox(height: dense ? 1 : 2),
+                          SizedBox(height: dense ? context.rs(1) : context.rs(2)),
                           Text(
                             '${day.day}',
-                            style: TextStyle(
-                              fontSize: dayFs,
+                            style: (dense ? tt.titleSmall : tt.titleMedium)?.copyWith(
                               fontWeight: FontWeight.w900,
                               color: dayNumberColor,
                             ),
@@ -309,13 +362,13 @@ class _ScheduleWeekDaySections extends ConsumerWidget {
 
     if (tiles.isEmpty) {
       final cs = Theme.of(context).colorScheme;
+      final tt = Theme.of(context).textTheme;
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: ResponsiveLayout.symmetric(context, vertical: 20),
         child: Center(
           child: Text(
             '이 주에는 등록된 일정이 없습니다.',
-            style: TextStyle(
-              fontSize: 13,
+            style: tt.bodySmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: cs.onSurfaceVariant,
             ),
@@ -348,6 +401,7 @@ class _DaySchedulePane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     assert(memos.isNotEmpty);
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final selectedDay = ref.watch(
       dashboardScheduleProvider.select((s) => s.selectedDay),
     );
@@ -380,14 +434,13 @@ class _DaySchedulePane extends ConsumerWidget {
         clipBehavior: Clip.antiAlias,
         child: ExpansionTile(
           initiallyExpanded: true,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          tilePadding: ResponsiveLayout.symmetric(context, horizontal: 10, vertical: 2),
+          childrenPadding: ResponsiveLayout.only(context, left: 8, right: 8, bottom: 8),
           shape: shape,
           collapsedShape: shape,
           title: Text(
             _dayTitleLine(day),
-            style: TextStyle(
-              fontSize: 13,
+            style: tt.bodySmall?.copyWith(
               fontWeight: FontWeight.w900,
               color: titleColor,
             ),
@@ -396,7 +449,7 @@ class _DaySchedulePane extends ConsumerWidget {
           children: [
             for (final m in memos)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: ResponsiveLayout.only(context, bottom: 8),
                 child: _memoTile(
                   context,
                   ref,
@@ -432,6 +485,7 @@ class DashboardScheduleWeekPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final state = ref.watch(dashboardScheduleProvider);
     final vm = ref.read(dashboardScheduleProvider.notifier);
 
@@ -453,8 +507,7 @@ class DashboardScheduleWeekPicker extends ConsumerWidget {
               child: Text(
                 _weekRangeLine(state.weekStart),
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
+                style: tt.labelMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                   color: cs.onSurface,
                 ),
@@ -598,36 +651,40 @@ class _DashboardScheduleCompactCardState
       useSafeArea: true,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
-        final sheetHeight =
-            (MediaQuery.sizeOf(ctx).height * 0.62).clamp(320.0, 520.0).toDouble();
+        final tt = Theme.of(ctx).textTheme;
+        final sheetHeight = (MediaQuery.sizeOf(ctx).height * 0.62)
+            .clamp(context.rs(320), context.rs(520))
+            .toDouble();
         return SizedBox(
           height: sheetHeight,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+            padding: ResponsiveLayout.only(ctx, left: 14, top: 4, right: 14, bottom: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   '공유할 날짜 선택',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w900),
                 ),
-                const SizedBox(height: 10),
+                rsV(ctx, 10),
                 Expanded(
                   child: ListView.builder(
                     itemCount: 7,
                     itemBuilder: (context, i) {
                       final day = weekStart.add(Duration(days: i));
                       final key = scheduleDateKey(day);
-                      final count =
-                          state.weekMemos.where((m) => m.taskDate == key).length;
+                      final count = state.weekMemos
+                          .where((m) => m.taskDate == key)
+                          .length;
                       final isSelected = _scheduleIsSameDay(day, selected);
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: ResponsiveLayout.only(ctx, bottom: 8),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(context.rs(12)),
                           onTap: () => Navigator.pop(ctx, day),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: ResponsiveLayout.symmetric(
+                              ctx,
                               horizontal: 12,
                               vertical: 10,
                             ),
@@ -649,8 +706,7 @@ class _DashboardScheduleCompactCardState
                                 Expanded(
                                   child: Text(
                                     _dayTitleLine(day),
-                                    style: TextStyle(
-                                      fontSize: 13,
+                                    style: tt.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w800,
                                       color: isSelected
                                           ? cs.onPrimaryContainer
@@ -660,8 +716,7 @@ class _DashboardScheduleCompactCardState
                                 ),
                                 Text(
                                   count == 0 ? '일정 없음' : '$count개',
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                  style: tt.labelMedium?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     color: isSelected
                                         ? cs.onPrimaryContainer
@@ -711,7 +766,8 @@ class _DashboardScheduleCompactCardState
     final vm = ref.read(dashboardScheduleProvider.notifier);
     final today = scheduleDateOnly(DateTime.now());
     final mediaH = MediaQuery.sizeOf(context).height;
-    final pageHeight = (mediaH * 0.44).clamp(340.0, 480.0);
+    final pageHeight = (mediaH * 0.44).clamp(context.rs(340), context.rs(480));
+    final tt = Theme.of(context).textTheme;
 
     ref.listen<DashboardScheduleState>(dashboardScheduleProvider, (prev, next) {
       if (prev?.weekStart == next.weekStart) return;
@@ -736,29 +792,36 @@ class _DashboardScheduleCompactCardState
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(context.rs(16)),
         side: BorderSide(
           color: cs.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
       child: Container(
         color: Theme.of(context).cardColor,
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        padding: ResponsiveLayout.only(
+          context,
+          left: 12,
+          top: 12,
+          right: 12,
+          bottom: 10,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Icon(Icons.event_note_outlined, size: 20, color: cs.primary),
-                const SizedBox(width: 8),
-                const Expanded(
+                Icon(Icons.event_note_outlined,
+                    size: context.rsi(20), color: cs.primary),
+                rsH(context, 8),
+                Expanded(
                   child: Text(
                     '일정 · 메모',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.share_outlined, size: 20),
+                  icon: Icon(Icons.share_outlined, size: context.rsi(20)),
                   onPressed: () async {
                     try {
                       final day = await _pickDayForShare(context, state);
@@ -775,11 +838,18 @@ class _DashboardScheduleCompactCardState
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            rsV(context, 12),
             SizedBox(
               height: pageHeight,
               child: _pageController == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? _scheduleWeekPageSkeleton(
+                      context: context,
+                      weekMonday: vm.weekMondayAtPageIndex(
+                        vm.weekPageIndexFor(state.weekStart),
+                      ),
+                      cs: cs,
+                      pageHeight: pageHeight,
+                    )
                   : PageView.builder(
                       controller: _pageController,
                       itemCount: DashboardScheduleViewModel.weekPageCount,
@@ -804,11 +874,11 @@ class _DashboardScheduleCompactCardState
                         final loading =
                             state.isWeekLoading && isActivePage && list.isEmpty;
                         if (loading) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(24),
-                              child: CircularProgressIndicator(),
-                            ),
+                          return _scheduleWeekPageSkeleton(
+                            context: context,
+                            weekMonday: mon,
+                            cs: cs,
+                            pageHeight: pageHeight,
                           );
                         }
                         return Column(
@@ -821,7 +891,7 @@ class _DashboardScheduleCompactCardState
                               onDayTap: _scrollToDaySection,
                             ),
                             Divider(
-                              height: 20,
+                              height: context.rs(20),
                               thickness: 1,
                               color: cs.outlineVariant.withValues(alpha: 0.45),
                             ),
@@ -829,8 +899,11 @@ class _DashboardScheduleCompactCardState
                               child: SingleChildScrollView(
                                 controller: scrollCtrl,
                                 physics: const AlwaysScrollableScrollPhysics(),
-                                padding:
-                                    const EdgeInsets.only(top: 4, bottom: 8),
+                                padding: ResponsiveLayout.only(
+                                  context,
+                                  top: 4,
+                                  bottom: 8,
+                                ),
                                 child: _ScheduleWeekDaySections(
                                   weekMonday: mon,
                                   memos: list,
@@ -844,7 +917,7 @@ class _DashboardScheduleCompactCardState
                       },
                     ),
             ),
-            const SizedBox(height: 6),
+            rsV(context, 6),
             Row(
               children: [
                 Expanded(
@@ -906,23 +979,23 @@ class _FullWeekBlock extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Material(
       color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(context.rs(14)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        padding: ResponsiveLayout.all(context, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               weekRangeLabel,
-              style: TextStyle(
-                fontSize: 13,
+              style: tt.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
                 color: cs.onSurface,
               ),
             ),
-            const SizedBox(height: 10),
+            rsV(context, 10),
             _ScheduleWeekDaySections(
               weekMonday: weekStart,
               memos: memos,
@@ -936,201 +1009,24 @@ class _FullWeekBlock extends ConsumerWidget {
   }
 }
 
-String _dayHeading(String taskDateKey) {
-  final d = _parseTaskDateKey(taskDateKey);
-  final wd = _weekdayKo[d.weekday - 1];
-  return '${d.month}/${d.day} ($wd)';
-}
-
 Widget _memoTile(
   BuildContext context,
   WidgetRef ref,
   ScheduleMemoModel m, {
   required bool showDayHeading,
 }) {
-  final cs = Theme.of(context).colorScheme;
   final vm = ref.read(dashboardScheduleProvider.notifier);
-  final d = _parseTaskDateKey(m.taskDate);
-  final isSat = d.weekday == DateTime.saturday;
-  final isSun = d.weekday == DateTime.sunday;
-
-  Color dayAccent;
-  if (isSun) {
-    dayAccent = _sundayRed;
-  } else if (isSat) {
-    dayAccent = _saturdayBlue;
-  } else {
-    dayAccent = cs.onSurfaceVariant;
-  }
-
-  return Slidable(
-    key: ValueKey(m.sid ?? '${m.taskDate}-${m.createdAtMs}-${m.title}'),
-    closeOnScroll: true,
-    startActionPane: ActionPane(
-      motion: const DrawerMotion(),
-      extentRatio: 0.28,
-      children: [
-        SlidableAction(
-          onPressed: (_) => openDashboardMemoEditor(context, ref, existing: m),
-          backgroundColor: cs.primary,
-          foregroundColor: cs.onPrimary,
-          icon: Icons.edit_outlined,
-          label: '수정',
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ],
-    ),
-    endActionPane: ActionPane(
-      motion: const DrawerMotion(),
-      extentRatio: 0.28,
-      children: [
-        SlidableAction(
-          onPressed: (_) => _confirmDelete(context, ref, m),
-          backgroundColor: Colors.red,
-          foregroundColor: Colors.white,
-          icon: Icons.delete_outline,
-          label: '삭제',
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ],
-    ),
-    child: Material(
-      color: cs.surface.withValues(alpha: 0.65),
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Checkbox(
-              value: m.done,
-              onChanged: (v) {
-                if (m.sid != null) {
-                  vm.setDone(m.sid!, v ?? false);
-                }
-              },
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-            Expanded(
-              child: InkWell(
-                onTap: () => openDashboardMemoEditor(context, ref, existing: m),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 2,
-                    horizontal: 2,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (showDayHeading) ...[
-                        Text(
-                          _dayHeading(m.taskDate),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: dayAccent,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                      ],
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  m.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                    decoration: m.done
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    color: m.done
-                                        ? cs.onSurfaceVariant
-                                        : cs.onSurface,
-                                  ),
-                                ),
-                                if (m.memo.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    m.memo,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: cs.onSurfaceVariant,
-                                      height: 1.25,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (m.taskTime.trim().isNotEmpty ||
-                              m.alarmEnabled) ...[
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: 110,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  if (m.taskTime.trim().isNotEmpty)
-                                    Text(
-                                      m.taskTime.trim(),
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w900,
-                                        color: cs.primary,
-                                        height: 1.0,
-                                      ),
-                                    ),
-                                  if (m.alarmEnabled) ...[
-                                    const SizedBox(height: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: cs.primaryContainer
-                                            .withValues(alpha: 0.9),
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                      child: Text(
-                                        '알람 ${_alarmOffsetLabel(m.alarmOffsetMinutes)}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: cs.onPrimaryContainer,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
+  return ScheduleMemoListTile(
+    memo: m,
+    showDayHeading: showDayHeading,
+    onTap: () => openDashboardMemoEditor(context, ref, existing: m),
+    onDoneChanged: (v) {
+      if (m.sid != null) {
+        vm.setDone(m.sid!, v ?? false);
+      }
+    },
+    onEdit: () => openDashboardMemoEditor(context, ref, existing: m),
+    onDelete: () => _confirmDelete(context, ref, m),
   );
 }
 
@@ -1163,159 +1059,6 @@ Future<void> _confirmDelete(
   }
 }
 
-TimeOfDay? _parseTaskTime(String value) {
-  final v = value.trim();
-  if (v.isEmpty) return null;
-  final p = v.split(':');
-  if (p.length != 2) return null;
-  final hour = int.tryParse(p[0]);
-  final minute = int.tryParse(p[1]);
-  if (hour == null || minute == null) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-  return TimeOfDay(hour: hour, minute: minute);
-}
-
-String _timeToKey(TimeOfDay t) {
-  return '${t.hour.toString().padLeft(2, '0')}:'
-      '${t.minute.toString().padLeft(2, '0')}';
-}
-
-Future<TimeOfDay?> _pickTaskTime(
-  BuildContext context,
-  TimeOfDay? initial,
-) async {
-  final now = DateTime.now();
-  final init = initial ?? TimeOfDay.now();
-  var selected = DateTime(
-    now.year,
-    now.month,
-    now.day,
-    init.hour,
-    init.minute,
-  );
-
-  final picked = await showModalBottomSheet<DateTime>(
-    context: context,
-    showDragHandle: true,
-    useSafeArea: true,
-    builder: (ctx) {
-      return StatefulBuilder(
-        builder: (ctx, setModalState) {
-          var pickerResetKey = 0;
-          void applyQuickMinute(int minute) {
-            final base = selected;
-            setModalState(() {
-              selected = DateTime(
-                base.year,
-                base.month,
-                base.day,
-                base.hour,
-                minute,
-              );
-              pickerResetKey++;
-            });
-          }
-
-          return SizedBox(
-            height: 360,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Row(
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('취소'),
-                      ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(ctx, selected),
-                        child: const Text('확인'),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.tonal(
-                            onPressed: () => applyQuickMinute(0),
-                            style: FilledButton.styleFrom(
-                              elevation: 0,
-                              backgroundColor: selected.minute == 0
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.transparent,
-                              foregroundColor: selected.minute == 0
-                                  ? Theme.of(context).colorScheme.onPrimary
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text('정각'),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: FilledButton.tonal(
-                            onPressed: () => applyQuickMinute(30),
-                            style: FilledButton.styleFrom(
-                              elevation: 0,
-                              backgroundColor: selected.minute == 30
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.transparent,
-                              foregroundColor: selected.minute == 30
-                                  ? Theme.of(context).colorScheme.onPrimary
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text('반'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: CupertinoDatePicker(
-                    key: ValueKey(
-                      '${selected.hour}-${selected.minute}-$pickerResetKey',
-                    ),
-                    mode: CupertinoDatePickerMode.time,
-                    use24hFormat: true,
-                    initialDateTime: selected,
-                    onDateTimeChanged: (value) => selected = value,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
-  if (picked == null) return null;
-  return TimeOfDay(hour: picked.hour, minute: picked.minute);
-}
-
 Future<void> openDashboardMemoEditor(
   BuildContext context,
   WidgetRef ref, {
@@ -1329,7 +1072,7 @@ Future<void> openDashboardMemoEditor(
       ? _parseTaskDateKey(existing.taskDate)
       : (initialDateOverride ?? st.selectedDay);
   final initialTime =
-      existing != null ? _parseTaskTime(existing.taskTime) : null;
+      existing != null ? parseScheduleMemoTaskTime(existing.taskTime) : null;
 
   List<PlaceInfoModel> places = const [];
   final me = ref.read(authSessionProvider).maybeWhen(
@@ -1354,10 +1097,11 @@ Future<void> openDashboardMemoEditor(
     }
   }
   if (!context.mounted) return;
-  places.sort((a, b) => (b.pid ?? 0).compareTo(a.pid ?? 0)); // 최근 등록 순
+  final placeList = List<PlaceInfoModel>.from(places);
+  placeList.sort((a, b) => (b.pid ?? 0).compareTo(a.pid ?? 0)); // 최근 등록 순
   final seen = <String>{};
   final placeNameSuggestions = <String>[];
-  for (final p in places) {
+  for (final p in placeList) {
     final name = p.pname.trim();
     if (name.isEmpty || seen.contains(name)) continue;
     seen.add(name);
@@ -1369,19 +1113,23 @@ Future<void> openDashboardMemoEditor(
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (ctx) => DashboardScheduleMemoEditorSheet(
-      existing: existing,
-      initialDate: initialDate,
-      initialTime: initialTime,
-      onPickTime: (initial) => _pickTaskTime(context, initial),
-      placeNameSuggestions: placeNameSuggestions,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+      child: DashboardScheduleMemoEditorSheet(
+        existing: existing,
+        initialDate: initialDate,
+        initialTime: initialTime,
+        onPickTime: (initial) => pickScheduleMemoTaskTime(context, initial),
+        placeNameSuggestions: placeNameSuggestions,
+      ),
     ),
   );
 
   if (result == null || !context.mounted) return;
 
-  final taskTime = result.time == null ? '' : _timeToKey(result.time!);
-  final normalizedMemo = _normalizeMemoAsBullets(result.memo);
+  final taskTime =
+      result.time == null ? '' : scheduleMemoTimeToKey(result.time!);
+  final normalizedMemo = normalizeScheduleMemoBulletText(result.memo);
   if (existing == null) {
     await vm.addMemo(
       date: result.date,
@@ -1403,14 +1151,4 @@ Future<void> openDashboardMemoEditor(
       ),
     );
   }
-}
-
-String _normalizeMemoAsBullets(String raw) {
-  final lines = raw
-      .split('\n')
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .map((e) => e.startsWith('- ') ? e : '- $e')
-      .toList();
-  return lines.join('\n');
 }

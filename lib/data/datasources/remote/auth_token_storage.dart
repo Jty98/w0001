@@ -11,7 +11,11 @@ final class AuthTokenStorage {
 
   static final AuthTokenStorage I = AuthTokenStorage._();
 
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+    ),
+  );
 
   Future<String?> readAccess() => _storage.read(key: _kAccessToken);
 

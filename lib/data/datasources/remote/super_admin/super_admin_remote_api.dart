@@ -11,6 +11,7 @@ import 'package:w0001/data/datasources/remote/place/place_work_days_api.dart';
 import 'package:w0001/data/datasources/remote/place/place_worker_recents_api.dart';
 import 'package:w0001/data/datasources/remote/place/places_api.dart';
 import 'package:w0001/data/datasources/remote/schedule_memo/schedule_memos_api.dart';
+import 'package:w0001/data/datasources/remote/worker_management/worker_management_api.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 
@@ -28,7 +29,8 @@ final class SuperAdminRemoteApi {
         placeWorkerRecents = PlaceWorkerRecentsRemoteApi(http),
         scheduleMemos = ScheduleMemosRemoteApi(http),
         placePhotoGroups = PlacePhotoGroupsRemoteApi(http),
-        placePhotos = PlacePhotosRemoteApi(http);
+        placePhotos = PlacePhotosRemoteApi(http),
+        workerManagement = WorkerManagementRemoteApi(http);
 
   final UsersRemoteApi users;
   final PlacesRemoteApi places;
@@ -42,6 +44,7 @@ final class SuperAdminRemoteApi {
   final ScheduleMemosRemoteApi scheduleMemos;
   final PlacePhotoGroupsRemoteApi placePhotoGroups;
   final PlacePhotosRemoteApi placePhotos;
+  final WorkerManagementRemoteApi workerManagement;
 
   // --- 퍼블릭 API (Repository 와 동일 시그니처) ---
 
@@ -52,7 +55,8 @@ final class SuperAdminRemoteApi {
       users.patch(uid, body);
   Future<void> userDelete(String uid) => users.delete(uid);
 
-  Future<List<UserRead>> usersPendingList({String? q}) => users.listPending(q: q);
+  Future<List<UserRead>> usersPendingList({String? q}) =>
+      users.listPending(q: q);
   Future<List<UserRead>> usersSearch({
     String? role,
     String? approvalStatus,
@@ -86,20 +90,23 @@ final class SuperAdminRemoteApi {
 
   Future<List<PlaceRead>> placesList() => places.list();
   Future<PlaceRead> placeGet(int pid) => places.get(pid);
-  Future<PlaceRead> placeCreate(Map<String, dynamic> body) => places.create(body);
+  Future<PlaceRead> placeCreate(Map<String, dynamic> body) =>
+      places.create(body);
   Future<PlaceRead> placePatch(int pid, Map<String, dynamic> body) =>
       places.patch(pid, body);
   Future<void> placeDelete(int pid) => places.delete(pid);
 
   Future<List<HumanRead>> humansList() => humans.list();
   Future<HumanRead> humanGet(int hid) => humans.get(hid);
-  Future<HumanRead> humanCreate(Map<String, dynamic> body) => humans.create(body);
+  Future<HumanRead> humanCreate(Map<String, dynamic> body) =>
+      humans.create(body);
   Future<HumanRead> humanPatch(int hid, Map<String, dynamic> body) =>
       humans.patch(hid, body);
   Future<void> humanDelete(int hid) => humans.delete(hid);
 
   Future<List<PlaceWorkDayRead>> placeWorkDaysList() => placeWorkDays.list();
-  Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid) => placeWorkDays.get(pwdid);
+  Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid) =>
+      placeWorkDays.get(pwdid);
   Future<PlaceWorkDayRead> placeWorkDayCreate(Map<String, dynamic> body) =>
       placeWorkDays.create(body);
   Future<PlaceWorkDayRead> placeWorkDayPatch(
@@ -121,7 +128,8 @@ final class SuperAdminRemoteApi {
   Future<MaterialCostRead> materialCostGet(int mid) => materialCosts.get(mid);
   Future<MaterialCostRead> materialCostCreate(Map<String, dynamic> body) =>
       materialCosts.create(body);
-  Future<MaterialCostRead> materialCostPatch(int mid, Map<String, dynamic> body) =>
+  Future<MaterialCostRead> materialCostPatch(
+          int mid, Map<String, dynamic> body) =>
       materialCosts.patch(mid, body);
   Future<void> materialCostDelete(int mid) => materialCosts.delete(mid);
 
@@ -140,7 +148,8 @@ final class SuperAdminRemoteApi {
       placeCollections.list();
   Future<PlaceCollectionRead> placeCollectionGet(int cid) =>
       placeCollections.get(cid);
-  Future<PlaceCollectionRead> placeCollectionCreate(Map<String, dynamic> body) =>
+  Future<PlaceCollectionRead> placeCollectionCreate(
+          Map<String, dynamic> body) =>
       placeCollections.create(body);
   Future<PlaceCollectionRead> placeCollectionPatch(
     int cid,
@@ -199,4 +208,39 @@ final class SuperAdminRemoteApi {
   Future<PlacePhotoRead> placePhotoPatch(int phid, Map<String, dynamic> body) =>
       placePhotos.patch(phid, body);
   Future<void> placePhotoDelete(int phid) => placePhotos.delete(phid);
+
+  Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid) =>
+      workerManagement.listNotes(workerHid);
+  Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
+    required int workerHid,
+    required String noteType,
+    required String memo,
+    int? rating,
+  }) =>
+      workerManagement.createNote(
+        workerHid: workerHid,
+        noteType: noteType,
+        memo: memo,
+        rating: rating,
+      );
+  Future<List<WorkerMgmtConflictRead>> workerMgmtConflictsList({
+    bool activeOnly = true,
+  }) =>
+      workerManagement.listConflicts(activeOnly: activeOnly);
+  Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
+    required int workerAHid,
+    required int workerBHid,
+    int severity = 2,
+    String note = '',
+    bool active = true,
+  }) =>
+      workerManagement.upsertConflict(
+        workerAHid: workerAHid,
+        workerBHid: workerBHid,
+        severity: severity,
+        note: note,
+        active: active,
+      );
+  Future<void> workerMgmtConflictDelete(int pairId) =>
+      workerManagement.deleteConflict(pairId);
 }

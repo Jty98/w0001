@@ -8,6 +8,7 @@ class PlaceModel {
   int pcomplete;
   final int prevenue;
   final int pcontractTotal;
+
   /// 공사금액 확정일 yyyy-MM-dd. 비어 있으면 대시보드·집계에서 `pstart` 앞 10자를 사용합니다.
   final String pcontractDate;
 
@@ -34,4 +35,3 @@ class PlaceModel {
         pcontractTotal = res['pcontractTotal'] ?? 0,
         pcontractDate = res['pcontractDate'] ?? '';
 }
-

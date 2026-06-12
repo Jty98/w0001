@@ -58,7 +58,8 @@ final class DashboardRemoteApi {
     final q = <String, dynamic>{'selectedYear': selectedYear};
     if (kpiYear != null) q['kpiYear'] = kpiYear;
     if (kpiMonth != null) q['kpiMonth'] = kpiMonth;
-    final r = await _http.get<dynamic>(ApiEndpoint.dashboardBundle, queryParameters: q);
+    final r = await _http.get<dynamic>(ApiEndpoint.dashboardBundle,
+        queryParameters: q);
     return saParseObject(r.data);
   }
 

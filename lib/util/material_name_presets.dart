@@ -201,4 +201,3 @@ const Map<String, List<String>> materialNamePresetsByCategory = {
     '마대',
   ],
 };
-

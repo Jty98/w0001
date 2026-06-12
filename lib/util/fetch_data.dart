@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/access/user_role_access.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/calendar_view_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
+import 'package:w0001/util/worker_dashboard_refresh.dart';
 
 /// [main]에서 [UncontrolledProviderScope]와 동일한 컨테이너를 할당해야 함
 ProviderContainer? rootProviderContainer;
@@ -14,13 +17,21 @@ class FetchData {
   static Future<void> fetchAllData() async {
     final container = rootProviderContainer;
     if (container != null) {
-      await container.read(calendarProvider.notifier).refreshForFetchData();
+      final u = container.read(authSessionProvider).asData?.value;
+      final isWorker = u?.isWorker ?? false;
+
+      if (!isWorker) {
+        await container.read(calendarProvider.notifier).refreshForFetchData();
+      }
       await container.read(workerProvider.notifier).refreshFromGlobalFetch();
-      // 현장관리 탭 리스트도 즉시 갱신 (탭 전환 시 build가 다시 돌지 않는 케이스 대응).
       await container.read(placeListProvider.notifier).fetchAllPlace();
-      // 대시보드 탭은 별도 Notifier라, 여기서 안 부르면 요약·지표가 옛 데이터로 남음.
-      await container.read(dashboardProvider.notifier).fetch();
-      await container.read(dashboardScheduleProvider.notifier).refresh();
+      if (!isWorker) {
+        await container.read(dashboardProvider.notifier).fetch(isWorker: false);
+        await container.read(dashboardScheduleProvider.notifier).refresh();
+      }
+      if (isWorker) {
+        scheduleWorkerPersonalDashboardReload(container);
+      }
       // 상세(인건비·자재·수익)는 별도 provider. 무효화(invalidate)하면 [PlaceDetailViewModel]이 dispose되며
       // TextEditingController가 파괴되어 수익 추가 직후 같은 화면에서 크래시가 난다. 이미 켜진 provider만
       // 동일 인스턴스로 데이터만 다시 읽는다.

@@ -49,8 +49,10 @@ class DashboardKpiSnapshot {
       completedPlaces: dashReadInt(j, 'completedPlaces'),
       outstandingReceivable: dashReadInt(j, 'outstandingReceivable'),
       completedSitesInKpiMonth: dashReadInt(j, 'completedSitesInKpiMonth'),
-      completedContractMarginPct: dashReadDouble(j, 'completedContractMarginPct'),
-      completedContractProfitTotal: dashReadInt(j, 'completedContractProfitTotal'),
+      completedContractMarginPct:
+          dashReadDouble(j, 'completedContractMarginPct'),
+      completedContractProfitTotal:
+          dashReadInt(j, 'completedContractProfitTotal'),
     );
   }
 }
@@ -91,7 +93,8 @@ class YearlyDashboardPoint {
       costTotal: dashReadInt(j, 'costTotal'),
       newProjectCount: dashReadInt(j, 'newProjectCount'),
       completedProjectCount: dashReadInt(j, 'completedProjectCount'),
-      completedContractMarginPct: dashReadDouble(j, 'completedContractMarginPct'),
+      completedContractMarginPct:
+          dashReadDouble(j, 'completedContractMarginPct'),
       completedProfitTotal: dashReadInt(j, 'completedProfitTotal'),
     );
   }
@@ -246,8 +249,7 @@ DashboardKpiSnapshot _kpiFillTopLineFromMonthlyWhenZeros(
   final collection = kpi.monthlyCollection == 0
       ? pick.collectionAmount
       : kpi.monthlyCollection;
-  final cost =
-      kpi.monthlyCost == 0 ? pick.costAmount : kpi.monthlyCost;
+  final cost = kpi.monthlyCost == 0 ? pick.costAmount : kpi.monthlyCost;
 
   if (contract == kpi.monthlyContract &&
       collection == kpi.monthlyCollection &&
@@ -282,8 +284,8 @@ List<T> _mapList<T>(
   return data
       .map(
         (e) => f(
-              Map<String, dynamic>.from(e as Map<dynamic, dynamic>),
-            ),
+          Map<String, dynamic>.from(e as Map<dynamic, dynamic>),
+        ),
       )
       .toList();
 }

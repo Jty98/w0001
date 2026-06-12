@@ -13,7 +13,8 @@ class SuperAdminRemoteUseCase {
   // Users
   Future<List<UserRead>> usersList() => _repository.usersList();
   Future<UserRead> userGet(String uid) => _repository.userGet(uid);
-  Future<UserRead> userCreate(UserCreateBody body) => _repository.userCreate(body);
+  Future<UserRead> userCreate(UserCreateBody body) =>
+      _repository.userCreate(body);
   Future<UserRead> userPatch(String uid, Map<String, dynamic> body) =>
       _repository.userPatch(uid, body);
   Future<void> userDelete(String uid) => _repository.userDelete(uid);
@@ -73,7 +74,8 @@ class SuperAdminRemoteUseCase {
   Future<void> humanDelete(int hid) => _repository.humanDelete(hid);
 
   // Place work days
-  Future<List<PlaceWorkDayRead>> placeWorkDaysList() => _repository.placeWorkDaysList();
+  Future<List<PlaceWorkDayRead>> placeWorkDaysList() =>
+      _repository.placeWorkDaysList();
   Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid) =>
       _repository.placeWorkDayGet(pwdid);
   Future<PlaceWorkDayRead> placeWorkDayCreate(Map<String, dynamic> body) =>
@@ -83,7 +85,8 @@ class SuperAdminRemoteUseCase {
     Map<String, dynamic> body,
   ) =>
       _repository.placeWorkDayPatch(pwdid, body);
-  Future<void> placeWorkDayDelete(int pwdid) => _repository.placeWorkDayDelete(pwdid);
+  Future<void> placeWorkDayDelete(int pwdid) =>
+      _repository.placeWorkDayDelete(pwdid);
 
   // Work costs
   Future<List<WorkCostRead>> workCostsList() => _repository.workCostsList();
@@ -95,36 +98,46 @@ class SuperAdminRemoteUseCase {
   Future<void> workCostDelete(int wid) => _repository.workCostDelete(wid);
 
   // Material costs
-  Future<List<MaterialCostRead>> materialCostsList() => _repository.materialCostsList();
-  Future<MaterialCostRead> materialCostGet(int mid) => _repository.materialCostGet(mid);
+  Future<List<MaterialCostRead>> materialCostsList() =>
+      _repository.materialCostsList();
+  Future<MaterialCostRead> materialCostGet(int mid) =>
+      _repository.materialCostGet(mid);
   Future<MaterialCostRead> materialCostCreate(Map<String, dynamic> body) =>
       _repository.materialCostCreate(body);
-  Future<MaterialCostRead> materialCostPatch(int mid, Map<String, dynamic> body) =>
+  Future<MaterialCostRead> materialCostPatch(
+          int mid, Map<String, dynamic> body) =>
       _repository.materialCostPatch(mid, body);
-  Future<void> materialCostDelete(int mid) => _repository.materialCostDelete(mid);
+  Future<void> materialCostDelete(int mid) =>
+      _repository.materialCostDelete(mid);
 
   // Place revenues
-  Future<List<PlaceRevenueRead>> placeRevenuesList() => _repository.placeRevenuesList();
-  Future<PlaceRevenueRead> placeRevenueGet(int rid) => _repository.placeRevenueGet(rid);
+  Future<List<PlaceRevenueRead>> placeRevenuesList() =>
+      _repository.placeRevenuesList();
+  Future<PlaceRevenueRead> placeRevenueGet(int rid) =>
+      _repository.placeRevenueGet(rid);
   Future<PlaceRevenueRead> placeRevenueCreate(Map<String, dynamic> body) =>
       _repository.placeRevenueCreate(body);
-  Future<PlaceRevenueRead> placeRevenuePatch(int rid, Map<String, dynamic> body) =>
+  Future<PlaceRevenueRead> placeRevenuePatch(
+          int rid, Map<String, dynamic> body) =>
       _repository.placeRevenuePatch(rid, body);
-  Future<void> placeRevenueDelete(int rid) => _repository.placeRevenueDelete(rid);
+  Future<void> placeRevenueDelete(int rid) =>
+      _repository.placeRevenueDelete(rid);
 
   // Place collections
   Future<List<PlaceCollectionRead>> placeCollectionsList() =>
       _repository.placeCollectionsList();
   Future<PlaceCollectionRead> placeCollectionGet(int cid) =>
       _repository.placeCollectionGet(cid);
-  Future<PlaceCollectionRead> placeCollectionCreate(Map<String, dynamic> body) =>
+  Future<PlaceCollectionRead> placeCollectionCreate(
+          Map<String, dynamic> body) =>
       _repository.placeCollectionCreate(body);
   Future<PlaceCollectionRead> placeCollectionPatch(
     int cid,
     Map<String, dynamic> body,
   ) =>
       _repository.placeCollectionPatch(cid, body);
-  Future<void> placeCollectionDelete(int cid) => _repository.placeCollectionDelete(cid);
+  Future<void> placeCollectionDelete(int cid) =>
+      _repository.placeCollectionDelete(cid);
 
   // Place worker recents
   Future<List<PlaceWorkerRecentRead>> placeWorkerRecentsList() =>
@@ -145,34 +158,77 @@ class SuperAdminRemoteUseCase {
       _repository.placeWorkerRecentDelete(pid, hid);
 
   // Schedule memos
-  Future<List<ScheduleMemoRead>> scheduleMemosList() => _repository.scheduleMemosList();
-  Future<ScheduleMemoRead> scheduleMemoGet(int sid) => _repository.scheduleMemoGet(sid);
+  Future<List<ScheduleMemoRead>> scheduleMemosList() =>
+      _repository.scheduleMemosList();
+  Future<ScheduleMemoRead> scheduleMemoGet(int sid) =>
+      _repository.scheduleMemoGet(sid);
   Future<ScheduleMemoRead> scheduleMemoCreate(Map<String, dynamic> body) =>
       _repository.scheduleMemoCreate(body);
-  Future<ScheduleMemoRead> scheduleMemoPatch(int sid, Map<String, dynamic> body) =>
+  Future<ScheduleMemoRead> scheduleMemoPatch(
+          int sid, Map<String, dynamic> body) =>
       _repository.scheduleMemoPatch(sid, body);
-  Future<void> scheduleMemoDelete(int sid) => _repository.scheduleMemoDelete(sid);
+  Future<void> scheduleMemoDelete(int sid) =>
+      _repository.scheduleMemoDelete(sid);
 
   // Place photo groups
   Future<List<PlacePhotoGroupRead>> placePhotoGroupsList() =>
       _repository.placePhotoGroupsList();
   Future<PlacePhotoGroupRead> placePhotoGroupGet(int pgid) =>
       _repository.placePhotoGroupGet(pgid);
-  Future<PlacePhotoGroupRead> placePhotoGroupCreate(Map<String, dynamic> body) =>
+  Future<PlacePhotoGroupRead> placePhotoGroupCreate(
+          Map<String, dynamic> body) =>
       _repository.placePhotoGroupCreate(body);
   Future<PlacePhotoGroupRead> placePhotoGroupPatch(
     int pgid,
     Map<String, dynamic> body,
   ) =>
       _repository.placePhotoGroupPatch(pgid, body);
-  Future<void> placePhotoGroupDelete(int pgid) => _repository.placePhotoGroupDelete(pgid);
+  Future<void> placePhotoGroupDelete(int pgid) =>
+      _repository.placePhotoGroupDelete(pgid);
 
   // Place photos
-  Future<List<PlacePhotoRead>> placePhotosList() => _repository.placePhotosList();
-  Future<PlacePhotoRead> placePhotoGet(int phid) => _repository.placePhotoGet(phid);
+  Future<List<PlacePhotoRead>> placePhotosList() =>
+      _repository.placePhotosList();
+  Future<PlacePhotoRead> placePhotoGet(int phid) =>
+      _repository.placePhotoGet(phid);
   Future<PlacePhotoRead> placePhotoCreate(Map<String, dynamic> body) =>
       _repository.placePhotoCreate(body);
   Future<PlacePhotoRead> placePhotoPatch(int phid, Map<String, dynamic> body) =>
       _repository.placePhotoPatch(phid, body);
   Future<void> placePhotoDelete(int phid) => _repository.placePhotoDelete(phid);
+
+  Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid) =>
+      _repository.workerMgmtNotesList(workerHid);
+  Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
+    required int workerHid,
+    required String noteType,
+    required String memo,
+    int? rating,
+  }) =>
+      _repository.workerMgmtNoteCreate(
+        workerHid: workerHid,
+        noteType: noteType,
+        memo: memo,
+        rating: rating,
+      );
+  Future<List<WorkerMgmtConflictRead>> workerMgmtConflictsList({
+    bool activeOnly = true,
+  }) =>
+      _repository.workerMgmtConflictsList(activeOnly: activeOnly);
+  Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
+    required int workerAHid,
+    required int workerBHid,
+    int severity = 2,
+    String note = '',
+    bool active = true,
+  }) =>
+      _repository.workerMgmtConflictUpsert(
+        workerAHid: workerAHid,
+        workerBHid: workerBHid,
+        severity: severity,
+        note: note,
+        active: active,
+      );
+  Future<void> workerMgmtConflictDelete(int pairId) =>
+      _repository.workerMgmtConflictDelete(pairId);
 }

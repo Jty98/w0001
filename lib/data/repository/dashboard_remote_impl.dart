@@ -10,7 +10,8 @@ class DashboardRemoteRepositoryImpl implements DashboardRemoteRepository {
   final DashboardRemoteApi _api;
 
   @override
-  Future<DashboardKpiSnapshot> kpi({required int year, required int month}) async {
+  Future<DashboardKpiSnapshot> kpi(
+      {required int year, required int month}) async {
     final j = await _api.kpi(year: year, month: month);
     return DashboardKpiSnapshot.fromJson(_unwrapKpiMap(j));
   }

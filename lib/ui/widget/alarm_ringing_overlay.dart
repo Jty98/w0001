@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
-import 'package:w0001/router/app_router.dart';
+import 'package:w0001/navigation/app_router.dart';
 import 'package:w0001/ui/screen/alarm/alarm_ringing_screen.dart';
 
 class AlarmRingingOverlayController {

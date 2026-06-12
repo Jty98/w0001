@@ -18,6 +18,8 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
     required this.vLeft,
     required this.vBody,
     required this.brushScrollLock,
+    this.readOnly = false,
+    this.onDateHeaderTap,
     required this.onStickyPointerDown,
     required this.onStickyPointerMove,
     required this.onStickyPointerUp,
@@ -35,6 +37,10 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
   final ScrollController vBody;
 
   final bool brushScrollLock;
+  final bool readOnly;
+
+  /// 관리자: 날짜 헤더 탭 시 (예: 인력 투입 화면으로).
+  final void Function(DateTime day)? onDateHeaderTap;
 
   final void Function(PointerDownEvent e) onStickyPointerDown;
   final void Function(PointerMoveEvent e) onStickyPointerMove;
@@ -44,15 +50,16 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = data;
+    final cellW = ProcessScheduleChartDim.cellW(context);
+    final cellH = ProcessScheduleChartDim.cellH(context);
     final tableBody = SizedBox(
-      width: d.dayCount * ProcessScheduleChartDim.cellW,
-      height: d.tasks.length * ProcessScheduleChartDim.cellH,
+      width: d.dayCount * cellW,
+      height: d.tasks.length * cellH,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Table(
-            defaultColumnWidth:
-                const FixedColumnWidth(ProcessScheduleChartDim.cellW),
+            defaultColumnWidth: FixedColumnWidth(cellW),
             border: TableBorder.all(
               color: cs.outlineVariant.withValues(alpha: 0.35),
               width: 0.5,
@@ -74,15 +81,16 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
                 ),
             ],
           ),
-          Positioned.fill(
-            child: Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: onStickyPointerDown,
-              onPointerMove: onStickyPointerMove,
-              onPointerUp: onStickyPointerUp,
-              onPointerCancel: (_) => onStickyPointerCancel(),
+          if (!readOnly)
+            Positioned.fill(
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: onStickyPointerDown,
+                onPointerMove: onStickyPointerMove,
+                onPointerUp: onStickyPointerUp,
+                onPointerCancel: (_) => onStickyPointerCancel(),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -91,11 +99,11 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: ProcessScheduleChartDim.headerH,
+          height: ProcessScheduleChartDim.headerH(context),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              cornerHeader(cs),
+              cornerHeader(context, cs),
               Expanded(
                 child: ListView.builder(
                   controller: hHeader,
@@ -103,8 +111,16 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   physics: const ClampingScrollPhysics(),
                   itemCount: dates.length,
-                  itemBuilder: (ctx, i) =>
-                      dateHeaderCell(context, dates[i]),
+                  itemBuilder: (ctx, i) => SizedBox(
+                    height: ProcessScheduleChartDim.headerH(context),
+                    child: dateHeaderCell(
+                      context,
+                      dates[i],
+                      onTap: onDateHeaderTap == null
+                          ? null
+                          : () => onDateHeaderTap!(dates[i]),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -115,14 +131,13 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: ProcessScheduleChartDim.leftColW,
+                width: ProcessScheduleChartDim.leftColW(context),
                 child: ListView.builder(
                   controller: vLeft,
                   physics: const ClampingScrollPhysics(),
                   itemCount: d.tasks.length,
-                  itemExtent: ProcessScheduleChartDim.cellH,
-                  itemBuilder: (ctx, i) =>
-                      taskLabelCell(context, d.tasks[i]),
+                  itemExtent: ProcessScheduleChartDim.cellH(context),
+                  itemBuilder: (ctx, i) => taskLabelCell(context, d.tasks[i]),
                 ),
               ),
               Expanded(
@@ -157,12 +172,13 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
   }
 }
 
-double chartContentW(ProcessScheduleData d) =>
-    ProcessScheduleChartDim.leftColW + d.dayCount * ProcessScheduleChartDim.cellW;
+double chartContentW(BuildContext context, ProcessScheduleData d) =>
+    ProcessScheduleChartDim.leftColW(context) +
+    d.dayCount * ProcessScheduleChartDim.cellW(context);
 
-double chartContentH(ProcessScheduleData d) =>
-    ProcessScheduleChartDim.headerH +
-    d.tasks.length * ProcessScheduleChartDim.cellH;
+double chartContentH(BuildContext context, ProcessScheduleData d) =>
+    ProcessScheduleChartDim.headerH(context) +
+    d.tasks.length * ProcessScheduleChartDim.cellH(context);
 
 /// InteractiveViewer 안에 들어가는 고정 크기 표 — 셀 탭만 지원.
 class ProcessScheduleOverviewChart extends StatelessWidget {
@@ -173,6 +189,7 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
     required this.dates,
     required this.labelCentersByRow,
     required this.onCellTap,
+    this.onDateHeaderTap,
   });
 
   final ColorScheme cs;
@@ -181,28 +198,36 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
   final List<Set<int>> labelCentersByRow;
 
   final void Function(int taskIndex, int dayIndex) onCellTap;
+  final void Function(DateTime day)? onDateHeaderTap;
 
   @override
   Widget build(BuildContext context) {
     final d = data;
+    final cellW = ProcessScheduleChartDim.cellW(context);
+    final cellH = ProcessScheduleChartDim.cellH(context);
     return SizedBox(
-      width: chartContentW(d),
-      height: chartContentH(d),
+      width: chartContentW(context, d),
+      height: chartContentH(context, d),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            height: ProcessScheduleChartDim.headerH,
+            height: ProcessScheduleChartDim.headerH(context),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                cornerHeader(cs),
+                cornerHeader(context, cs),
                 for (var i = 0; i < dates.length; i++)
                   SizedBox(
-                    width: ProcessScheduleChartDim.cellW,
-                    height: ProcessScheduleChartDim.headerH,
-                    child: dateHeaderCell(context, dates[i]),
+                    height: ProcessScheduleChartDim.headerH(context),
+                    child: dateHeaderCell(
+                      context,
+                      dates[i],
+                      onTap: onDateHeaderTap == null
+                          ? null
+                          : () => onDateHeaderTap!(dates[i]),
+                    ),
                   ),
               ],
             ),
@@ -211,25 +236,24 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: ProcessScheduleChartDim.leftColW,
+                width: ProcessScheduleChartDim.leftColW(context),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final t in d.tasks)
                       SizedBox(
-                        height: ProcessScheduleChartDim.cellH,
-                        width: ProcessScheduleChartDim.leftColW,
+                        height: cellH,
+                        width: ProcessScheduleChartDim.leftColW(context),
                         child: taskLabelCell(context, t),
                       ),
                   ],
                 ),
               ),
               SizedBox(
-                width: d.dayCount * ProcessScheduleChartDim.cellW,
-                height: d.tasks.length * ProcessScheduleChartDim.cellH,
+                width: d.dayCount * cellW,
+                height: d.tasks.length * cellH,
                 child: Table(
-                  defaultColumnWidth:
-                      const FixedColumnWidth(ProcessScheduleChartDim.cellW),
+                  defaultColumnWidth: FixedColumnWidth(cellW),
                   border: TableBorder.all(
                     color: cs.outlineVariant.withValues(alpha: 0.35),
                     width: 0.5,

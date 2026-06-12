@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:w0001/data/datasources/remote/auth_token_storage.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/util/api_endpoint.dart';
 import 'package:w0001/util/auth_api_user_messages.dart';
+import 'package:w0001/util/auth_forced_sign_out.dart';
 
 // ---------------------------------------------------------------------------
 // Exceptions (CRUD / 네트워크 공통)
@@ -45,13 +47,21 @@ final class HttpStatusException extends HttpClientException {
 
 /// 인증/리프레시 실패
 final class HttpAuthException extends HttpClientException {
-  const HttpAuthException(String message, {Object? super.cause, super.statusCode})
-      : super(message);
+  const HttpAuthException(
+    String message, {
+    Object? super.cause,
+    super.statusCode,
+    this.uiMessageAlreadyShown = false,
+  }) : super(message);
+
+  /// [performAuthForcedSignOut] 등에서 이미 안내한 경우 화면별 스낵바 생략.
+  final bool uiMessageAlreadyShown;
 }
 
 /// JSON 등 파싱 실패
 final class HttpParseException extends HttpClientException {
-  const HttpParseException(String message, {Object? super.cause}) : super(message);
+  const HttpParseException(String message, {Object? super.cause})
+      : super(message);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,15 +89,24 @@ final class AppHttpClient {
   Future<void>? _ongoingRefresh;
   bool _isInit = false;
 
+  /// 네트워크 오류 스낵바 중복 표시 방지용
+  static DateTime? _lastNetworkErrorSnackbarTime;
+  static const _networkErrorSnackbarThrottleDuration = Duration(seconds: 3);
+
+  /// 네트워크 오류 스낵바를 표시하기 위한 NavigatorKey (main.dart에서 설정)
+  static GlobalKey<NavigatorState>? rootNavigatorKey;
+
   bool get isInitialized => _isInit;
 
   Dio get raw => _dio;
 
   /// 선택 `.env` 키: `auth_refresh_path`, `auth_login_path`, `auth_signup_path`
-  Future<void> init({Duration? connectTimeout, Duration? receiveTimeout}) async {
+  Future<void> init(
+      {Duration? connectTimeout, Duration? receiveTimeout}) async {
     final base = dotenv.env['base_url']?.trim();
     if (base == null || base.isEmpty) {
-      throw StateError('dotenv에 base_url이 없습니다. (예: base_url=https://api.example.com)');
+      throw StateError(
+          'dotenv에 base_url이 없습니다. (예: base_url=https://api.example.com)');
     }
     _baseUrl = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
     _refreshPath =
@@ -95,7 +114,8 @@ final class AppHttpClient {
     if (!_refreshPath.startsWith('/')) {
       _refreshPath = '/$_refreshPath';
     }
-    _loginPath = (dotenv.env['auth_login_path']?.trim() ?? ApiEndpoint.authLogin);
+    _loginPath =
+        (dotenv.env['auth_login_path']?.trim() ?? ApiEndpoint.authLogin);
     if (!_loginPath.startsWith('/')) {
       _loginPath = '/$_loginPath';
     }
@@ -157,22 +177,34 @@ final class AppHttpClient {
         requestPath.endsWith(configuredPath);
   }
 
+  bool _isPublicTermsPath(String p) {
+    return p == ApiEndpoint.terms || p.startsWith('${ApiEndpoint.terms}/');
+  }
+
   bool _shouldSkipAuthHeader(RequestOptions o) {
     final p = o.uri.path;
     if (_pathMatchesAuthRoute(p, _loginPath)) return true;
     if (_pathMatchesAuthRoute(p, _refreshPath)) return true;
     if (_pathMatchesAuthRoute(p, _signupPath)) return true;
+    if (_pathMatchesAuthRoute(p, ApiEndpoint.authCheckUid)) return true;
+    if (_pathMatchesAuthRoute(p, ApiEndpoint.authPhoneSendCode)) return true;
+    if (_pathMatchesAuthRoute(p, ApiEndpoint.authPhoneVerify)) return true;
+    if (_isPublicTermsPath(p)) return true;
     return false;
   }
 
   bool _isRefreshRequest(RequestOptions o) =>
       _pathMatchesAuthRoute(o.uri.path, _refreshPath);
 
-  /// 로그인·회원가입 POST 는 Bearer 없이 401 나오므로 리프레시로 보완하지 않음.
-  bool _isCredentialAuthRequest(RequestOptions o) {
+  /// 로그인·회원가입·아이디 중복 확인 등 공개 Auth — Bearer·401 리프레시 없음.
+  bool _isPublicAuthRequest(RequestOptions o) {
     final p = o.uri.path;
     return _pathMatchesAuthRoute(p, _loginPath) ||
-        _pathMatchesAuthRoute(p, _signupPath);
+        _pathMatchesAuthRoute(p, _signupPath) ||
+        _pathMatchesAuthRoute(p, ApiEndpoint.authCheckUid) ||
+        _pathMatchesAuthRoute(p, ApiEndpoint.authPhoneSendCode) ||
+        _pathMatchesAuthRoute(p, ApiEndpoint.authPhoneVerify) ||
+        _isPublicTermsPath(p);
   }
 
   void _onUnauthorized401(
@@ -187,11 +219,16 @@ final class AppHttpClient {
       // 리프레시 API가 401이면 루프 방지: 그대로 매핑
       return handler.next(_mapDioToClientException(err));
     }
-    if (_isCredentialAuthRequest(req)) {
+    if (_isPublicAuthRequest(req)) {
       return handler.next(_mapDioToClientException(err));
     }
 
     final structured = tryParseAuthStructuredDetail(err.response?.data);
+    if (structured != null &&
+        AuthApiErrorCodes.isInterceptorSessionSuperseded(structured.code)) {
+      unawaited(_handleSessionSuperseded401(err, handler));
+      return;
+    }
     if (structured != null &&
         AuthApiErrorCodes.isInterceptorAccountBlocked(structured.code)) {
       unawaited(_clearAuthThenNext401(err, handler));
@@ -199,6 +236,25 @@ final class AppHttpClient {
     }
 
     unawaited(_refreshAndRetry(err, handler));
+  }
+
+  Future<void> _handleSessionSuperseded401(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    await performAuthForcedSignOut(authSessionSupersededMessageKo);
+    handler.next(
+      DioException(
+        requestOptions: err.requestOptions,
+        type: DioExceptionType.badResponse,
+        error: HttpAuthException(
+          authSessionSupersededMessageKo,
+          statusCode: 401,
+          uiMessageAlreadyShown: true,
+        ),
+        response: err.response,
+      ),
+    );
   }
 
   Future<void> _clearAuthThenNext401(
@@ -299,19 +355,32 @@ final class AppHttpClient {
       );
     } on DioException catch (e) {
       final code = e.response?.statusCode;
-        if (code == 401) {
-          await AuthTokenStorage.I.clear();
-          final msg = resolveAuthRelatedUserLine(
-            httpStatusCode: 401,
-            responseData: e.response?.data,
-            fallbackMessage: authTokenSessionUnifiedMessageKo,
-          );
+      if (code == 401) {
+        await AuthTokenStorage.I.clear();
+        final structured = tryParseAuthStructuredDetail(e.response?.data);
+        if (structured != null &&
+            AuthApiErrorCodes.isInterceptorSessionSuperseded(
+              structured.code,
+            )) {
+          await performAuthForcedSignOut(authSessionSupersededMessageKo);
           throw HttpAuthException(
-            msg,
+            authSessionSupersededMessageKo,
             statusCode: 401,
             cause: e,
+            uiMessageAlreadyShown: true,
           );
         }
+        final msg = resolveAuthRelatedUserLine(
+          httpStatusCode: 401,
+          responseData: e.response?.data,
+          fallbackMessage: authTokenSessionUnifiedMessageKo,
+        );
+        throw HttpAuthException(
+          msg,
+          statusCode: 401,
+          cause: e,
+        );
+      }
       // 타임아웃·연결 끊김 등 일시 오류에서는 저장된 토큰을 유지한다 (재시도·오프라인 복귀 대비).
       final transient = e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.sendTimeout ||
@@ -478,12 +547,14 @@ final class AppHttpClient {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+        _showNetworkErrorSnackbar('요청 시간이 초과되었습니다.');
         return DioException(
           requestOptions: e.requestOptions,
           type: e.type,
           error: HttpConnectionException('요청 시간이 초과되었습니다.', cause: e),
         );
       case DioExceptionType.connectionError:
+        _showNetworkErrorSnackbar('네트워크 연결을 확인해주세요.');
         return DioException(
           requestOptions: e.requestOptions,
           type: e.type,
@@ -494,7 +565,8 @@ final class AppHttpClient {
         final b = e.response?.data;
         if (c == 401) {
           // `detail.code` 없을 때: 로그인 호출면 자격증명 실패, 그 외는 토큰/세션 문제로 안내.
-          final fallback401 = _isCredentialAuthRequest(e.requestOptions)
+          final p401 = e.requestOptions.uri.path;
+          final fallback401 = _pathMatchesAuthRoute(p401, _loginPath)
               ? '아이디 또는 비밀번호가 일치하지 않습니다.'
               : authTokenSessionUnifiedMessageKo;
           final msg = resolveAuthRelatedUserLine(
@@ -526,6 +598,7 @@ final class AppHttpClient {
           response: e.response,
         );
       default:
+        _showNetworkErrorSnackbar('네트워크 연결을 확인해주세요.');
         return DioException(
           requestOptions: e.requestOptions,
           type: e.type,
@@ -533,9 +606,79 @@ final class AppHttpClient {
         );
     }
   }
+
+  /// 네트워크 오류 스낵바를 표시합니다. (중복 표시 방지 로직 포함)
+  void _showNetworkErrorSnackbar(String message) {
+    final now = DateTime.now();
+    if (_lastNetworkErrorSnackbarTime != null &&
+        now.difference(_lastNetworkErrorSnackbarTime!) <
+            _networkErrorSnackbarThrottleDuration) {
+      return;
+    }
+    _lastNetworkErrorSnackbarTime = now;
+
+    final navKey = rootNavigatorKey;
+    if (navKey == null || navKey.currentContext == null) return;
+
+    final messenger = ScaffoldMessenger.maybeOf(navKey.currentContext!);
+    if (messenger == null) return;
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.red.shade700,
+      ),
+    );
+  }
 }
 
 extension AppHttpClientDioX on DioException {
   HttpClientException? get httpClientError =>
       error is HttpClientException ? error as HttpClientException : null;
+}
+
+/// [DioException.error]에 감싸진 [HttpClientException] 또는 그대로인 예외를 꺼낸다.
+HttpClientException? unwrapHttpClientException(Object error) {
+  if (error is HttpClientException) return error;
+  if (error is DioException) return error.httpClientError;
+  return null;
+}
+
+/// `place-work-days` 등에서 트러블 페어로 인한 409 응답인지.
+///
+/// 서버: `error.code == WORKER_CONFLICT_PAIR_WARNING`, `acknowledge_required: true` 등.
+/// 구형 응답은 본문 메시지 힌트로 판별.
+bool isWorkerTroublePairConflictError(Object error) {
+  final h = unwrapHttpClientException(error);
+  if (h == null || h.statusCode != 409) return false;
+  if (h is HttpStatusException) {
+    final body = h.body;
+    if (_isWorkerConflictPairWarningBody(body)) return true;
+  }
+  final m = h.message.toLowerCase();
+  return m.contains('worker pair') ||
+      m.contains('cannot be assigned together') ||
+      m.contains('conflict warning');
+}
+
+bool _isWorkerConflictPairWarningBody(Object? body) {
+  Map<String, dynamic>? errMap;
+  if (body is Map) {
+    final m = Map<String, dynamic>.from(body);
+    final e = m['error'];
+    if (e is Map) {
+      errMap = Map<String, dynamic>.from(e);
+    } else {
+      final d = m['detail'];
+      if (d is Map) errMap = Map<String, dynamic>.from(d);
+    }
+  }
+  if (errMap == null) return false;
+  if (errMap['code']?.toString() == 'WORKER_CONFLICT_PAIR_WARNING') {
+    return true;
+  }
+  if (errMap['acknowledge_required'] == true) return true;
+  return false;
 }

@@ -3,45 +3,53 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
+import 'package:w0001/access/user_role_capabilities.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/calendar_view_model.dart';
 import 'package:w0001/ui/widget/calendar/my_calendar.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/work_cost_delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/total_cost_card.dart';
 import 'package:w0001/ui/widget/total_price_bar.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class CalendarScreen extends ConsumerWidget {
   const CalendarScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final readOnly = ref.watch(authSessionProvider).maybeWhen(
+          data: (u) => u != null && !u.role.canEditCalendarExpenses,
+          orElse: () => false,
+        );
     return Scaffold(
       body: Column(
         children: [
           const CalendarWidget(),
-          _buildTotalPriceBar(ref),
-          _buildSelectedCategoryText(ref),
+          _buildTotalPriceBar(ref, readOnly),
+          _buildSelectedCategoryText(context, ref),
           Expanded(
-            child: _buildListView(context, ref),
+            child: _buildListView(context, ref, readOnly),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSelectedCategoryText(WidgetRef ref) {
+  Widget _buildSelectedCategoryText(BuildContext context, WidgetRef ref) {
     final state = ref.watch(calendarProvider);
     final vm = ref.read(calendarProvider.notifier);
+    final tt = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: ResponsiveLayout.only(context, left: 12, top: 4, right: 12),
       child: Text(
         '${state.selectedFilterType.category} ${getPrice(price: vm.getFilteredListPrice)}',
-        style: normalStyle,
+        style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -49,14 +57,21 @@ class CalendarScreen extends ConsumerWidget {
   Widget _buildListView(
     BuildContext context,
     WidgetRef ref,
+    bool readOnly,
   ) {
     ref.watch(calendarProvider);
     final vm = ref.read(calendarProvider.notifier);
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: ResponsiveLayout.only(context, left: 12, top: 6, right: 12),
       child: vm.placeCount == 0
-          ? const Center(child: Text('조회된 데이터가 없습니다.'))
+          ? Center(
+              child: Text(
+                '조회된 데이터가 없습니다.',
+                style: tt.bodyMedium,
+              ),
+            )
           : ListView.builder(
               itemCount: vm.placeCount,
               itemBuilder: (context, index) {
@@ -67,98 +82,150 @@ class CalendarScreen extends ConsumerWidget {
                   elevation: 0,
                   color: cs.surfaceContainerLow,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+                    borderRadius: BorderRadius.circular(context.rs(16)),
+                    side: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: 0.55)),
                   ),
                   child: ExpansionTile(
                     initiallyExpanded: true,
                     shape: const Border(),
-                    tilePadding: const EdgeInsets.symmetric(
+                    tilePadding: ResponsiveLayout.symmetric(
+                      context,
                       horizontal: 10,
                     ),
                     leading: Icon(
                       pcomplete == 0 ? null : Icons.check_box_rounded,
-                      color: Colors.grey[600],
-                      size: 20,
+                      color: cs.onSurfaceVariant,
+                      size: context.rsi(20),
                     ),
                     title: Text(
                       pname,
-                      style: normalStyle,
+                      style: tt.titleMedium,
                     ),
                     expandedAlignment: Alignment.centerLeft,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                        padding: ResponsiveLayout.only(
+                          context,
+                          left: 12,
+                          top: 6,
+                          right: 12,
+                          bottom: 12,
+                        ),
                         child: Column(
                           children: [
                             for (var element in vm.filteredTotalCostList
                                 .where((e) => e.pname == pname)
                                 .toList())
-                              Slidable(
-                                closeOnScroll: true,
-                                startActionPane: element.category == 'w'
-                                    ? ActionPane(
-                                        motion: const DrawerMotion(),
-                                        children: [
-                                          SlidableAction(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                            backgroundColor:
-                                                element.wcomplete == 1
-                                                    ? Colors.blue
-                                                    : Colors.green,
-                                            icon: element.wcomplete == 1
-                                                ? Icons.autorenew_outlined
-                                                : Icons.check_circle,
-                                            label: element.wcomplete == 1
-                                                ? '미지급으로 변경'
-                                                : '지급 완료',
-                                            onPressed: (slidableCtx) async {
-                                              final msg = await vm
-                                                  .updateWComplete(
-                                                      element.wcomplete,
-                                                      element.id);
-                                              if (!slidableCtx.mounted) {
-                                                return;
-                                              }
-                                              await showDialog<void>(
-                                                context: slidableCtx,
-                                                builder: (_) =>
-                                                    saveDialog(text: msg),
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      )
-                                    : null,
-                                endActionPane: ActionPane(
-                                  motion: const DrawerMotion(),
-                                  children: [
-                                    SlidableAction(
-                                      borderRadius: BorderRadius.circular(10),
-                                      backgroundColor: Colors.red,
-                                      icon: Icons.delete,
-                                      label: '삭제',
-                                      onPressed: (slidableCtx) async {
-                                        await showDialog<void>(
-                                          context: slidableCtx,
-                                          builder: (dialogCtx) => deleteDialog(
-                                            onPressed: () async {
-                                              await vm.deleteCost(
-                                                  element.category,
-                                                  element.id);
-                                              if (dialogCtx.mounted) {
-                                                Navigator.of(dialogCtx).pop();
-                                              }
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
+                              if (readOnly)
+                                Padding(
+                                  padding: EdgeInsets.only(bottom: context.rs(8)),
+                                  child: TotalCostCard(
+                                    category: element.category,
+                                    name: element.name,
+                                    price: element.price,
+                                    wcomplete: element.wcomplete,
+                                    wcompletedAt: element.wcompletedAt,
+                                  ),
+                                )
+                              else
+                                Slidable(
+                                  closeOnScroll: true,
+                                  startActionPane: element.category == 'w'
+                                      ? ActionPane(
+                                          motion: const DrawerMotion(),
+                                          children: [
+                                            SlidableAction(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              backgroundColor:
+                                                  element.wcomplete == 1
+                                                      ? cs.primary
+                                                      : cs.tertiary,
+                                              icon: element.wcomplete == 1
+                                                  ? Icons.autorenew_outlined
+                                                  : Icons.check_circle,
+                                              label: element.wcomplete == 1
+                                                  ? '미지급으로 변경'
+                                                  : '지급 완료',
+                                              onPressed: (slidableCtx) async {
+                                                final msg =
+                                                    await vm.updateWComplete(
+                                                        element.wcomplete,
+                                                        element.id);
+                                                if (!slidableCtx.mounted) {
+                                                  return;
+                                                }
+                                                await showDialog<void>(
+                                                  context: slidableCtx,
+                                                  builder: (_) =>
+                                                      saveDialog(text: msg),
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        )
+                                      : null,
+                                  endActionPane: ActionPane(
+                                    motion: const DrawerMotion(),
+                                    children: [
+                                      SlidableAction(
+                                        borderRadius: BorderRadius.circular(10),
+                                        backgroundColor: cs.error,
+                                        icon: Icons.delete,
+                                        label: '삭제',
+                                        onPressed: (slidableCtx) async {
+                                          if (element.category == 'w') {
+                                            final pwdid = await vm
+                                                .placeWorkDayPwdidForWorkCost(
+                                                    element);
+                                            if (!slidableCtx.mounted) return;
+                                            final choice =
+                                                await showWorkCostDeleteDialog(
+                                              slidableCtx,
+                                              placeName: element.pname,
+                                              workerName: element.name,
+                                              dateLabel: element.date,
+                                              hasLinkedWorkDay: pwdid != null,
+                                              workrole: element.workrole,
+                                            );
+                                            if (choice == null ||
+                                                choice ==
+                                                    WorkCostDeleteChoice
+                                                        .cancel ||
+                                                !slidableCtx.mounted) {
+                                              return;
+                                            }
+                                            await vm.deleteWorkCostLinked(
+                                              wid: element.id,
+                                              pwdid: choice ==
+                                                      WorkCostDeleteChoice
+                                                          .costAndWorkDay
+                                                  ? pwdid
+                                                  : null,
+                                            );
+                                            return;
+                                          }
+                                          await showDialog<void>(
+                                            context: slidableCtx,
+                                            builder: (dialogCtx) =>
+                                                deleteDialog(
+                                              onPressed: () async {
+                                                await vm.deleteCost(
+                                                    element.category,
+                                                    element.id);
+                                                if (dialogCtx.mounted) {
+                                                  Navigator.of(dialogCtx).pop();
+                                                }
+                                              },
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                  child: _editableCard(context, ref, element),
                                 ),
-                                child: _editableCard(context, ref, element),
-                              ),
                           ],
                         ),
                       ),
@@ -170,16 +237,19 @@ class CalendarScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTotalPriceBar(WidgetRef ref) {
+  Widget _buildTotalPriceBar(WidgetRef ref, bool readOnly) {
     final state = ref.watch(calendarProvider);
     final vm = ref.read(calendarProvider.notifier);
-    final callbacks = {
-      for (final type in FilterType.values)
-        type.category: (_) => vm.setFilterType(type),
-    };
+    final callbacks = readOnly
+        ? <String, CategoryTapCallback>{}
+        : {
+            for (final type in FilterType.values)
+              type.category: (_) => vm.setFilterType(type),
+          };
     return TotalPriceBar(
       totalCostList: state.totalCostList,
       categoryTapCallbacks: callbacks,
+      compact: true,
     );
   }
 
@@ -202,31 +272,34 @@ class CalendarScreen extends ConsumerWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    color: const Color.fromARGB(255, 243, 243, 243),
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     mainAxisAlignment: MainAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 15),
+                      Padding(
+                        padding: EdgeInsets.only(top: context.rs(15)),
                         child: Text(
                           '수정',
-                          style: bigStyle,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
                       TextButton.icon(
                         onPressed: () async =>
                             dialogVm.pickDialogDate(dialogContext),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.date_range_outlined,
-                          color: Color.fromARGB(255, 117, 154, 193),
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                         label: Text(
                           formatDateTimeWeekDayToString(
                               dialogState.dialogDateTime),
-                          style: smalldateStyle,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: const Color.fromARGB(255, 105, 112, 127),
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       Visibility(
@@ -249,7 +322,10 @@ class CalendarScreen extends ConsumerWidget {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.only(top: 10, bottom: 3),
+                        padding: EdgeInsets.only(
+                          top: context.rsi(10),
+                          bottom: context.rsi(3),
+                        ),
                         child: AddTextField(
                           tController: dialogVm.mNameController,
                           labelText: '항목',
@@ -270,10 +346,12 @@ class CalendarScreen extends ConsumerWidget {
                         onChanged: (value) => dialogVm.clearEditAlert(),
                       ),
                       Padding(
-                        padding: const EdgeInsets.only(top: 5),
+                        padding: EdgeInsets.only(top: context.rsi(5)),
                         child: Text(
                           dialogState.alertText,
-                          style: const TextStyle(color: Colors.red),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
                         ),
                       ),
                       Row(
@@ -284,9 +362,13 @@ class CalendarScreen extends ConsumerWidget {
                               dialogVm.clearEditAlert();
                               Navigator.of(dialogContext).pop();
                             },
-                            child: const Text(
+                            child: Text(
                               '취소',
-                              style: TextStyle(color: Colors.red),
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                             ),
                           ),
                           TextButton(
@@ -317,6 +399,7 @@ class CalendarScreen extends ConsumerWidget {
         name: element.name,
         price: element.price,
         wcomplete: element.wcomplete,
+        wcompletedAt: element.wcompletedAt,
       ),
     );
   }

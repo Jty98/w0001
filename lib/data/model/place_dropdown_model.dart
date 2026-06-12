@@ -2,7 +2,7 @@
 class PlaceDropDownModel {
   final String pname;
   final int pid;
-  
+
   PlaceDropDownModel({
     required this.pname,
     required this.pid,

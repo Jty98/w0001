@@ -1,10 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 typedef AddProcessDialogResult = ({
   String name,
   int startIdx,
   int endIdx,
 });
+
+/// 공정 이름 수정 다이얼로그
+Future<String?> showEditProcessNameDialog(
+  BuildContext context,
+  String currentName,
+) async {
+  final controller = TextEditingController(text: currentName);
+  final result = await showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ctx.rs(16)),
+        ),
+        title: const Text('공정 이름 수정'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: '공정 이름',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ctx.rs(12)),
+            ),
+            filled: true,
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              Navigator.pop(ctx, value.trim());
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                Navigator.pop(ctx, name);
+              }
+            },
+            child: const Text('수정'),
+          ),
+        ],
+      );
+    },
+  );
+  controller.dispose();
+  return result;
+}
 
 /// 공사 기간 — [공정 추가]와 동일하게 시작·종료 드롭다운.
 class PlacePeriodDropdownDialog extends StatefulWidget {
@@ -49,7 +103,9 @@ class _PlacePeriodDropdownDialogState extends State<PlacePeriodDropdownDialog> {
     final last = widget.dateLabels.length - 1;
     if (last < 0) {
       return AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.rs(12)),
+        ),
         title: const Text('공사 기간'),
         content: const Text('선택 가능한 날짜가 없습니다.'),
         actions: [
@@ -62,23 +118,22 @@ class _PlacePeriodDropdownDialogState extends State<PlacePeriodDropdownDialog> {
     }
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.rs(12)),
+      ),
       title: Text(
         '공사 기간',
-        style: tt.titleLarge?.copyWith(
-          fontWeight: FontWeight.w800,
-          fontSize: 17,
-        ),
+        style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
       ),
       content: SizedBox(
-        width: 420,
+        width: context.rs(420),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (widget.savedLine != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.only(bottom: context.rsi(12)),
                 child: Text(
                   '현재 공사 기간: ${widget.savedLine}',
                   style: tt.bodySmall?.copyWith(
@@ -95,13 +150,12 @@ class _PlacePeriodDropdownDialogState extends State<PlacePeriodDropdownDialog> {
                     children: [
                       Text(
                         '시작일',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: tt.labelSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: cs.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: context.rsi(4)),
                       DropdownButton<int>(
                         isExpanded: true,
                         value: _startIdx.clamp(0, last),
@@ -126,20 +180,19 @@ class _PlacePeriodDropdownDialogState extends State<PlacePeriodDropdownDialog> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: context.rsi(10)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
                         '종료일',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: tt.labelSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: cs.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: context.rsi(4)),
                       DropdownButton<int>(
                         isExpanded: true,
                         value: _endIdx.clamp(_startIdx, last),
@@ -217,10 +270,13 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final last = widget.dateLabels.length - 1;
     if (last < 0) {
       return AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.rs(20)),
+        ),
         title: const Text('공정 추가'),
         content: const Text('표시할 날짜가 없습니다.'),
         actions: [
@@ -233,10 +289,12 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
     }
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.rs(20)),
+      ),
       title: const Text('공정 추가'),
       content: SizedBox(
-        width: 420,
+        width: context.rs(420),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -247,13 +305,13 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
                 decoration: InputDecoration(
                   labelText: '공정 이름',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(context.rs(12)),
                   ),
                   filled: true,
                 ),
                 textInputAction: TextInputAction.next,
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: context.rsi(14)),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -263,13 +321,12 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
                       children: [
                         Text(
                           '시작일',
-                          style: TextStyle(
-                            fontSize: 12,
+                          style: tt.labelSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: cs.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: context.rsi(4)),
                         DropdownButton<int>(
                           isExpanded: true,
                           value: _startIdx.clamp(0, last),
@@ -294,20 +351,19 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: context.rsi(10)),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
                           '종료일',
-                          style: TextStyle(
-                            fontSize: 12,
+                          style: tt.labelSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: cs.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: context.rsi(4)),
                         DropdownButton<int>(
                           isExpanded: true,
                           value: _endIdx.clamp(_startIdx, last),

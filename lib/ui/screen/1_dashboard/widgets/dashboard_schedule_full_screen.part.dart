@@ -85,43 +85,46 @@ class _DashboardScheduleFullScreenState
       isScrollControlled: true,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
+        final tt = Theme.of(ctx).textTheme;
         final sheetHeight = (MediaQuery.sizeOf(ctx).height * 0.62)
-            .clamp(320.0, 520.0)
+            .clamp(context.rs(320), context.rs(520))
             .toDouble();
         return SizedBox(
           height: sheetHeight,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+            padding: ResponsiveLayout.only(ctx, left: 14, top: 4, right: 14, bottom: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   '공유할 날짜 선택',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w900),
                 ),
-                const SizedBox(height: 10),
+                rsV(ctx, 10),
                 Expanded(
                   child: ListView.builder(
                     itemCount: 7,
                     itemBuilder: (context, i) {
                       final day = weekStart.add(Duration(days: i));
                       final key = scheduleDateKey(day);
-                      final count = (state.fullMemos ?? const <ScheduleMemoModel>[])
-                          .where((m) => m.taskDate == key)
-                          .length;
+                      final count =
+                          (state.fullMemos ?? const <ScheduleMemoModel>[])
+                              .where((m) => m.taskDate == key)
+                              .length;
                       final isSelected = _scheduleIsSameDay(day, selected);
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: ResponsiveLayout.only(ctx, bottom: 8),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(context.rs(12)),
                           onTap: () => Navigator.pop(ctx, day),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: ResponsiveLayout.symmetric(
+                              ctx,
                               horizontal: 12,
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(context.rs(12)),
                               color: isSelected
                                   ? cs.primaryContainer
                                   : cs.surfaceContainerHighest
@@ -137,8 +140,7 @@ class _DashboardScheduleFullScreenState
                                 Expanded(
                                   child: Text(
                                     _dayTitleLine(day),
-                                    style: TextStyle(
-                                      fontSize: 13,
+                                    style: tt.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w800,
                                       color: isSelected
                                           ? cs.onPrimaryContainer
@@ -148,8 +150,7 @@ class _DashboardScheduleFullScreenState
                                 ),
                                 Text(
                                   count == 0 ? '일정 없음' : '$count개',
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                  style: tt.labelMedium?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     color: isSelected
                                         ? cs.onPrimaryContainer
@@ -245,7 +246,8 @@ class _DashboardScheduleFullScreenState
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: scheduleDateOnly(ref.read(dashboardScheduleProvider).selectedDay),
+      initialDate:
+          scheduleDateOnly(ref.read(dashboardScheduleProvider).selectedDay),
       firstDate: now.subtract(const Duration(days: 366)),
       lastDate: now.add(const Duration(days: 366)),
       locale: const Locale('ko'),
@@ -300,9 +302,8 @@ class _DashboardScheduleFullScreenState
                 return Center(
                   child: Text(
                     '${d.year}년 ${d.month}월',
-                    style: TextStyle(
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w800,
-                      fontSize: 13,
                       color: cs.onSurface,
                     ),
                   ),
@@ -330,11 +331,9 @@ class _DashboardScheduleFullScreenState
     final state = ref.watch(dashboardScheduleProvider);
     final vm = ref.read(dashboardScheduleProvider.notifier);
     final pageIdx = vm.weekPageIndexFor(state.weekStart);
-    final mon =
-        scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
-    final label = _spanIndex == 0
-        ? _weekRangeLine(mon)
-        : _twoWeekSingleRangeLine(mon);
+    final mon = scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
+    final label =
+        _spanIndex == 0 ? _weekRangeLine(mon) : _twoWeekSingleRangeLine(mon);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -361,19 +360,19 @@ class _DashboardScheduleFullScreenState
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w800,
-                  fontSize: 13,
                   color: cs.onSurface,
                 ),
               ),
             ),
             IconButton(
               tooltip: '다음 주',
-              onPressed: pageIdx < DashboardScheduleViewModel.weekPageCount - 1 &&
-                      !state.isWeekLoading
-                  ? () => _moveWeek(vm, 1)
-                  : null,
+              onPressed:
+                  pageIdx < DashboardScheduleViewModel.weekPageCount - 1 &&
+                          !state.isWeekLoading
+                      ? () => _moveWeek(vm, 1)
+                      : null,
               icon: Icon(
                 Icons.chevron_right_rounded,
                 size: 28,
@@ -424,11 +423,13 @@ class _DashboardScheduleFullScreenState
             color: cs.surfaceContainerLow,
             elevation: 0,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+              padding: ResponsiveLayout.only(context, left: 12, top: 4, right: 12, bottom: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SegmentedButton<int>(
+                    showSelectedIcon: false,
+                    style: AppSegmentedButton.styleFrom(),
                     segments: const [
                       ButtonSegment(
                         value: 0,
@@ -475,11 +476,6 @@ class _DashboardScheduleFullScreenState
                         });
                       }
                     },
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
                   ),
                   const SizedBox(height: 8),
                   if (_spanIndex == 2)
@@ -489,14 +485,13 @@ class _DashboardScheduleFullScreenState
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Icon(Icons.today_outlined, size: 18, color: cs.primary),
-                      const SizedBox(width: 6),
+                      Icon(Icons.today_outlined, size: context.rsi(18), color: cs.primary),
+                      rsH(context, 6),
                       Expanded(
                         child: Text(
                           '${_selectedDayHeading(state.selectedDay)} 기준',
-                          style: const TextStyle(
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w800,
-                            fontSize: 13,
                           ),
                         ),
                       ),
@@ -515,7 +510,8 @@ class _DashboardScheduleFullScreenState
                           if (_spanIndex == 2) {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (!mounted || _spanIndex != 2) return;
-                              final t = _monthPageIndexFromDate(_monthViewMonth);
+                              final t =
+                                  _monthPageIndexFromDate(_monthViewMonth);
                               final c = _monthPageCtrl;
                               if (c != null && c.hasClients) {
                                 c.jumpToPage(t);
@@ -545,43 +541,43 @@ class _DashboardScheduleFullScreenState
             child: _spanIndex == 2
                 ? _buildScrollBody(context, ref, state, cs)
                 : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ...previousChildren,
-                            if (currentChild != null) currentChild,
-                          ],
-                        );
-                      },
-                      transitionBuilder: (child, animation) {
-                        final enterFrom = Offset(
-                          _weekNavDirection > 0 ? 0.10 : -0.10,
-                          0,
-                        );
-                        return ClipRect(
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: enterFrom,
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: FadeTransition(
-                              opacity: animation,
-                              child: child,
-                            ),
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      );
+                    },
+                    transitionBuilder: (child, animation) {
+                      final enterFrom = Offset(
+                        _weekNavDirection > 0 ? 0.10 : -0.10,
+                        0,
+                      );
+                      return ClipRect(
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: enterFrom,
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: FadeTransition(
+                            opacity: animation,
+                            child: child,
                           ),
-                        );
-                      },
-                      child: KeyedSubtree(
-                        key: ValueKey(
-                          '${_spanIndex}_${scheduleDateKey(state.weekStart)}',
                         ),
-                        child: _buildScrollBody(context, ref, state, cs),
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey(
+                        '${_spanIndex}_${scheduleDateKey(state.weekStart)}',
                       ),
+                      child: _buildScrollBody(context, ref, state, cs),
                     ),
+                  ),
           ),
         ],
       ),
@@ -594,8 +590,62 @@ class _DashboardScheduleFullScreenState
     DashboardScheduleState state,
     ColorScheme cs,
   ) {
+    final tt = Theme.of(context).textTheme;
+    final bottomPad = context.rs(88);
+    final scrollPad = ResponsiveLayout.only(
+      context,
+      left: 12,
+      top: 12,
+      right: 12,
+      bottom: bottomPad,
+    );
     if (state.isFullLoading || state.fullMemos == null) {
-      return const Center(child: CircularProgressIndicator());
+      final mon =
+          scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
+      return Skeletonizer(
+        enabled: true,
+        child: SingleChildScrollView(
+          padding: scrollPad,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _weekRangeLine(mon),
+                textAlign: TextAlign.center,
+                style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              rsV(context, 12),
+              for (var i = 0; i < 5; i++)
+                Padding(
+                  padding: EdgeInsets.only(bottom: i < 4 ? context.rs(10) : 0),
+                  child: Material(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(context.rs(16)),
+                    child: Padding(
+                      padding: EdgeInsets.all(context.rs(14)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '일정 · 메모',
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          rsV(context, 8),
+                          Text(
+                            '내용을 불러오는 중입니다.',
+                            style: tt.bodySmall?.copyWith(height: 1.35),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
     }
 
     final mon = scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
@@ -606,7 +656,7 @@ class _DashboardScheduleFullScreenState
       final memos = state.memosOnFullListForWeekMonday(mon);
       scrollContent = SingleChildScrollView(
         controller: _fullScrollCtrl,
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+        padding: scrollPad,
         child: _FullWeekBlock(
           weekStart: mon,
           memos: memos,
@@ -619,7 +669,7 @@ class _DashboardScheduleFullScreenState
       final mon2 = mon.add(const Duration(days: 7));
       scrollContent = SingleChildScrollView(
         controller: _fullScrollCtrl,
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+        padding: scrollPad,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -630,7 +680,7 @@ class _DashboardScheduleFullScreenState
               onDayTap: _scrollToDay,
               daySectionKeys: _daySectionKeys,
             ),
-            const SizedBox(height: 10),
+            rsV(context, 10),
             _FullWeekBlock(
               weekStart: mon2,
               memos: state.memosOnFullListForWeekMonday(mon2),
@@ -648,12 +698,11 @@ class _DashboardScheduleFullScreenState
           .toList();
       if (blocks.isEmpty) {
         scrollContent = Padding(
-          padding: const EdgeInsets.only(bottom: 88),
+          padding: ResponsiveLayout.only(context, bottom: bottomPad),
           child: Center(
             child: Text(
               '이 달에는 등록된 일정이 없습니다.',
-              style: TextStyle(
-                fontSize: 13,
+              style: tt.bodySmall?.copyWith(
                 fontWeight: FontWeight.w600,
                 color: cs.onSurfaceVariant,
               ),
@@ -663,7 +712,7 @@ class _DashboardScheduleFullScreenState
       } else {
         scrollContent = SingleChildScrollView(
           controller: _fullScrollCtrl,
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+          padding: scrollPad,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -675,7 +724,7 @@ class _DashboardScheduleFullScreenState
                   onDayTap: _scrollToDay,
                   daySectionKeys: _daySectionKeys,
                 ),
-                if (i < blocks.length - 1) const SizedBox(height: 10),
+                if (i < blocks.length - 1) rsV(context, 10),
               ],
             ],
           ),

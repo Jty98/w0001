@@ -19,7 +19,8 @@ final class PlaceCollectionsRemoteApi {
   }
 
   Future<PlaceCollectionRead> create(Map<String, dynamic> body) async {
-    final r = await _http.post<dynamic>(ApiEndpoint.placeCollections, data: body);
+    final r =
+        await _http.post<dynamic>(ApiEndpoint.placeCollections, data: body);
     return PlaceCollectionRead.fromJson(saParseObject(r.data));
   }
 

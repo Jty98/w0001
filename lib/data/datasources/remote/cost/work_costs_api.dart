@@ -24,7 +24,8 @@ final class WorkCostsRemoteApi {
   }
 
   Future<WorkCostRead> patch(int wid, Map<String, dynamic> body) async {
-    final r = await _http.patch<dynamic>(ApiEndpoint.workCostsWid(wid), data: body);
+    final r =
+        await _http.patch<dynamic>(ApiEndpoint.workCostsWid(wid), data: body);
     return WorkCostRead.fromJson(saParseObject(r.data));
   }
 

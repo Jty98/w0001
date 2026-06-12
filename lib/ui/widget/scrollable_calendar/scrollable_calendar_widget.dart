@@ -1,11 +1,200 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:scrollable_calendar_package/calendar.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/responsive_layout.dart';
+
+/// [ScrollableCalendarWidget.adaptiveHeightForWeekModes]용 — 패키지
+/// `BuildWeekWidget`(헤더·요일·그리드)과 동일 비율(1주/2줄) 근사.
+double estimateScrollableCalendarWeekStripeHeight(
+  double viewportWidth,
+  CalendarViewMode mode,
+) {
+  if (mode != CalendarViewMode.oneWeek &&
+      mode != CalendarViewMode.twoWeeks) {
+    return 320;
+  }
+  const containerVMargin = 8.0;
+  const containerVPadding = 16.0;
+  const gapHeaderToGrid = 12.0;
+  const horizontalPaddingTotal = 10.0;
+  const headerAndWeekTitleApprox = 108.0;
+  const crossAxisCount = 7;
+  const aspect = 1.2;
+  const mainAxisSpacing = 2.0;
+  const crossAxisSpacing = 2.0;
+
+  final innerW =
+      math.max(0.0, viewportWidth - horizontalPaddingTotal).clamp(120.0, 2000.0);
+  final cellW = (innerW - crossAxisSpacing * (crossAxisCount - 1)) /
+      crossAxisCount;
+  final cellH = cellW / aspect;
+
+  final dayCount = mode == CalendarViewMode.twoWeeks ? 14 : 7;
+  final rows = (dayCount / crossAxisCount).ceil();
+  final gridH = rows * cellH + (rows > 1 ? (rows - 1) * mainAxisSpacing : 0.0);
+
+  return containerVMargin +
+      containerVPadding +
+      headerAndWeekTitleApprox +
+      gapHeaderToGrid +
+      gridH;
+}
+
+/// 해당 월 달력 그리드에 필요한 주(행) 수 (5 또는 6).
+int scrollableCalendarWeekRowsForMonth(int year, int month) {
+  final firstWeekday = DateTime(year, month, 1).weekday % 7;
+  final daysInMonth = DateTime(year, month + 1, 0).day;
+  return ((firstWeekday + daysInMonth) / 7).ceil();
+}
+
+/// 월별 보기 카드 높이 근사 — [scrollableCalendarWeekRowsForMonth] 행 수 반영.
+double estimateScrollableCalendarMonthStripeHeight(
+  double viewportWidth, {
+  required int weekRows,
+}) {
+  const containerVMargin = 4.0;
+  const containerVPadding = 10.0;
+  const gapHeaderToGrid = 8.0;
+  const horizontalPaddingTotal = 10.0;
+  const headerAndWeekTitleApprox = 112.0;
+  const crossAxisCount = 7;
+  const aspect = 1.32;
+  const mainAxisSpacing = 2.0;
+  const crossAxisSpacing = 2.0;
+  const bottomSafety = 4.0;
+
+  final innerW =
+      math.max(0.0, viewportWidth - horizontalPaddingTotal).clamp(120.0, 2000.0);
+  final cellW = (innerW - crossAxisSpacing * (crossAxisCount - 1)) /
+      crossAxisCount;
+  final cellH = cellW / aspect;
+  final rows = weekRows.clamp(4, 6);
+  final gridH = rows * cellH + (rows > 1 ? (rows - 1) * mainAxisSpacing : 0.0);
+
+  return containerVMargin +
+      containerVPadding +
+      headerAndWeekTitleApprox +
+      gapHeaderToGrid +
+      gridH +
+      bottomSafety;
+}
+
+/// 앱 [ThemeData.colorScheme]에 맞춘 달력 스타일 — 패키지 기본(인디고 고정) 대신 사용합니다.
+CalendarStyle scrollableCalendarStyleFromColorScheme(
+  ColorScheme cs, {
+  required bool subtleSelection,
+  TextTheme? textTheme,
+}) {
+  final tt = textTheme ?? const TextTheme();
+  final titleBase = tt.titleLarge ?? tt.titleMedium;
+  final labelBase = tt.labelLarge ?? tt.bodyMedium;
+  final bodyBase = tt.bodyLarge ?? tt.bodyMedium;
+
+  final headerText = (titleBase ?? const TextStyle()).copyWith(
+    fontWeight: FontWeight.bold,
+    color: cs.onSurface,
+    fontSize: 17,
+    height: 1.15,
+  );
+  final weekdayText = (labelBase ?? const TextStyle()).copyWith(
+    fontWeight: FontWeight.w700,
+    color: cs.onSurfaceVariant,
+  );
+  final dayText = (bodyBase ?? const TextStyle()).copyWith(
+    color: cs.onSurface,
+    fontWeight: FontWeight.w700,
+  );
+
+  final eventPalette = <Color>[
+    cs.primary,
+    cs.secondary,
+    cs.tertiary,
+    cs.error,
+    cs.primary,
+  ];
+
+  if (subtleSelection) {
+    return CalendarStyle(
+      focusedMonthBackgroundColor: Colors.transparent,
+      focusedMonthBorderColor: cs.outlineVariant.withValues(alpha: 0.65),
+      focusBorderColor: cs.primary,
+      headerAccentColor: cs.primary,
+      headerTextStyle: headerText,
+      weekdayTextStyle: weekdayText,
+      dayBackgroundColor: Colors.transparent,
+      selectedDayBackgroundColor: cs.primary.withValues(alpha: 0.17),
+      dayTextStyle: dayText,
+      selectedDayTextStyle: dayText.copyWith(
+        color: cs.primary,
+        fontWeight: FontWeight.bold,
+      ),
+      todayTextStyle: dayText.copyWith(
+        color: cs.primary,
+        fontWeight: FontWeight.w900,
+      ),
+      todayBorderColor: cs.primary,
+      todayBorderWidth: 1.6,
+      eventRangeBackgroundColor: cs.primary.withValues(alpha: 0.12),
+      eventStartEndBackgroundColor: cs.primary.withValues(alpha: 0.24),
+      eventStartEndTextStyle: dayText.copyWith(
+        color: cs.primary,
+        fontWeight: FontWeight.bold,
+      ),
+      eventColors: eventPalette,
+      eventSaveButtonTextStyle: dayText.copyWith(
+        color: cs.onPrimary,
+        fontWeight: FontWeight.bold,
+      ),
+      eventSaveButtonColor: cs.primary,
+      eventSaveButtonBorderColor: cs.primary,
+    );
+  }
+
+  return CalendarStyle(
+    focusedMonthBackgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+    focusedMonthBorderColor: cs.outlineVariant.withValues(alpha: 0.7),
+    focusBorderColor: cs.primary,
+    headerAccentColor: cs.primary,
+    headerTextStyle: headerText,
+    weekdayTextStyle: weekdayText,
+    dayBackgroundColor: Colors.transparent,
+    selectedDayBackgroundColor: cs.primaryContainer,
+    dayTextStyle: dayText,
+    selectedDayTextStyle: dayText.copyWith(
+      color: cs.onPrimaryContainer,
+      fontWeight: FontWeight.bold,
+    ),
+    todayTextStyle: dayText.copyWith(
+      color: cs.primary,
+      fontWeight: FontWeight.w800,
+    ),
+    todayBorderColor: cs.primary,
+    todayBorderWidth: 1.6,
+    eventRangeBackgroundColor: cs.primary.withValues(alpha: 0.14),
+    eventStartEndBackgroundColor: cs.primary,
+    eventStartEndTextStyle: dayText.copyWith(
+      color: cs.onPrimary,
+      fontWeight: FontWeight.bold,
+    ),
+    eventColors: eventPalette,
+    eventSaveButtonTextStyle: dayText.copyWith(
+      color: cs.onPrimary,
+      fontWeight: FontWeight.bold,
+    ),
+    eventSaveButtonColor: cs.primary,
+    eventSaveButtonBorderColor: cs.primary,
+  );
+}
 
 class ScrollableCalendarWidget extends StatefulWidget {
   const ScrollableCalendarWidget({
     super.key,
     this.height = 320,
+    /// true면 1주·2주 모드에서는 [height]를 상한만 두고, 실제 카드 높이는
+    /// 그리드 행 수에 맞춰 줄어들어 바로 아래 위젯이 위로 붙습니다. 월별은 [height].
+    this.adaptiveHeightForWeekModes = false,
     this.onRangeChanged,
     this.onDayPicked,
     this.initialRangeStart,
@@ -24,6 +213,9 @@ class ScrollableCalendarWidget extends StatefulWidget {
   });
 
   final double height;
+
+  /// 1주·2주 ↔ 월별 전환 시 뷰포트 높이를 내용에 맞출지(아래 레이아웃 밀림).
+  final bool adaptiveHeightForWeekModes;
 
   /// Inclusive date range (time stripped). Used by place add/edit dialog.
   final void Function(DateTime? start, DateTime? end)? onRangeChanged;
@@ -80,6 +272,9 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
   int _rebuildNonce = 0;
   late final int _instanceSeed;
 
+  late CalendarViewMode _calendarViewModeForHeight;
+  late DateTime _monthAnchorForHeight;
+
   bool get _isFixedRangeSinglePickMode =>
       widget.onDayPicked != null && !widget.useSingleDaySelection;
 
@@ -92,15 +287,23 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
   void initState() {
     super.initState();
     _instanceSeed = DateTime.now().microsecondsSinceEpoch;
+    _calendarViewModeForHeight =
+        widget.initialCalendarViewMode ?? CalendarViewMode.month;
     _rangeStart = widget.initialRangeStart;
     _rangeEnd = widget.initialRangeEnd ?? widget.initialRangeStart;
     final base = widget.initialSelectedDay ?? DateTime.now();
     _selectedDay = DateTime(base.year, base.month, base.day);
+    _monthAnchorForHeight = _selectedDay;
   }
 
   @override
   void didUpdateWidget(covariant ScrollableCalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.adaptiveHeightForWeekModes &&
+        oldWidget.initialCalendarViewMode != widget.initialCalendarViewMode) {
+      _calendarViewModeForHeight =
+          widget.initialCalendarViewMode ?? CalendarViewMode.month;
+    }
     if (oldWidget.initialRangeStart != widget.initialRangeStart ||
         oldWidget.initialRangeEnd != widget.initialRangeEnd) {
       setState(() {
@@ -113,11 +316,61 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
       final d = widget.initialSelectedDay!;
       setState(() {
         _selectedDay = DateTime(d.year, d.month, d.day);
+        _monthAnchorForHeight = _selectedDay;
         if (_isFixedRangeSinglePickMode) {
           _rebuildNonce++;
         }
       });
     }
+  }
+
+  void _handleMonthChanged(DateTime monthFirst) {
+    widget.onMonthChanged?.call(monthFirst);
+    if (!widget.adaptiveHeightForWeekModes) return;
+    final anchor = DateTime(monthFirst.year, monthFirst.month, 1);
+    if (_monthAnchorForHeight.year == anchor.year &&
+        _monthAnchorForHeight.month == anchor.month) {
+      return;
+    }
+    setState(() => _monthAnchorForHeight = anchor);
+  }
+
+  void _handleViewModeChanged(CalendarViewMode mode) {
+    if (widget.adaptiveHeightForWeekModes &&
+        _calendarViewModeForHeight != mode) {
+      setState(() => _calendarViewModeForHeight = mode);
+    }
+    widget.onViewModeChanged?.call(mode);
+  }
+
+  double _viewportHeight(double layoutMaxWidth) {
+    if (!widget.adaptiveHeightForWeekModes) {
+      return widget.height;
+    }
+    final w = layoutMaxWidth.isFinite && layoutMaxWidth > 0
+        ? layoutMaxWidth
+        : MediaQuery.sizeOf(context).width;
+    if (_calendarViewModeForHeight == CalendarViewMode.month) {
+      final rows = scrollableCalendarWeekRowsForMonth(
+        _monthAnchorForHeight.year,
+        _monthAnchorForHeight.month,
+      );
+      final est = estimateScrollableCalendarMonthStripeHeight(
+        w,
+        weekRows: rows,
+      );
+      final screenCap = MediaQuery.sizeOf(context).height * 0.405;
+      // 내용이 잘리지 않게 하되, 과한 여유는 화면 비율로 상한.
+      if (est <= screenCap) return est;
+      return math.max(screenCap, est * 0.98);
+    }
+    final oneW =
+        estimateScrollableCalendarWeekStripeHeight(w, CalendarViewMode.oneWeek);
+    final hi = widget.height;
+    final lo = math.min(oneW, hi);
+    final est =
+        estimateScrollableCalendarWeekStripeHeight(w, _calendarViewModeForHeight);
+    return est.clamp(lo, hi).toDouble();
   }
 
   String _rangeLabel() {
@@ -145,28 +398,12 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final style = widget.disableDateSelectionHighlight
-        ? CalendarStyle(
-            focusedMonthBackgroundColor: Colors.transparent,
-            selectedDayBackgroundColor: const Color(0x2B3B82F6),
-            selectedDayTextStyle: TextStyle(
-              color: cs.primary,
-              fontWeight: FontWeight.bold,
-            ),
-            todayTextStyle: const TextStyle(
-              color: Color(0xFF1D4ED8),
-              fontWeight: FontWeight.w900,
-            ),
-            todayBorderColor: const Color(0xFF1D4ED8),
-            todayBorderWidth: 1.6,
-            eventRangeBackgroundColor: const Color(0x1F3B82F6),
-            eventStartEndBackgroundColor: const Color(0x3B2563EB),
-            eventStartEndTextStyle: TextStyle(
-              color: cs.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          )
-        : const CalendarStyle();
+    final tt = Theme.of(context).textTheme;
+    final style = scrollableCalendarStyleFromColorScheme(
+      cs,
+      subtleSelection: widget.disableDateSelectionHighlight,
+      textTheme: Theme.of(context).textTheme,
+    );
 
     final initialStart = widget.initialRangeStart;
     final initialEnd = widget.initialRangeEnd ?? initialStart;
@@ -175,132 +412,150 @@ class _ScrollableCalendarWidgetState extends State<ScrollableCalendarWidget> {
     final useRangeMode =
         widget.onRangeChanged != null && !widget.useSingleDaySelection;
 
-    return SizedBox(
-      height: widget.height,
-      width: double.infinity,
-      child: ScrollableCalendar(
-        key: widget.calendarKey ??
-            (_isFixedRangeSinglePickMode
-                ? ValueKey(
-                    'addcost-calendar-$_rebuildNonce-${_selectedDay.toIso8601String()}',
-                  )
-                : ValueKey(
-                    'scroll-cal-$_instanceSeed-'
-                    '${widget.useSingleDaySelection ? 'single' : 'range'}-'
-                    '${widget.disableDateSelectionHighlight ? 'flat' : 'normal'}-'
-                    '${widget.showViewModeToggle ? 'toggle' : 'notoggle'}',
-                  )),
-        config: CalendarConfig(
-          initialDate: focusDate,
-          pageScrollDirection: CalendarPageScrollDirection.horizontal,
-          selectionMode: useRangeMode
-              ? CalendarSelectionMode.range
-              : CalendarSelectionMode.single,
-          showMonthArrowButtons: true,
-          calendarHeightFactor: 1,
-          initialEventStartDate: useRangeMode ? initialStart : null,
-          initialEventEndDate: useRangeMode ? initialEnd : null,
-          initialEvents: widget.initialEvents,
-        ),
-        style: style,
-        initialCalendarViewMode: widget.initialCalendarViewMode,
-        showViewModeToggle: widget.showViewModeToggle,
-        onMonthChanged: widget.onMonthChanged,
-        onCalendarPageAnchorChanged: widget.onCalendarPageAnchorChanged,
-        onViewModeChanged: widget.onViewModeChanged,
-        onDaySelected: widget.onDayPicked == null
-            ? null
-            : (date) {
-                if (!mounted) return;
-                final d = DateTime(date.year, date.month, date.day);
-                if (widget.useSingleDaySelection) {
-                  setState(() => _selectedDay = d);
-                  widget.onDayPicked?.call(d);
-                  return;
-                }
-                setState(() {
-                  _selectedDay = d;
-                  _rebuildNonce++;
-                });
-                widget.onDayPicked?.call(d);
-              },
-        onEventRangeChanged: widget.onRangeChanged == null
-            ? null
-            : (start, end) {
-                if (!mounted) return;
-                setState(() {
-                  _rangeStart = start;
-                  _rangeEnd = end;
-                });
-                widget.onRangeChanged?.call(start, end);
-              },
-        builder: (context, selectedDate, calendar) {
-          return Column(
-            children: [
-              if (_showRangeSummary)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: cs.outlineVariant.withValues(alpha: 0.55),
+    Widget sizedCalendar(double viewportHeight) => SizedBox(
+          height: viewportHeight,
+          width: double.infinity,
+          child: ScrollableCalendar(
+            key: widget.calendarKey ??
+                (_isFixedRangeSinglePickMode
+                    ? ValueKey(
+                        'addcost-calendar-$_rebuildNonce-${_selectedDay.toIso8601String()}',
+                      )
+                    : ValueKey(
+                        'scroll-cal-$_instanceSeed-'
+                        '${widget.useSingleDaySelection ? 'single' : 'range'}-'
+                        '${widget.disableDateSelectionHighlight ? 'flat' : 'normal'}-'
+                        '${widget.showViewModeToggle ? 'toggle' : 'notoggle'}',
+                      )),
+            config: CalendarConfig(
+              initialDate: focusDate,
+              pageScrollDirection: CalendarPageScrollDirection.horizontal,
+              selectionMode: useRangeMode
+                  ? CalendarSelectionMode.range
+                  : CalendarSelectionMode.single,
+              showMonthArrowButtons: true,
+              calendarHeightFactor: 1,
+              initialEventStartDate: useRangeMode ? initialStart : null,
+              initialEventEndDate: useRangeMode ? initialEnd : null,
+              initialEvents: widget.initialEvents,
+            ),
+            style: style,
+            initialCalendarViewMode: widget.initialCalendarViewMode,
+            showViewModeToggle: widget.showViewModeToggle,
+            onMonthChanged: _handleMonthChanged,
+            onCalendarPageAnchorChanged: widget.onCalendarPageAnchorChanged,
+            onViewModeChanged: _handleViewModeChanged,
+            onDaySelected: widget.onDayPicked == null
+                ? null
+                : (date) {
+                    if (!mounted) return;
+                    final d = DateTime(date.year, date.month, date.day);
+                    if (widget.useSingleDaySelection) {
+                      setState(() {
+                        _selectedDay = d;
+                        _monthAnchorForHeight = d;
+                      });
+                      widget.onDayPicked?.call(d);
+                      return;
+                    }
+                    setState(() {
+                      _selectedDay = d;
+                      _rebuildNonce++;
+                    });
+                    widget.onDayPicked?.call(d);
+                  },
+            onEventRangeChanged: widget.onRangeChanged == null
+                ? null
+                : (start, end) {
+                    if (!mounted) return;
+                    setState(() {
+                      _rangeStart = start;
+                      _rangeEnd = end;
+                    });
+                    widget.onRangeChanged?.call(start, end);
+                  },
+            builder: (context, selectedDate, calendar) {
+              return Column(
+                children: [
+                  if (_showRangeSummary)
+                    Padding(
+                      padding: ResponsiveLayout.only(
+                        context,
+                        left: 12,
+                        top: 12,
+                        right: 12,
+                        bottom: 8,
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: ResponsiveLayout.symmetric(
+                          context,
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest
+                              .withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(context.rs(12)),
+                          border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.date_range_outlined,
+                              size: context.rsi(18),
+                              color: cs.primary,
+                            ),
+                            rsH(context, 8),
+                            Expanded(
+                              child: Text(
+                                _rangeLabel(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: tt.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface,
+                                ),
+                              ),
+                            ),
+                            rsH(context, 8),
+                            Container(
+                              padding: ResponsiveLayout.symmetric(
+                                context,
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: cs.primaryContainer,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                _rangeDaysLabel(),
+                                style: tt.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.date_range_outlined,
-                          size: 18,
-                          color: cs.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _rangeLabel(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: cs.primaryContainer,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            _rangeDaysLabel(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              Expanded(child: calendar),
-            ],
-          );
-        },
-      ),
+                  Expanded(child: calendar),
+                ],
+              );
+            },
+          ),
+        );
+
+    if (!widget.adaptiveHeightForWeekModes) {
+      return sizedCalendar(widget.height);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          sizedCalendar(_viewportHeight(constraints.maxWidth)),
     );
   }
 }

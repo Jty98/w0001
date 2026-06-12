@@ -87,7 +87,8 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<void> humanDelete(int hid) => _api.humanDelete(hid);
 
   @override
-  Future<List<PlaceWorkDayRead>> placeWorkDaysList() => _api.placeWorkDaysList();
+  Future<List<PlaceWorkDayRead>> placeWorkDaysList() =>
+      _api.placeWorkDaysList();
   @override
   Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid) =>
       _api.placeWorkDayGet(pwdid);
@@ -117,9 +118,11 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<void> workCostDelete(int wid) => _api.workCostDelete(wid);
 
   @override
-  Future<List<MaterialCostRead>> materialCostsList() => _api.materialCostsList();
+  Future<List<MaterialCostRead>> materialCostsList() =>
+      _api.materialCostsList();
   @override
-  Future<MaterialCostRead> materialCostGet(int mid) => _api.materialCostGet(mid);
+  Future<MaterialCostRead> materialCostGet(int mid) =>
+      _api.materialCostGet(mid);
   @override
   Future<MaterialCostRead> materialCostCreate(Map<String, dynamic> body) =>
       _api.materialCostCreate(body);
@@ -133,9 +136,11 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<void> materialCostDelete(int mid) => _api.materialCostDelete(mid);
 
   @override
-  Future<List<PlaceRevenueRead>> placeRevenuesList() => _api.placeRevenuesList();
+  Future<List<PlaceRevenueRead>> placeRevenuesList() =>
+      _api.placeRevenuesList();
   @override
-  Future<PlaceRevenueRead> placeRevenueGet(int rid) => _api.placeRevenueGet(rid);
+  Future<PlaceRevenueRead> placeRevenueGet(int rid) =>
+      _api.placeRevenueGet(rid);
   @override
   Future<PlaceRevenueRead> placeRevenueCreate(Map<String, dynamic> body) =>
       _api.placeRevenueCreate(body);
@@ -166,7 +171,8 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   ) =>
       _api.placeCollectionPatch(cid, body);
   @override
-  Future<void> placeCollectionDelete(int cid) => _api.placeCollectionDelete(cid);
+  Future<void> placeCollectionDelete(int cid) =>
+      _api.placeCollectionDelete(cid);
 
   @override
   Future<List<PlaceWorkerRecentRead>> placeWorkerRecentsList() =>
@@ -191,9 +197,11 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
       _api.placeWorkerRecentDelete(pid, hid);
 
   @override
-  Future<List<ScheduleMemoRead>> scheduleMemosList() => _api.scheduleMemosList();
+  Future<List<ScheduleMemoRead>> scheduleMemosList() =>
+      _api.scheduleMemosList();
   @override
-  Future<ScheduleMemoRead> scheduleMemoGet(int sid) => _api.scheduleMemoGet(sid);
+  Future<ScheduleMemoRead> scheduleMemoGet(int sid) =>
+      _api.scheduleMemoGet(sid);
   @override
   Future<ScheduleMemoRead> scheduleMemoCreate(Map<String, dynamic> body) =>
       _api.scheduleMemoCreate(body);
@@ -224,7 +232,8 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   ) =>
       _api.placePhotoGroupPatch(pgid, body);
   @override
-  Future<void> placePhotoGroupDelete(int pgid) => _api.placePhotoGroupDelete(pgid);
+  Future<void> placePhotoGroupDelete(int pgid) =>
+      _api.placePhotoGroupDelete(pgid);
 
   @override
   Future<List<PlacePhotoRead>> placePhotosList() => _api.placePhotosList();
@@ -238,4 +247,44 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
       _api.placePhotoPatch(phid, body);
   @override
   Future<void> placePhotoDelete(int phid) => _api.placePhotoDelete(phid);
+
+  @override
+  Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid) =>
+      _api.workerMgmtNotesList(workerHid);
+  @override
+  Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
+    required int workerHid,
+    required String noteType,
+    required String memo,
+    int? rating,
+  }) =>
+      _api.workerMgmtNoteCreate(
+        workerHid: workerHid,
+        noteType: noteType,
+        memo: memo,
+        rating: rating,
+      );
+  @override
+  Future<List<WorkerMgmtConflictRead>> workerMgmtConflictsList({
+    bool activeOnly = true,
+  }) =>
+      _api.workerMgmtConflictsList(activeOnly: activeOnly);
+  @override
+  Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
+    required int workerAHid,
+    required int workerBHid,
+    int severity = 2,
+    String note = '',
+    bool active = true,
+  }) =>
+      _api.workerMgmtConflictUpsert(
+        workerAHid: workerAHid,
+        workerBHid: workerBHid,
+        severity: severity,
+        note: note,
+        active: active,
+      );
+  @override
+  Future<void> workerMgmtConflictDelete(int pairId) =>
+      _api.workerMgmtConflictDelete(pairId);
 }

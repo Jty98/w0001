@@ -122,7 +122,8 @@ class PlaceInfoModel {
       pfirstrevenue: (res['prevenue'] as num?)?.toInt() ?? 0,
       pcontractTotal: (res['pcontractTotal'] as num?)?.toInt() ?? 0,
       workerCount: (res['workerCount'] as num?)?.toInt() ?? 0,
-      totalAdditionalRevenue: (res['totalAdditionalRevenue'] as num?)?.toInt() ?? 0,
+      totalAdditionalRevenue:
+          (res['totalAdditionalRevenue'] as num?)?.toInt() ?? 0,
       mTotal: (res['mTotal'] as num?)?.toInt() ?? 0,
       woodTotal: (res['woodTotal'] as num?)?.toInt() ?? 0,
       metalTotal: (res['metalTotal'] as num?)?.toInt() ?? 0,
@@ -139,7 +140,8 @@ class PlaceInfoModel {
       fuelTotal: (res['fuelTotal'] as num?)?.toInt() ?? 0,
       accommodationTotal: (res['accommodationTotal'] as num?)?.toInt() ?? 0,
       foodTotal: (res['foodTotal'] as num?)?.toInt() ?? 0,
-      personalExpensesTotal: (res['personalExpensesTotal'] as num?)?.toInt() ?? 0,
+      personalExpensesTotal:
+          (res['personalExpensesTotal'] as num?)?.toInt() ?? 0,
       firefightingTotal: (res['firefightingTotal'] as num?)?.toInt() ?? 0,
       signageTotal: (res['signageTotal'] as num?)?.toInt() ?? 0,
       airConditioningTotal: (res['airConditioningTotal'] as num?)?.toInt() ?? 0,

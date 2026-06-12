@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
+import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/ui/widget/round_text_field.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class AddWorkerDialog extends ConsumerStatefulWidget {
   const AddWorkerDialog({super.key});
@@ -42,6 +44,8 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
   Widget build(BuildContext context) {
     final vm = ref.read(addCostProvider.notifier);
     final alertText = ref.watch(addCostProvider).alertText;
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     return Dialog(
       child: ConstrainedBox(
@@ -49,18 +53,24 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
           maxHeight: MediaQuery.sizeOf(context).height * 0.88,
           maxWidth: MediaQuery.sizeOf(context).width * 0.92,
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        child: KeyboardAwareScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.rsi(24),
+            vertical: context.rsi(12),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 8, bottom: 12),
+              Padding(
+                padding: EdgeInsets.only(
+                  top: context.rsi(8),
+                  bottom: context.rsi(12),
+                ),
                 child: Text(
                   '사람 추가',
                   textAlign: TextAlign.center,
-                  style: bigStyle,
+                  style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
               RoundTextField(
@@ -68,16 +78,16 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
                 onChanged: (value) => vm.clearWorkerDialogAlert(),
                 labelText: '이름 (필수)',
               ),
-              const SizedBox(height: 5),
+              SizedBox(height: context.rsi(5)),
               RoundTextField(
                 controller: vm.hNumController,
                 onChanged: (value) => vm.clearWorkerDialogAlert(),
                 labelText: '주민등록번호(선택)',
                 keyboardType: TextInputType.number,
               ),
-              const SizedBox(height: 5),
+              SizedBox(height: context.rsi(5)),
               AddTextField(
-                height: 66,
+                height: context.rs(66),
                 witdh: MediaQuery.sizeOf(context).width,
                 tController: vm.hDailyWageController,
                 labelText: '일 인건비(선택·추가 시 금액 기본값)',
@@ -86,22 +96,22 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
                 onSubmitted: (value) => vm.clearWorkerDialogAlert(),
                 readOnly: false,
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: context.rsi(10)),
               Text(
                 '역할 (선택)',
-                style: Theme.of(context).textTheme.labelLarge,
+                style: tt.labelLarge,
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: context.rsi(6)),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
                     for (var i = 0; i < kWorkRolePresets.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 6),
+                      if (i > 0) SizedBox(width: context.rsi(6)),
                       ChoiceChip(
                         label: Text(
                           kWorkRolePresets[i],
-                          style: const TextStyle(fontSize: 13),
+                          style: tt.labelLarge,
                         ),
                         selected: _dialogRole == kWorkRolePresets[i],
                         onSelected: (_) => setState(() {
@@ -116,43 +126,44 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
                 ),
               ),
               if (_dialogRole == '직접입력') ...[
-                const SizedBox(height: 8),
+                SizedBox(height: context.rsi(8)),
                 TextField(
                   controller: _dialogCustomRoleController,
+                  style: tt.bodyMedium,
                   decoration: InputDecoration(
                     hintText: '역할 직접 입력',
                     isDense: true,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(context.rsi(10)),
                     ),
                   ),
                 ),
               ],
-              const SizedBox(height: 5),
+              SizedBox(height: context.rsi(5)),
               RoundTextField(
                 controller: vm.hMemoController,
                 onChanged: (value) => vm.clearWorkerDialogAlert(),
                 labelText: '메모 (선택)',
-                height: 120,
+                height: context.rs(120),
                 maxLines: 3,
                 maxLength: 50,
               ),
               Text(
                 alertText,
-                style: const TextStyle(color: Colors.red),
+                style: tt.bodyMedium?.copyWith(color: cs.error),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: context.rsi(10)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text(
+                    onPressed: () => context.pop(),
+                    child: Text(
                       '취소',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: cs.onSurfaceVariant),
                     ),
                   ),
-                  const SizedBox(width: 20),
+                  SizedBox(width: context.rsi(20)),
                   TextButton(
                     onPressed: () async {
                       vm.clearWorkerDialogAlert();
@@ -160,9 +171,8 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
                       final ok =
                           await vm.insertWorker(hdefaultRole: persistedRole);
                       if (!ok || !context.mounted) return;
-                      vm.applyDefaultRoleFromPersistedString(persistedRole);
                       if (context.mounted) {
-                        Navigator.of(context).pop();
+                        context.pop();
                       }
                     },
                     child: const Text('확인'),

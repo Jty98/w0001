@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +11,17 @@ import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
+import 'package:w0001/access/user_role_access.dart';
+import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
+import 'package:w0001/domain/place_list_display.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// DB 문자열 → 캘린더 초기 구간 (파싱 실패 시 null).
 (DateTime?, DateTime?) _parsedPlaceRange(PlaceInfoModel element) {
@@ -33,8 +40,7 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
   }
 }
 
-String _formatYmdKorean(DateTime d) =>
-    '${d.year}년 ${d.month}월 ${d.day}일';
+String _formatYmdKorean(DateTime d) => '${d.year}년 ${d.month}월 ${d.day}일';
 
 String _formatPendLineForDialog(String iso) {
   final d = DateTime.tryParse(iso);
@@ -104,29 +110,29 @@ Future<String?> _showCompletePendChoiceDialog(
               FilledButton.tonal(
                 onPressed: () => Navigator.of(ctx).pop(existingIso),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: ResponsiveLayout.symmetric(ctx, vertical: 8),
                   child: Text(
                     '기존 종료일로 저장\n(${_formatPendLineForDialog(existingIso)})',
                     textAlign: TextAlign.center,
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              rsV(ctx, 8),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(todayIso),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: ResponsiveLayout.symmetric(ctx, vertical: 8),
                   child: Text(
                     '오늘 종료로 저장\n(${_formatYmdKorean(DateTime(now.year, now.month, now.day))})',
                     textAlign: TextAlign.center,
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              rsV(ctx, 8),
               OutlinedButton(
                 onPressed: () => pickCustomEnd(ctx),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: ResponsiveLayout.symmetric(ctx, vertical: 10),
                   child: Text(
                     '직접 선택…',
                     textAlign: TextAlign.center,
@@ -185,13 +191,16 @@ class _PickCompletionEndDialogState extends State<_PickCompletionEndDialog> {
     final screenH = MediaQuery.sizeOf(context).height;
     final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
     final lo = widget.firstSelectableDay;
+    final cs = Theme.of(context).colorScheme;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.rs(16)),
+      ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
+        constraints: BoxConstraints(maxWidth: context.rs(440)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 14, 10, 8),
+          padding: ResponsiveLayout.only(context, left: 10, top: 14, right: 10, bottom: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -201,7 +210,7 @@ class _PickCompletionEndDialogState extends State<_PickCompletionEndDialog> {
                       fontWeight: FontWeight.w800,
                     ),
               ),
-              const SizedBox(height: 10),
+              rsV(context, 10),
               SizedBox(
                 height: calHeight,
                 width: double.infinity,
@@ -222,22 +231,24 @@ class _PickCompletionEndDialogState extends State<_PickCompletionEndDialog> {
                   },
                 ),
               ),
-              const SizedBox(height: 8),
+              rsV(context, 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () =>
-                        Navigator.of(context).pop<DateTime?>(null),
-                    child: const Text(
+                    onPressed: () => Navigator.of(context).pop<DateTime?>(null),
+                    child: Text(
                       '취소',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: cs.onSurfaceVariant),
                     ),
                   ),
                   TextButton(
                     onPressed: () =>
                         Navigator.of(context).pop<DateTime>(_pickedDay),
-                    child: const Text('확인'),
+                    child: Text(
+                      '확인',
+                      style: TextStyle(color: cs.primary),
+                    ),
                   ),
                 ],
               ),
@@ -252,7 +263,7 @@ class _PickCompletionEndDialogState extends State<_PickCompletionEndDialog> {
 class PlaceScreen extends ConsumerWidget {
   const PlaceScreen({super.key});
 
-  static const String _addressSeparator = '||';
+  static const String _addressSeparator = ' ';
 
   (String, String) _splitAddress(String raw) {
     final t = raw.trim();
@@ -260,7 +271,9 @@ class PlaceScreen extends ConsumerWidget {
     if (t.contains(_addressSeparator)) {
       final parts = t.split(_addressSeparator);
       final main = parts.isNotEmpty ? parts.first.trim() : '';
-      final detail = parts.length > 1 ? parts.sublist(1).join(_addressSeparator).trim() : '';
+      final detail = parts.length > 1
+          ? parts.sublist(1).join(_addressSeparator).trim()
+          : '';
       return (main, detail);
     }
     return (t, '');
@@ -303,29 +316,43 @@ class PlaceScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(placeListProvider);
     final viewModel = ref.read(placeListProvider.notifier);
+    final canManagePlaces =
+        ref.watch(authSessionProvider).asData?.value?.isManagementRole ?? false;
 
-    return GestureDetector(
+    return _PlaceListBootstrap(
+      child: GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         appBar: AppBar(
           title: const Text('현장 관리'),
           actions: [
-            _buildAppBarIconButton(context, ref, viewModel),
+            if (canManagePlaces) _buildAppBarIconButton(context, ref, viewModel),
           ],
         ),
         body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: ResponsiveLayout.symmetric(context, horizontal: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _buildSegmentButton(state, viewModel),
+              _buildSegmentButton(context, state, viewModel),
+              _PlaceListSearchSortBar(state: state, viewModel: viewModel),
               Expanded(
-                child: _buildListView(context, ref, state, viewModel),
+                child: RefreshIndicator(
+                  onRefresh: viewModel.fetchAllPlace,
+                  child: _buildListView(
+                    context,
+                    ref,
+                    state,
+                    viewModel,
+                    canManagePlaces: canManagePlaces,
+                  ),
+                ),
               ),
             ],
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -333,19 +360,114 @@ class PlaceScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     PlaceListState state,
-    PlaceListViewModel viewModel,
-  ) {
-    if (state.filteredPlaceList.isEmpty) {
-      final label = state.placeState == PlaceState.incomplete ? '진행중인' : '완료된';
-      return Center(
-        child: Text(
-          '$label 현장이 없습니다.',
-          style: normalStyle,
+    PlaceListViewModel viewModel, {
+    required bool canManagePlaces,
+  }) {
+    if (state.loadError != null &&
+        state.placeList.isEmpty &&
+        !state.isLoading) {
+      return CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(context.rs(24)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      state.loadError!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    rsV(context, 16),
+                    FilledButton.icon(
+                      onPressed: () =>
+                          viewModel.fetchAllPlace(force: true),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('다시 불러오기'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (!state.hasLoadedOnce ||
+        (state.isLoading &&
+            state.placeList.isEmpty &&
+            state.filteredPlaceList.isEmpty)) {
+      // 테마 변경 시 스켈레톤도 재생성
+      final brightness = Theme.of(context).brightness;
+      
+      return Skeletonizer(
+        enabled: true,
+        child: ListView.builder(
+          key: ValueKey('place_skeleton_$brightness'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(
+            top: context.rs(8),
+            bottom: context.rs(24),
+          ),
+          itemCount: 8,
+          itemBuilder: (ctx, i) => Padding(
+            padding: EdgeInsets.only(bottom: context.rs(10)),
+            child: Material(
+              color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(context.rs(14)),
+              child: ListTile(
+                title: Text('현장 이름 ${i + 1}'),
+                subtitle: Text(
+                  '주소 · 공사 기간',
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
 
+    if (state.filteredPlaceList.isEmpty) {
+      final searching = state.searchQuery.trim().isNotEmpty;
+      final msg = searching
+          ? '검색 결과가 없습니다.'
+          : (state.placeState == PlaceState.incomplete
+              ? '진행중인 현장이 없습니다.'
+              : '완료된 현장이 없습니다.');
+      return CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Text(
+                msg,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // 테마 변경 시 리스트를 재생성하기 위해 brightness를 key로 사용
+    final brightness = Theme.of(context).brightness;
+    
     return ListView.builder(
+      key: ValueKey('place_list_$brightness'),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.only(
+        top: context.rs(8),
+        bottom: context.rs(24),
+      ),
       itemCount: state.filteredPlaceList.length,
       itemBuilder: (ctx, index) => _buildPlaceListTile(
         context: ctx,
@@ -353,16 +475,18 @@ class PlaceScreen extends ConsumerWidget {
         element: state.filteredPlaceList[index],
         index: index,
         viewModel: viewModel,
+        canManagePlaces: canManagePlaces,
       ),
     );
   }
 
   Padding _buildSegmentButton(
+    BuildContext context,
     PlaceListState state,
     PlaceListViewModel viewModel,
   ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: ResponsiveLayout.symmetric(context, vertical: 10),
       child: CupertinoSlidingSegmentedControl<PlaceState>(
         groupValue: state.placeState,
         children: const {
@@ -381,33 +505,48 @@ class PlaceScreen extends ConsumerWidget {
   ) {
     return IconButton(
       tooltip: '현장 추가',
-      onPressed: () async {
+      onPressed: () {
         viewModel.setPlaceDialogDateRange(null, null);
-        await showDialog<void>(
-          context: context,
-          builder: (dialogCtx) => _placeDialog(
-            isAdd: true,
-            initialCalendarStart: null,
-            initialCalendarEnd: null,
-            onConfirm: (_, __) async {
-              await viewModel.insertPlace();
-              final cur = ref.read(placeListProvider);
-              if (cur.updateText.isEmpty) {
-                if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-                viewModel.resetTextController();
-              }
-            },
-            nameController: viewModel.placeNameController,
-            revenueController: viewModel.placeRevenueController,
-            contractTotalController: viewModel.placeContractTotalController,
-            addressController: viewModel.placeAddressController,
-            onPlaceDateRangeChanged: viewModel.setPlaceDialogDateRange,
-          ),
-        );
-        viewModel.resetTextController();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          unawaited(_showAddPlaceDialog(context, ref, viewModel));
+        });
       },
       icon: const Icon(Icons.add),
     );
+  }
+
+  Future<void> _showAddPlaceDialog(
+    BuildContext context,
+    WidgetRef ref,
+    PlaceListViewModel viewModel,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => _placeDialog(
+        isAdd: true,
+        initialCalendarStart: null,
+        initialCalendarEnd: null,
+        onConfirm: (_, __) async {
+          await viewModel.insertPlace();
+          final cur = ref.read(placeListProvider);
+          if (cur.updateText.isEmpty) {
+            if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+            viewModel.resetTextController();
+          }
+        },
+        nameController: viewModel.placeNameController,
+        revenueController: viewModel.placeRevenueController,
+        contractTotalController: viewModel.placeContractTotalController,
+        addressController: viewModel.placeAddressController,
+        onPlaceDateRangeChanged: viewModel.setPlaceDialogDateRange,
+      ),
+    );
+    if (!context.mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      viewModel.resetTextController();
+    });
   }
 
   Dialog _placeDialog({
@@ -427,7 +566,8 @@ class PlaceScreen extends ConsumerWidget {
         builder: (context) {
           final screenH = MediaQuery.sizeOf(context).height;
           final maxHeight = (screenH * 0.82).clamp(560.0, 760.0).toDouble();
-          final calendarHeight = (screenH * 0.34).clamp(250.0, 320.0).toDouble();
+          final calendarHeight =
+              (screenH * 0.34).clamp(250.0, 320.0).toDouble();
           DateTime? rangeStart = initialCalendarStart;
           DateTime? rangeEnd = initialCalendarEnd ?? initialCalendarStart;
           final (initialMainAddress, initialDetailAddress) =
@@ -436,7 +576,9 @@ class PlaceScreen extends ConsumerWidget {
               TextEditingController(text: initialMainAddress);
           final detailAddressController =
               TextEditingController(text: initialDetailAddress);
-          var showAddressSection = initialMainAddress.isNotEmpty || initialDetailAddress.isNotEmpty;
+          var showAddressSection =
+              initialMainAddress.isNotEmpty || initialDetailAddress.isNotEmpty;
+          var isSaving = false;
 
           return Consumer(
             builder: (context, consumerRef, _) {
@@ -444,15 +586,22 @@ class PlaceScreen extends ConsumerWidget {
               return StatefulBuilder(
                 builder: (context, setDialogState) {
                   final cs = Theme.of(context).colorScheme;
+                  final tt = Theme.of(context).textTheme;
                   return ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: maxHeight),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: cs.surface,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(context.rs(16)),
                       ),
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        padding: ResponsiveLayout.only(
+                          context,
+                          left: 14,
+                          top: 12,
+                          right: 14,
+                          bottom: 12,
+                        ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -460,10 +609,12 @@ class PlaceScreen extends ConsumerWidget {
                             Center(
                               child: Text(
                                 isAdd ? '현장 추가' : '현장 수정',
-                                style: bigStyle,
+                                style: tt.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            rsV(context, 12),
                             AddTextField(
                               tController: nameController,
                               labelText: '현장 이름 (필수)',
@@ -487,26 +638,34 @@ class PlaceScreen extends ConsumerWidget {
                               readOnly: false,
                               witdh: double.infinity,
                             ),
-                            const SizedBox(height: 2),
+                            rsV(context, 2),
                             InkWell(
-                              borderRadius: BorderRadius.circular(10),
-                              onTap: () =>
-                                  setDialogState(() => showAddressSection = !showAddressSection),
+                              borderRadius: BorderRadius.circular(context.rs(10)),
+                              onTap: () => setDialogState(() =>
+                                  showAddressSection = !showAddressSection),
                               child: Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                padding: ResponsiveLayout.symmetric(
+                                  context,
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                                  borderRadius: BorderRadius.circular(context.rs(10)),
+                                  color: cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.35),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.location_on_outlined, size: 18, color: cs.primary),
-                                    const SizedBox(width: 8),
-                                    const Expanded(
+                                    Icon(Icons.location_on_outlined,
+                                        size: context.rsi(18), color: cs.primary),
+                                    rsH(context, 8),
+                                    Expanded(
                                       child: Text(
                                         '현장 주소 (선택입력)',
-                                        style: TextStyle(fontWeight: FontWeight.w700),
+                                        style: tt.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
                                     Icon(
@@ -519,7 +678,7 @@ class PlaceScreen extends ConsumerWidget {
                               ),
                             ),
                             if (showAddressSection) ...[
-                              const SizedBox(height: 8),
+                              rsV(context, 8),
                               GestureDetector(
                                 onTap: () => _openAddressSearch(
                                   context,
@@ -533,6 +692,8 @@ class PlaceScreen extends ConsumerWidget {
                                     keyboardType: TextInputType.text,
                                     readOnly: true,
                                     witdh: double.infinity,
+                                    minLines: 2,
+                                    maxLines: 4,
                                   ),
                                 ),
                               ),
@@ -543,17 +704,26 @@ class PlaceScreen extends ConsumerWidget {
                                 keyboardType: TextInputType.text,
                                 readOnly: false,
                                 witdh: double.infinity,
+                                minLines: 1,
+                                maxLines: 3,
                               ),
                             ],
-                            const SizedBox(height: 6),
+                            rsV(context, 6),
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                              padding: ResponsiveLayout.only(
+                                context,
+                                left: 10,
+                                top: 8,
+                                right: 10,
+                                bottom: 10,
+                              ),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(context.rs(12)),
                                 color: cs.surfaceContainerLowest,
                                 border: Border.all(
-                                  color: cs.outlineVariant.withValues(alpha: 0.6),
+                                  color:
+                                      cs.outlineVariant.withValues(alpha: 0.6),
                                 ),
                               ),
                               child: ScrollableCalendarWidget(
@@ -574,47 +744,80 @@ class PlaceScreen extends ConsumerWidget {
                             ),
                             if (vmState.updateText.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(top: 10),
+                                padding: ResponsiveLayout.only(context, top: 10),
                                 child: Text(
                                   vmState.updateText,
-                                  style: const TextStyle(color: Colors.red),
+                                  style: tt.bodySmall?.copyWith(color: cs.error),
                                 ),
                               ),
-                            const SizedBox(height: 8),
+                            rsV(context, 8),
                             Row(
                               children: [
                                 Expanded(
                                   child: OutlinedButton(
-                                    onPressed: () => Navigator.of(context).pop(),
+                                    onPressed: isSaving
+                                        ? null
+                                        : () => Navigator.of(context).pop(),
                                     style: OutlinedButton.styleFrom(
-                                      minimumSize: const Size(double.infinity, 44),
+                                      minimumSize: Size(
+                                        double.infinity,
+                                        context.rs(44),
+                                      ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
+                                        borderRadius:
+                                            BorderRadius.circular(context.rs(10)),
                                       ),
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       '취소',
-                                      style: TextStyle(color: Colors.red),
+                                      style: TextStyle(
+                                        color: cs.onSurfaceVariant,
+                                      ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 10),
+                                rsH(context, 10),
                                 Expanded(
                                   child: FilledButton(
-                                    onPressed: () async {
-                                      addressController.text = _joinAddress(
-                                        mainAddressController.text,
-                                        detailAddressController.text,
-                                      );
-                                      await onConfirm(rangeStart, rangeEnd);
-                                    },
+                                    onPressed: isSaving
+                                        ? null
+                                        : () async {
+                                            if (isSaving) return;
+                                            setDialogState(() => isSaving = true);
+                                            try {
+                                              addressController.text = _joinAddress(
+                                                mainAddressController.text,
+                                                detailAddressController.text,
+                                              );
+                                              await onConfirm(rangeStart, rangeEnd);
+                                            } finally {
+                                              if (context.mounted) {
+                                                setDialogState(() => isSaving = false);
+                                              }
+                                            }
+                                          },
                                     style: FilledButton.styleFrom(
-                                      minimumSize: const Size(double.infinity, 44),
+                                      minimumSize: Size(
+                                        double.infinity,
+                                        context.rs(44),
+                                      ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
+                                        borderRadius:
+                                            BorderRadius.circular(context.rs(10)),
                                       ),
                                     ),
-                                    child: const Text('저장'),
+                                    child: isSaving
+                                        ? SizedBox(
+                                            height: context.rs(20),
+                                            width: context.rs(20),
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation<Color>(
+                                                cs.onPrimary,
+                                              ),
+                                            ),
+                                          )
+                                        : const Text('저장'),
                                   ),
                                 ),
                               ],
@@ -639,6 +842,7 @@ class PlaceScreen extends ConsumerWidget {
     required PlaceInfoModel element,
     required int index,
     required PlaceListViewModel viewModel,
+    required bool canManagePlaces,
   }) {
     final cs = Theme.of(context).colorScheme;
     final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -649,7 +853,137 @@ class PlaceScreen extends ConsumerWidget {
           fontWeight: FontWeight.w600,
         );
     final isComplete = element.pcomplete == 1;
-    final accent = isComplete ? Colors.green[700] : cs.primary;
+    final accent = isComplete ? cs.tertiary : cs.primary;
+
+    final listTile = InkWell(
+        // nested route: /place/detail (분기 화면)
+        onTap: () => context.push('/place/detail', extra: element),
+        onLongPress: canManagePlaces
+            ? () => showDialog<void>(
+                  context: context,
+                  builder: (sheetCtx) => pageViewDialog(
+                    title: element.pname,
+                    height: 500,
+                    text: formatDuration(element.pstart, element.pend),
+                    textStyle: Theme.of(sheetCtx).textTheme.bodyMedium,
+                    children: [
+                      _buildMainTable(sheetCtx, element),
+                      _buildMaterialTable(sheetCtx, element),
+                    ],
+                  ),
+                )
+            : null,
+        child: Card(
+          elevation: 0,
+          color: cs.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(context.rs(16)),
+            side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+          ),
+          child: ListTile(
+            contentPadding: ResponsiveLayout.only(
+              context,
+              left: 16,
+              top: 12,
+              right: 16,
+              bottom: 12,
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    element.pname,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  ),
+                ),
+                rsH(context, 10),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: ResponsiveLayout.symmetric(
+                      context,
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Text(
+                      isComplete ? '완료' : '진행중',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: accent,
+                            height: 1.0,
+                          ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Padding(
+              padding: EdgeInsets.only(top: context.rs(10)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    formatDuration(element.pstart, element.pend),
+                    style: subtitleStyle,
+                  ),
+                  if (canManagePlaces) ...[
+                    rsV(context, 10),
+                    Builder(
+                      builder: (context) {
+                        final totalRevenue = element.pfirstrevenue +
+                            element.totalAdditionalRevenue;
+                        final balance =
+                            (element.pcontractTotal - totalRevenue) < 0
+                                ? 0
+                                : (element.pcontractTotal - totalRevenue);
+
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: _PlaceMetric(
+                                label: '공사금액',
+                                value: getPrice(price: element.pcontractTotal),
+                                icon: Icons.request_quote_outlined,
+                              ),
+                            ),
+                            rsH(context, 10),
+                            Expanded(
+                              child: _PlaceMetric(
+                                label: '수금액',
+                                value: getPrice(price: totalRevenue),
+                                icon: Icons.trending_up_rounded,
+                              ),
+                            ),
+                            rsH(context, 10),
+                            Expanded(
+                              child: _PlaceMetric(
+                                label: '잔금',
+                                value: getPrice(price: balance),
+                                icon:
+                                    Icons.account_balance_wallet_outlined,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+    if (!canManagePlaces) return listTile;
 
     return Slidable(
       closeOnScroll: true,
@@ -658,7 +992,7 @@ class PlaceScreen extends ConsumerWidget {
         children: [
           SlidableAction(
             borderRadius: BorderRadius.circular(10),
-            backgroundColor: Colors.green,
+            backgroundColor: cs.tertiary,
             icon: element.pcomplete == 1
                 ? Icons.autorenew_outlined
                 : Icons.check_circle,
@@ -692,7 +1026,7 @@ class PlaceScreen extends ConsumerWidget {
             borderRadius: BorderRadius.circular(10),
             label: '수정',
             icon: Icons.edit,
-            backgroundColor: Colors.blue,
+            backgroundColor: cs.primary,
             onPressed: (context) {
               TextEditingController nameController =
                   TextEditingController(text: element.pname);
@@ -752,7 +1086,7 @@ class PlaceScreen extends ConsumerWidget {
           ),
           SlidableAction(
             borderRadius: BorderRadius.circular(10),
-            backgroundColor: Colors.red,
+            backgroundColor: cs.error,
             icon: Icons.delete,
             label: '삭제',
             onPressed: (slidableCtx) => showDialog<void>(
@@ -769,124 +1103,13 @@ class PlaceScreen extends ConsumerWidget {
           ),
         ],
       ),
-      child: InkWell(
-        // nested route: /place/detail (분기 화면)
-        onTap: () => context.push('/place/detail', extra: element),
-        onLongPress: () => showDialog<void>(
-          context: context,
-          builder: (_) => pageViewDialog(
-            title: element.pname,
-            height: 500,
-            text: formatDuration(element.pstart, element.pend),
-            textStyle: const TextStyle(fontSize: 15),
-            children: [
-              _buildMainTable(element),
-              _buildMaterialTable(element),
-            ],
-          ),
-        ),
-        child: Card(
-          elevation: 0,
-          color: cs.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    element.pname,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: titleStyle,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: (accent ?? cs.primary).withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.55),
-                    ),
-                  ),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Text(
-                      isComplete ? '완료' : '진행중',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: accent ?? cs.primary,
-                        height: 1.0,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    formatDuration(element.pstart, element.pend),
-                    style: subtitleStyle,
-                  ),
-                  const SizedBox(height: 10),
-                  Builder(
-                    builder: (context) {
-                      final totalRevenue = element.pfirstrevenue +
-                          element.totalAdditionalRevenue;
-                      final balance =
-                          (element.pcontractTotal - totalRevenue) < 0
-                              ? 0
-                              : (element.pcontractTotal - totalRevenue);
-
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: _PlaceMetric(
-                              label: '공사금액',
-                              value: getPrice(price: element.pcontractTotal),
-                              icon: Icons.request_quote_outlined,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _PlaceMetric(
-                              label: '수금액',
-                              value: getPrice(price: totalRevenue),
-                              icon: Icons.trending_up_rounded,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _PlaceMetric(
-                              label: '잔금',
-                              value: getPrice(price: balance),
-                              icon: Icons.account_balance_wallet_outlined,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: listTile,
     );
   }
 
-  Widget _buildMainTable(PlaceInfoModel element) {
+  Widget _buildMainTable(BuildContext context, PlaceInfoModel element) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final totalRevenue = element.pfirstrevenue + element.totalAdditionalRevenue;
     final totalCost = element.mTotal + element.wTotal;
     final balance = (element.pcontractTotal - totalRevenue) < 0
@@ -923,20 +1146,20 @@ class PlaceScreen extends ConsumerWidget {
 
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 10),
+        Padding(
+          padding: ResponsiveLayout.symmetric(context, vertical: 10),
           child: Center(
             child: Text(
               '현장 요약',
-              style: TextStyle(fontSize: 15),
+              style: tt.titleSmall,
             ),
           ),
         ),
         Table(
-          border: TableBorder.all(color: Colors.grey),
-          columnWidths: const {
-            0: FixedColumnWidth(100.0),
-            1: FixedColumnWidth(170.0),
+          border: TableBorder.all(color: cs.outlineVariant),
+          columnWidths: {
+            0: FixedColumnWidth(context.rs(100)),
+            1: FixedColumnWidth(context.rs(170)),
           },
           children: mainRows.map(
             (row) {
@@ -945,10 +1168,10 @@ class PlaceScreen extends ConsumerWidget {
                   TableCell(
                     child: Text(
                       row.label,
-                      style: TextStyle(
+                      style: tt.bodyMedium?.copyWith(
                           color: row.label.contains('미지급')
-                              ? const Color.fromARGB(255, 236, 28, 13)
-                              : Colors.black,
+                              ? cs.error
+                              : cs.onSurface,
                           fontWeight: row.label.contains('합계')
                               ? FontWeight.bold
                               : null),
@@ -960,10 +1183,10 @@ class PlaceScreen extends ConsumerWidget {
                       child: Text(
                         '${row.value}  ',
                         textAlign: row.align,
-                        style: TextStyle(
+                        style: tt.bodyMedium?.copyWith(
                             color: row.label.contains('미지급')
-                                ? const Color.fromARGB(255, 236, 28, 13)
-                                : Colors.black,
+                                ? cs.error
+                                : cs.onSurface,
                             fontWeight: row.label.contains('합계')
                                 ? FontWeight.bold
                                 : null),
@@ -979,7 +1202,9 @@ class PlaceScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMaterialTable(PlaceInfoModel element) {
+  Widget _buildMaterialTable(BuildContext context, PlaceInfoModel element) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     List<TableRowModel> materialRows = categoryList.map((category) {
       final valueGetter = categoryMapping[category];
       if (valueGetter != null) {
@@ -995,29 +1220,35 @@ class PlaceScreen extends ConsumerWidget {
 
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 10),
+        Padding(
+          padding: ResponsiveLayout.symmetric(context, vertical: 10),
           child: Center(
             child: Text(
               '자재비 상세',
-              style: TextStyle(fontSize: 15),
+              style: tt.titleSmall,
             ),
           ),
         ),
         Table(
-          border: TableBorder.all(color: Colors.grey),
-          columnWidths: const {
-            0: FixedColumnWidth(100.0),
-            1: FixedColumnWidth(170.0),
+          border: TableBorder.all(color: cs.outlineVariant),
+          columnWidths: {
+            0: FixedColumnWidth(context.rs(100)),
+            1: FixedColumnWidth(context.rs(170)),
           },
           children: materialRows.map((row) {
             return TableRow(
               children: [
-                TableCell(child: Text(' ${row.label}')),
+                TableCell(
+                  child: Text(' ${row.label}', style: tt.bodyMedium),
+                ),
                 TableCell(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: Text('${row.value}  ', textAlign: row.align),
+                    child: Text(
+                      '${row.value}  ',
+                      textAlign: row.align,
+                      style: tt.bodyMedium,
+                    ),
                   ),
                 ),
               ],
@@ -1055,30 +1286,30 @@ class _PlaceMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(context.rs(12)),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.50)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        padding: ResponsiveLayout.only(context, left: 10, top: 8, right: 10, bottom: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 14, color: cs.onSurfaceVariant),
-                  const SizedBox(width: 6),
+                  Icon(icon, size: context.rsi(14), color: cs.onSurfaceVariant),
+                  rsH(context, 6),
                 ],
                 Expanded(
                   child: Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: tt.labelSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: cs.onSurfaceVariant,
                       height: 1.0,
@@ -1087,10 +1318,9 @@ class _PlaceMetric extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            // 금액이 커져도 ... 되지 않게, 영역 안에서 자동 축소로 항상 전체를 보여준다.
+            rsV(context, 6),
             SizedBox(
-              height: 16,
+              height: context.rs(16),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: FittedBox(
@@ -1098,8 +1328,7 @@ class _PlaceMetric extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     value,
-                    style: TextStyle(
-                      fontSize: 13,
+                    style: tt.labelLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: cs.onSurface,
                       height: 1.0,
@@ -1115,4 +1344,211 @@ class _PlaceMetric extends StatelessWidget {
   }
 }
 
-// end
+/// 현장 이름·주소 검색 + 정렬.
+class _PlaceListSearchSortBar extends ConsumerStatefulWidget {
+  const _PlaceListSearchSortBar({
+    required this.state,
+    required this.viewModel,
+  });
+
+  final PlaceListState state;
+  final PlaceListViewModel viewModel;
+
+  @override
+  ConsumerState<_PlaceListSearchSortBar> createState() =>
+      _PlaceListSearchSortBarState();
+}
+
+class _PlaceListSearchSortBarState extends ConsumerState<_PlaceListSearchSortBar> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController =
+        TextEditingController(text: widget.state.searchQuery);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    final vm = widget.viewModel;
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final hasQuery = state.searchQuery.trim().isNotEmpty;
+    final countLine = hasQuery
+        ? '검색 ${state.filteredPlaceList.length}곳 · '
+            '이 탭 ${state.tabPlaceCount}곳'
+        : '총 ${state.filteredPlaceList.length}곳';
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.rs(6)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: '현장 이름·주소 검색',
+                    isDense: true,
+                    prefixIcon:
+                        Icon(Icons.search_rounded, size: context.rsi(22)),
+                    suffixIcon: hasQuery
+                        ? IconButton(
+                            tooltip: '지우기',
+                            icon: const Icon(Icons.clear_rounded),
+                            onPressed: () {
+                              _searchController.clear();
+                              vm.clearSearchQuery();
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: cs.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(context.rs(12)),
+                      borderSide: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(context.rs(12)),
+                      borderSide: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(context.rs(12)),
+                      borderSide: BorderSide(
+                        color: cs.primary.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                  onChanged: vm.setSearchQuery,
+                  onSubmitted: vm.setSearchQuery,
+                ),
+              ),
+              rsH(context, 8),
+              PopupMenuButton<PlaceListSortMode>(
+                tooltip: '정렬',
+                initialValue: state.sortMode,
+                onSelected: vm.setSortMode,
+                child: Container(
+                  height: context.rs(48),
+                  padding: ResponsiveLayout.symmetric(context, horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(context.rs(12)),
+                    border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sort_rounded,
+                          size: context.rsi(20), color: cs.primary),
+                      rsH(context, 4),
+                      Icon(Icons.arrow_drop_down, color: cs.onSurfaceVariant),
+                    ],
+                  ),
+                ),
+                itemBuilder: (ctx) {
+                  return PlaceListSortMode.optionsFor(state.placeState)
+                      .map(
+                        (mode) => PopupMenuItem<PlaceListSortMode>(
+                          value: mode,
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 22,
+                                child: mode == state.sortMode
+                                    ? Icon(Icons.check_rounded,
+                                        size: 18, color: cs.primary)
+                                    : null,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  mode.labelKo,
+                                  style: tt.bodyMedium?.copyWith(
+                                    fontWeight: mode == state.sortMode
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            countLine,
+            style: tt.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// [placeListProvider] 초기 로드를 build 밖(첫 프레임 이후)으로 옮깁니다.
+class _PlaceListBootstrap extends ConsumerStatefulWidget {
+  const _PlaceListBootstrap({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_PlaceListBootstrap> createState() => _PlaceListBootstrapState();
+}
+
+class _PlaceListBootstrapState extends ConsumerState<_PlaceListBootstrap> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePlaceListLoaded());
+  }
+
+  void _ensurePlaceListLoaded() {
+    if (!mounted) return;
+    if (ref.read(authSessionProvider).asData?.value == null) return;
+    final st = ref.read(placeListProvider);
+    if (st.hasLoadedOnce) return;
+    unawaited(ref.read(placeListProvider.notifier).fetchAllPlace());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UserRead?>>(authSessionProvider, (prev, next) {
+      final u = next.asData?.value;
+      if (u == null) return;
+      final placeState = ref.read(placeListProvider);
+      if (prev?.asData?.value?.uid == u.uid && placeState.hasLoadedOnce) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensurePlaceListLoaded();
+      });
+    });
+    return widget.child;
+  }
+}

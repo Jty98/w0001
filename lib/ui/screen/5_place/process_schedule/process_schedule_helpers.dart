@@ -44,8 +44,8 @@ List<DateTime> placePeriodDatePool(DateTime anchorStart, DateTime anchorEnd) {
   final b = DateTime(anchorEnd.year, anchorEnd.month, anchorEnd.day);
   final spanDays = b.difference(a).inDays;
   final mid = a.add(Duration(days: math.max(0, spanDays ~/ 2)));
-  final poolStart =
-      DateTime(mid.year, mid.month, mid.day).subtract(const Duration(days: 270));
+  final poolStart = DateTime(mid.year, mid.month, mid.day)
+      .subtract(const Duration(days: 270));
   return List.generate(541, (i) => poolStart.add(Duration(days: i)));
 }
 

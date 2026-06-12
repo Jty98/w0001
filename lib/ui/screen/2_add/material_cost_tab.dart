@@ -7,6 +7,7 @@ import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/material_name_presets.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/date_card_widget.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class MaterialCostTab extends ConsumerStatefulWidget {
   const MaterialCostTab({super.key});
@@ -23,9 +24,16 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final fieldH = context.rs(52);
+    final btnH = context.rs(44);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(12),
+        context.rsi(10),
+        context.rsi(12),
+        0,
+      ),
       child: CustomScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
@@ -33,9 +41,9 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
             child: Column(
               children: [
                 const SelectDateButton(),
-                const SizedBox(height: 10),
-                _categoryDropdownSearch(ref),
-                const SizedBox(height: 5),
+                SizedBox(height: context.rsi(10)),
+                _categoryDropdownSearch(context, ref),
+                SizedBox(height: context.rsi(5)),
                 Row(
                   children: [
                     Expanded(
@@ -47,7 +55,7 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                         labelText: '자재 이름',
                         keyboardType: TextInputType.text,
                         isPrice: false,
-                        height: 52,
+                        height: fieldH,
                         witdh: double.infinity,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -55,7 +63,7 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                         readOnly: false,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: context.rsi(8)),
                     Expanded(
                       flex: 4,
                       child: AddTextField(
@@ -65,7 +73,7 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                         keyboardType: TextInputType.number,
                         onSubmitted: (value) => vm.addMaterialCostList(context),
                         isPrice: true,
-                        height: 52,
+                        height: fieldH,
                         witdh: double.infinity,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -75,7 +83,7 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: context.rsi(6)),
                 _MaterialNamePresetButtons(
                   selectedCategory: state.selectedCategory,
                   selectedPreset: _selectedPreset,
@@ -97,10 +105,12 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOutCubic,
                   margin: EdgeInsets.only(
-                    bottom: keyboardInset > 0 ? keyboardInset + 8 : 0,
+                    bottom: keyboardInset > 0
+                        ? keyboardInset + context.rsi(8)
+                        : 0,
                   ),
                   child: SizedBox(
-                    height: 44,
+                    height: btnH,
                     width: double.infinity,
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -124,7 +134,7 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: context.rsi(6)),
               ],
             ),
           ),
@@ -133,18 +143,19 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
             itemBuilder: (context, index) =>
                 tempCostBuilder(ref, context, index, 'material'),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          SliverToBoxAdapter(child: SizedBox(height: context.rsi(16))),
         ],
       ),
     );
   }
 
-  Widget _categoryDropdownSearch(WidgetRef ref) {
+  Widget _categoryDropdownSearch(BuildContext context, WidgetRef ref) {
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
+    final tt = Theme.of(context).textTheme;
 
     return SizedBox(
-      height: 52,
+      height: context.rs(52),
       child: DropdownSearch<String>(
         items: categoryList,
         onChanged: (value) {
@@ -155,11 +166,13 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
         selectedItem: state.selectedCategory,
         dropdownDecoratorProps: DropDownDecoratorProps(
           dropdownSearchDecoration: InputDecoration(
-            labelStyle: const TextStyle(fontSize: 14),
-            hintStyle: const TextStyle(fontSize: 14),
+            labelStyle: tt.bodyMedium,
+            hintStyle: tt.bodyMedium,
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: context.rsi(12),
+              vertical: context.rsi(12),
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -185,7 +198,8 @@ class _MaterialNamePresetButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final category = selectedCategory;
-    if (category == null || materialPresetExcludedCategories.contains(category)) {
+    if (category == null ||
+        materialPresetExcludedCategories.contains(category)) {
       return const SizedBox.shrink();
     }
     final presets = materialNamePresetsByCategory[category];
@@ -193,9 +207,15 @@ class _MaterialNamePresetButtons extends StatelessWidget {
     final items = ['직접입력', ...presets.take(10)];
 
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(10),
+        context.rsi(8),
+        context.rsi(10),
+        context.rsi(10),
+      ),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(12),
@@ -206,24 +226,22 @@ class _MaterialNamePresetButtons extends StatelessWidget {
         children: [
           Text(
             '$category 대표 자재',
-            style: TextStyle(
-              fontSize: 12,
+            style: tt.labelSmall?.copyWith(
               fontWeight: FontWeight.w800,
               color: cs.onSurface,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: context.rsi(8)),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: context.rsi(6),
+            runSpacing: context.rsi(6),
             children: items
                 .map(
                   (name) => ChoiceChip(
                     selected: selectedPreset == name,
                     label: Text(
                       name,
-                      style: TextStyle(
-                        fontSize: 11,
+                      style: tt.labelSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: selectedPreset == name
                             ? cs.onPrimaryContainer

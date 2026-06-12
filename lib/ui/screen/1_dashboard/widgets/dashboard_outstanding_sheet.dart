@@ -5,6 +5,7 @@ import 'package:w0001/data/model/dashboard_models.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// 미수금이 남아 있는 현장 목록 (금액 내림차순).
 void showDashboardOutstandingSheet(
@@ -38,41 +39,41 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final maxH = MediaQuery.sizeOf(context).height * 0.55;
 
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.paddingOf(context).bottom + 12,
+        left: context.rsi(16),
+        right: context.rsi(16),
+        bottom: MediaQuery.paddingOf(context).bottom + context.rsi(12),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             '미수금 있는 현장',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 4),
+          rsV(context, 4),
           Text(
             rows.isEmpty
                 ? '미수금이 없습니다.'
                 : '총 ${rows.length}곳 · 탭하면 수금 관리로 이동합니다.',
-            style: TextStyle(
-              fontSize: 12,
+            style: tt.labelSmall?.copyWith(
               color: cs.onSurfaceVariant,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 12),
+          rsV(context, 12),
           SizedBox(
             height: maxH,
             child: rows.isEmpty
                 ? Center(
                     child: Text(
                       '미수금 잔액이 0인 현장만 있습니다.',
-                      style: TextStyle(
+                      style: tt.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
@@ -88,14 +89,15 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                       final r = rows[i];
                       return Material(
                         color: cs.surface.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(context.rs(10)),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(context.rs(10)),
                           onTap: () {
                             final info = _placeForPid(ref, r.pid);
                             Navigator.of(context).pop();
                             if (info != null) {
-                              context.push('/place/detail/revenue', extra: info);
+                              context.push('/place/detail/revenue',
+                                  extra: info);
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -106,7 +108,13 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                             }
                           },
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                            padding: ResponsiveLayout.only(
+                              ctx,
+                              left: 10,
+                              top: 8,
+                              right: 10,
+                              bottom: 8,
+                            ),
                             child: Row(
                               children: [
                                 Expanded(
@@ -121,21 +129,23 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                               r.pname,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
+                                              style: tt.bodyMedium?.copyWith(
                                                 fontWeight: FontWeight.w800,
-                                                fontSize: 14,
                                               ),
                                             ),
                                           ),
                                           Padding(
-                                            padding:
-                                                const EdgeInsets.only(left: 8),
+                                            padding: ResponsiveLayout.only(
+                                              ctx,
+                                              left: 8,
+                                            ),
                                             child: Container(
                                               padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4,
-                                                  ),
+                                                  ResponsiveLayout.symmetric(
+                                                ctx,
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
                                               decoration: BoxDecoration(
                                                 color: cs.primaryContainer,
                                                 borderRadius:
@@ -143,8 +153,7 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                               ),
                                               child: Text(
                                                 getPrice(price: r.outstanding),
-                                                style: TextStyle(
-                                                  fontSize: 11,
+                                                style: tt.labelSmall?.copyWith(
                                                   fontWeight: FontWeight.w800,
                                                   color: cs.onPrimaryContainer,
                                                 ),
@@ -153,10 +162,11 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 6),
+                                      rsV(ctx, 6),
                                       Container(
                                         width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
+                                        padding: ResponsiveLayout.symmetric(
+                                          ctx,
                                           horizontal: 8,
                                           vertical: 6,
                                         ),
@@ -164,7 +174,7 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                           color: cs.surfaceContainerHighest
                                               .withValues(alpha: 0.45),
                                           borderRadius:
-                                              BorderRadius.circular(8),
+                                              BorderRadius.circular(context.rs(8)),
                                           border: Border.all(
                                             color: cs.outlineVariant
                                                 .withValues(alpha: 0.4),
@@ -173,12 +183,14 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                         child: Column(
                                           children: [
                                             _infoRow(
+                                              ctx,
                                               cs,
                                               text:
                                                   '공사 ${getPrice(price: r.contractTotal)}',
                                             ),
-                                            const SizedBox(height: 6),
+                                            rsV(ctx, 6),
                                             _infoRow(
+                                              ctx,
                                               cs,
                                               text:
                                                   '수금 ${getPrice(price: r.collected)}',
@@ -189,10 +201,10 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                rsH(ctx, 4),
                                 Icon(
                                   Icons.chevron_right_rounded,
-                                  size: 18,
+                                  size: context.rsi(18),
                                   color: cs.onSurfaceVariant,
                                 ),
                               ],
@@ -208,23 +220,27 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
     );
   }
 
-  Widget _infoRow(ColorScheme cs, {required String text}) {
+  Widget _infoRow(
+    BuildContext context,
+    ColorScheme cs, {
+    required String text,
+  }) {
+    final tt = Theme.of(context).textTheme;
     return Row(
       children: [
         Container(
-          width: 6,
-          height: 6,
+          width: context.rs(6),
+          height: context.rs(6),
           decoration: BoxDecoration(
             color: cs.primary,
             borderRadius: BorderRadius.circular(999),
           ),
         ),
-        const SizedBox(width: 8),
+        rsH(context, 8),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(
-              fontSize: 11,
+            style: tt.labelSmall?.copyWith(
               fontWeight: FontWeight.w700,
               color: cs.onSurfaceVariant,
             ),

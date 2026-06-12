@@ -60,7 +60,8 @@ PlaceInfoModel placeReadToPlaceInfoSummaryZeros(PlaceRead p) {
   );
 }
 
-Map<String, dynamic> placeModelToCreateBody(PlaceModel p, String pcontractdate) {
+Map<String, dynamic> placeModelToCreateBody(
+    PlaceModel p, String pcontractdate) {
   return <String, dynamic>{
     'pname': p.pname,
     'pstart': p.pstart,
@@ -80,11 +81,19 @@ Map<String, dynamic> placeModelToPatchBody(PlaceModel p, String pcontractdate) {
 HumanModel humanReadToModel(HumanRead h) {
   return HumanModel(
     hid: h.hid,
+    uid: h.uid,
     hname: h.hname,
     hnumber: h.hnumber,
     hmemo: h.hmemo,
     hdailyWage: h.hdailywage,
     hdefaultRole: h.hdefaultrole,
+    primarySpecialty: h.primarySpecialty,
+    specialties: h.specialties,
+    career: h.career,
+    canBePlaceMember: h.canBePlaceMember,
+    linkedUserName: h.linkedUserName,
+    hphone: h.hphone,
+    linkedPhone: h.linkedPhone,
     hstar: h.hstar,
     hdelete: h.hdelete,
   );
@@ -108,8 +117,7 @@ String contractDateKey(String pcontractDate, String pstart) {
   return DateTime.now().toIso8601String().substring(0, 10);
 }
 
-String dateKeyYmd(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-'
+String dateKeyYmd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
     '${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 

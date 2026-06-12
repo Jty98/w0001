@@ -15,9 +15,9 @@ String _opaqueArgbHex(Color c) {
   final g = (c.g.clamp(0.0, 1.0) * 255).round();
   final b = (c.b.clamp(0.0, 1.0) * 255).round();
   return 'FF'
-      '${r.toRadixString(16).padLeft(2, '0')}'
-      '${g.toRadixString(16).padLeft(2, '0')}'
-      '${b.toRadixString(16).padLeft(2, '0')}'
+          '${r.toRadixString(16).padLeft(2, '0')}'
+          '${g.toRadixString(16).padLeft(2, '0')}'
+          '${b.toRadixString(16).padLeft(2, '0')}'
       .toUpperCase();
 }
 
@@ -55,8 +55,9 @@ ExcelColor _headerDayFg(DateTime d) {
   return ExcelColor.grey900;
 }
 
-String _ellipsis(String s, int max) =>
-    s.runes.length <= max ? s : '${String.fromCharCodes(s.runes.take(max - 1))}…';
+String _ellipsis(String s, int max) => s.runes.length <= max
+    ? s
+    : '${String.fromCharCodes(s.runes.take(max - 1))}…';
 
 /// 공정표 한 장을 표 형식(.xlsx)으로 직렬화합니다.
 ///

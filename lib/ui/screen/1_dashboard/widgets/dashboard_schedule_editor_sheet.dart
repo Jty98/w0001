@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
+import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 const List<int> _alarmOffsetChoices = [0, 30, 60, 180, 1440];
 
@@ -63,13 +65,20 @@ class DashboardScheduleMemoEditorSheet extends StatefulWidget {
 }
 
 class _DashboardScheduleMemoEditorSheetState
-    extends State<DashboardScheduleMemoEditorSheet> {
+    extends State<DashboardScheduleMemoEditorSheet>
+    with KeyboardScrollIntoViewMixin {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _memoCtrl;
+  final _titleFocus = FocusNode();
+  final _memoFocus = FocusNode();
+  final _memoFieldKey = GlobalKey();
   late DateTime _picked;
   TimeOfDay? _pickedTime;
   late bool _alarmEnabled;
   late int _alarmOffsetMinutes;
+
+  @override
+  GlobalKey? get keyboardScrollTargetKey => _memoFieldKey;
 
   @override
   void initState() {
@@ -83,10 +92,23 @@ class _DashboardScheduleMemoEditorSheetState
     if (!_alarmOffsetChoices.contains(_alarmOffsetMinutes)) {
       _alarmOffsetMinutes = 60;
     }
+    _titleFocus.addListener(_onTextFieldFocusChanged);
+    _memoFocus.addListener(_onTextFieldFocusChanged);
+  }
+
+  void _onTextFieldFocusChanged() {
+    if (!mounted) return;
+    if (_titleFocus.hasFocus || _memoFocus.hasFocus) {
+      scheduleKeyboardScrollIntoView();
+    }
   }
 
   @override
   void dispose() {
+    _titleFocus.removeListener(_onTextFieldFocusChanged);
+    _memoFocus.removeListener(_onTextFieldFocusChanged);
+    _titleFocus.dispose();
+    _memoFocus.dispose();
     _titleCtrl.dispose();
     _memoCtrl.dispose();
     super.dispose();
@@ -134,7 +156,8 @@ class _DashboardScheduleMemoEditorSheetState
         return StatefulBuilder(
           builder: (ctx, setModalState) {
             final filtered = widget.placeNameSuggestions
-                .where((name) => name.toLowerCase().contains(query.toLowerCase()))
+                .where(
+                    (name) => name.toLowerCase().contains(query.toLowerCase()))
                 .toList();
             return AlertDialog(
               title: const Text('현장 이름 선택'),
@@ -159,15 +182,15 @@ class _DashboardScheduleMemoEditorSheetState
                           : ListView.separated(
                               shrinkWrap: true,
                               itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final name = filtered[index];
                                 return ListTile(
                                   dense: true,
                                   title: Text(
                                     name,
-                                    style: const TextStyle(
-                                      fontSize: 13,
+                                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -209,28 +232,25 @@ class _DashboardScheduleMemoEditorSheetState
 
   @override
   Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.viewInsetsOf(context);
     final pad = MediaQuery.paddingOf(context);
+    final tt = Theme.of(context).textTheme;
 
-    return AnimatedPadding(
-      padding: EdgeInsets.only(bottom: viewInsets.bottom),
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + pad.bottom),
-          child: Column(
+    return KeyboardAwareScrollView(
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(16),
+        context.rsi(8),
+        context.rsi(16),
+        context.rsi(16) + pad.bottom,
+      ),
+      child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 widget.existing == null ? '일정 추가' : '일정 수정',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 12),
+              rsV(context, 12),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('날짜'),
@@ -294,11 +314,14 @@ class _DashboardScheduleMemoEditorSheetState
               ],
               TextField(
                 controller: _titleCtrl,
+                focusNode: _titleFocus,
+                scrollPadding: keyboardScrollPadding(context),
                 decoration: const InputDecoration(
                   labelText: '제목',
                   border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.next,
+                onTap: scheduleKeyboardScrollIntoView,
               ),
               const SizedBox(height: 8),
               Container(
@@ -321,14 +344,13 @@ class _DashboardScheduleMemoEditorSheetState
                     Icons.business_outlined,
                     color: Theme.of(context).colorScheme.primary,
                   ),
-                  title: const Text(
+                  title: Text(
                     '현장 이름 불러오기',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                    style: tt.bodySmall?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
                     '최근 등록된 현장 검색/정렬',
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: tt.labelSmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -343,16 +365,22 @@ class _DashboardScheduleMemoEditorSheetState
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _memoCtrl,
-                decoration: const InputDecoration(
-                  labelText: '내용',
-                  hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
+              KeyedSubtree(
+                key: _memoFieldKey,
+                child: TextField(
+                  controller: _memoCtrl,
+                  focusNode: _memoFocus,
+                  scrollPadding: keyboardScrollPadding(context, extra: 80),
+                  decoration: const InputDecoration(
+                    labelText: '내용',
+                    hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                  minLines: 3,
+                  maxLines: 6,
+                  onTap: scheduleKeyboardScrollIntoView,
                 ),
-                minLines: 3,
-                maxLines: 6,
               ),
               const SizedBox(height: 16),
               Row(
@@ -370,8 +398,6 @@ class _DashboardScheduleMemoEditorSheetState
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }
@@ -457,20 +483,23 @@ class _DashboardScheduleDatePickerDialogState
     final screenH = MediaQuery.sizeOf(context).height;
     final maxHeight = (screenH * 0.60).clamp(400.0, 520.0).toDouble();
     final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
+    final cs = Theme.of(context).colorScheme;
 
     return Dialog(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: ResponsiveLayout.only(context, bottom: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 10),
+              Padding(
+                padding: ResponsiveLayout.symmetric(context, vertical: 10),
                 child: Text(
                   '날짜 선택',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               ScrollableCalendarWidget(
@@ -491,16 +520,20 @@ class _DashboardScheduleDatePickerDialogState
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop<DateTime?>(null),
-                    child: const Text(
+                    child: Text(
                       '취소',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: cs.onSurfaceVariant),
                     ),
                   ),
                   TextButton(
                     onPressed: _pickedDay == null
                         ? null
-                        : () => Navigator.of(context).pop<DateTime?>(_pickedDay),
-                    child: const Text('확인'),
+                        : () =>
+                            Navigator.of(context).pop<DateTime?>(_pickedDay),
+                    child: Text(
+                      '확인',
+                      style: TextStyle(color: cs.primary),
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],

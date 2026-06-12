@@ -50,7 +50,8 @@ class HumanRepositoryImpl implements HumanRepository {
 
   @override
   Future<void> toggleWorkerStarStatus(int hid, bool isStarred) {
-    return _remote.humanPatch(hid, <String, dynamic>{'hstar': isStarred ? 1 : 0});
+    return _remote
+        .humanPatch(hid, <String, dynamic>{'hstar': isStarred ? 1 : 0});
   }
 
   @override
@@ -64,7 +65,8 @@ class HumanRepositoryImpl implements HumanRepository {
     final all = await _remote.placeWorkerRecentsList();
     final hit = all.any((e) => e.pid == pid && e.hid == hid);
     if (hit) {
-      await _remote.placeWorkerRecentPatch(pid, hid, <String, dynamic>{'lastusedms': ms});
+      await _remote.placeWorkerRecentPatch(
+          pid, hid, <String, dynamic>{'lastusedms': ms});
     } else {
       await _remote.placeWorkerRecentCreate(<String, dynamic>{
         'pid': pid,

@@ -18,4 +18,3 @@ class MaterialCostUseCase {
     return _repository.deleteMaterialCost(mid);
   }
 }
-

@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class TotalCostCard extends StatelessWidget {
   final String category;
   final String name;
   final int price;
   final int? wcomplete;
+  final String? wcompletedAt;
+
   const TotalCostCard({
     super.key,
     required this.category,
     required this.name,
     required this.price,
     this.wcomplete,
+    this.wcompletedAt,
   });
 
   Widget _pill(
@@ -20,6 +24,7 @@ class TotalCostCard extends StatelessWidget {
     required Color color,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
@@ -27,11 +32,13 @@ class TotalCostCard extends StatelessWidget {
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: context.rsi(10),
+          vertical: context.rsi(6),
+        ),
         child: Text(
           text,
-          style: TextStyle(
-            fontSize: 11,
+          style: tt.labelSmall?.copyWith(
             fontWeight: FontWeight.w700,
             color: color,
             height: 1.0,
@@ -44,19 +51,153 @@ class TotalCostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final isWork = category == 'w';
-    final accent = isWork ? (Colors.blue[700] ?? cs.primary) : (Colors.green[700] ?? cs.tertiary);
+    final isPaid = isWork && wcomplete == 1;
+    final accent = isWork ? cs.primary : cs.tertiary;
     final showNotPaid = isWork && wcomplete == 0;
+    final completedAtLabel = wcompletedAt != null && wcompletedAt!.isNotEmpty
+        ? formatWorkCostCompletedAt(wcompletedAt!)
+        : null;
+
+    if (isPaid) {
+      return Card(
+        elevation: 0,
+        color: cs.primaryContainer.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.rsi(14)),
+          side: BorderSide(
+            color: cs.primary.withValues(alpha: 0.45),
+            width: 1,
+          ),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(context.rsi(14)),
+            gradient: LinearGradient(
+              colors: [
+                cs.primary.withValues(alpha: 0.08),
+                cs.primaryContainer.withValues(alpha: 0.02),
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              context.rsi(10),
+              context.rsi(8),
+              context.rsi(10),
+              context.rsi(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: context.rs(3),
+                  height: context.rs(36),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                SizedBox(width: context.rsi(10)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: context.rsi(7),
+                              vertical: context.rsi(3),
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.primary,
+                              borderRadius:
+                                  BorderRadius.circular(context.rsi(6)),
+                            ),
+                            child: Text(
+                              '지급완료',
+                              style: tt.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: cs.onPrimary,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: context.rsi(6)),
+                          _pill(context, text: '인건비', color: accent),
+                          SizedBox(width: context.rsi(6)),
+                          Expanded(
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (completedAtLabel != null) ...[
+                        SizedBox(height: context.rsi(5)),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: context.rs(12),
+                              color: cs.primary.withValues(alpha: 0.85),
+                            ),
+                            SizedBox(width: context.rsi(4)),
+                            Text(
+                              completedAtLabel,
+                              style: tt.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onPrimaryContainer
+                                    .withValues(alpha: 0.85),
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(width: context.rsi(8)),
+                Text(
+                  getPrice(price: price),
+                  style: tt.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.onPrimaryContainer,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Card(
       elevation: 0,
       color: cs.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(context.rsi(14)),
         side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: EdgeInsets.fromLTRB(
+          context.rsi(12),
+          context.rsi(10),
+          context.rsi(12),
+          context.rsi(10),
+        ),
         child: Row(
           children: [
             _pill(
@@ -64,7 +205,7 @@ class TotalCostCard extends StatelessWidget {
               text: isWork ? '인건비' : '자재비',
               color: accent,
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: context.rsi(10)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,33 +214,31 @@ class TotalCostCard extends StatelessWidget {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: tt.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (isWork && (wcomplete != null))
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: EdgeInsets.only(top: context.rsi(2)),
                       child: Text(
                         wcomplete == 1 ? '지급완료' : '미지급',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: tt.labelSmall?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: wcomplete == 1 ? cs.onSurfaceVariant : Colors.red[700],
+                          color:
+                              wcomplete == 1 ? cs.onSurfaceVariant : cs.error,
                         ),
                       ),
                     ),
                 ],
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: context.rsi(10)),
             Text(
               getPrice(price: price),
-              style: TextStyle(
-                fontSize: 15,
+              style: tt.titleSmall?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: showNotPaid ? Colors.red[700] : cs.onSurface,
+                color: showNotPaid ? cs.error : cs.onSurface,
               ),
             ),
           ],

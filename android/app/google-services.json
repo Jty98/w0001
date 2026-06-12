@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "736087562902",
+    "project_id": "interior-project-b5a35",
+    "storage_bucket": "interior-project-b5a35.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:736087562902:android:b982dfa4c31832708e40b7",
+        "android_client_info": {
+          "package_name": "com.example.w0001"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0wU5x6ZnQX4DigQFDnmPmfSVScCmQtI0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

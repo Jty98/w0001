@@ -135,7 +135,8 @@ Future<bool> showSuperAdminSimpleConfirmDialog({
                   alpha: 0.6,
                 ),
         title: Text(title),
-        content: SingleChildScrollView(child: Text(body, style: _bodyStyle(ctx))),
+        content:
+            SingleChildScrollView(child: Text(body, style: _bodyStyle(ctx))),
         actions: AuthDialogActionsDual(
           secondaryLabel: '취소',
           secondaryOnPressed: () => Navigator.pop(ctx, false),

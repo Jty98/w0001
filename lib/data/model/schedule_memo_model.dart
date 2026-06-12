@@ -14,15 +14,19 @@ class ScheduleMemoModel {
   });
 
   final int? sid;
+
   /// yyyy-MM-dd
   final String taskDate;
+
   /// HH:mm (24-hour) or empty string when no time is set.
   final String taskTime;
   final String title;
   final String memo;
   final bool done;
+
   /// True when pre-alarm should ring before schedule time.
   final bool alarmEnabled;
+
   /// Alarm lead time in minutes (for example 60 = 1 hour before).
   final int alarmOffsetMinutes;
   final int sortOrder;

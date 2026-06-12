@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class AlarmRingingScreen extends StatelessWidget {
   const AlarmRingingScreen({
@@ -17,6 +18,7 @@ class AlarmRingingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -24,47 +26,44 @@ class AlarmRingingScreen extends StatelessWidget {
         body: SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: EdgeInsets.symmetric(horizontal: context.rsi(24)),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.alarm, size: 52, color: cs.primary),
-                  const SizedBox(height: 18),
+                  Icon(Icons.alarm, size: context.rs(52), color: cs.primary),
+                  SizedBox(height: context.rsi(18)),
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 24,
+                    style: tt.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: context.rsi(10)),
                   Text(
                     timeText,
-                    style: TextStyle(
-                      fontSize: 32,
+                    style: tt.displaySmall?.copyWith(
                       fontWeight: FontWeight.w900,
                       color: cs.primary,
                     ),
                   ),
                   if (body.trim().isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                    SizedBox(height: context.rsi(14)),
                     Text(
                       body,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
+                      style: tt.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 28),
+                  SizedBox(height: context.rsi(28)),
                   FilledButton.icon(
                     onPressed: () async => onStop(),
                     icon: const Icon(Icons.notifications_off_outlined),
                     label: const Text('알람 끄기'),
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
+                      minimumSize: Size(double.infinity, context.rs(52)),
                     ),
                   ),
                 ],

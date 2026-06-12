@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// 프로필 본문에서 블록 구분용 짧은 제목 줄.
 class ProfileSectionTitle extends StatelessWidget {
@@ -14,14 +15,14 @@ class ProfileSectionTitle extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 3,
-          height: 15,
+          width: context.rs(3),
+          height: context.rs(15),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(context.rs(2)),
             color: cs.primary.withValues(alpha: 0.9),
           ),
         ),
-        const SizedBox(width: 10),
+        rsH(context, 10),
         Text(
           text,
           style: tt.titleSmall?.copyWith(
@@ -39,25 +40,26 @@ class ProfileInsetPanel extends StatelessWidget {
   const ProfileInsetPanel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(1),
+    this.padding,
   });
 
   final Widget child;
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final resolved = padding ?? EdgeInsets.all(context.rsi(1));
     return DecoratedBox(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(context.rs(18)),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.42),
         ),
       ),
       child: Padding(
-        padding: padding,
+        padding: resolved,
         child: child,
       ),
     );

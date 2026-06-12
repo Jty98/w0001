@@ -3,8 +3,11 @@ import 'package:w0001/data/model/place_dropdown_model.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
+import 'package:w0001/data/datasources/remote/place/place_work_day_fields.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
 import 'package:w0001/domain/repository/workcost_abst.dart';
+import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
+import 'package:w0001/util/funtions.dart';
 
 class WorkCostRepositoryImpl implements WorkCostRepository {
   WorkCostRepositoryImpl(this._remote);
@@ -20,10 +23,22 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
   ) async {
     final endN = _endExclusive(endDate);
     final wcs = await _remote.workCostsList();
+    final pwdList = await _remote.placeWorkDaysList();
     final places = await _remote.placesList();
     final humans = await _remote.humansList();
     final pMap = {for (final p in places) p.pid: p};
     final hMap = {for (final h in humans) h.hid: h};
+
+    final pwdByKey = <String, PlaceWorkDayRead>{};
+    for (final pwd in pwdList) {
+      final key =
+          '${pwd.hid}|${pwd.pid}|${normalizeToIsoDateString(pwd.workdate)}';
+      final prev = pwdByKey[key];
+      if (prev == null ||
+          (prev.workrole.trim().isEmpty && pwd.workrole.trim().isNotEmpty)) {
+        pwdByKey[key] = pwd;
+      }
+    }
 
     final out = <TotalWorkCostModel>[];
     for (final w in wcs) {
@@ -33,6 +48,11 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
       if (h == null || p == null) continue;
       if (h.hdelete != 0) continue;
       if (p.pcomplete == 2) continue;
+      final dateKey = normalizeToIsoDateString(w.wdate);
+      final pwd = pwdByKey['${w.whid}|${w.wpid}|$dateKey'];
+      final role = pwd != null && pwd.workrole.trim().isNotEmpty
+          ? pwd.workrole.trim()
+          : w.wrole.trim();
       out.add(
         TotalWorkCostModel(
           hname: h.hname,
@@ -40,11 +60,14 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
           hstar: h.hstar,
           hnumber: h.hnumber,
           pname: p.pname,
+          wpid: w.wpid,
           wid: w.wid,
           pcomplete: p.pcomplete,
           wcomplete: w.wcomplete,
-          date: w.wdate,
+          date: dateKey,
           price: w.wprice,
+          wcompletedAt: w.wcompletedAt,
+          workrole: role,
         ),
       );
     }
@@ -91,25 +114,69 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
   }
 
   @override
-  Future<bool> addWorkCosts(List<WorkCostModel> wCostList) async {
+  Future<bool> addWorkCosts(
+    List<WorkCostModel> wCostList, {
+    bool acknowledgeTroublePair = false,
+  }) async {
+    if (wCostList.isEmpty) return true;
+    final pwdList = await _remote.placeWorkDaysList();
+    final wcs = await _remote.workCostsList();
+
     for (final w in wCostList) {
-      await _remote.workCostCreate(<String, dynamic>{
-        'wpid': w.wpid,
-        'whid': w.whid ?? 0,
-        'wdate': w.wdate,
-        'wprice': w.wprice,
-        'wcomplete': w.wcomplete,
-        'wrole': w.wrole,
-      });
+      final wd = w.wdate.length >= 10 ? w.wdate.substring(0, 10) : w.wdate;
+      final role = w.wrole.trim().isEmpty
+          ? kWorkRoleManualAddDefault
+          : w.wrole.trim();
+
       if (w.whid != null) {
-        final wd = w.wdate.length >= 10 ? w.wdate.substring(0, 10) : w.wdate;
-        await _remote.placeWorkDayCreate(<String, dynamic>{
-          'pid': w.wpid,
-          'hid': w.whid,
-          'workdate': wd,
-          'dailywage': w.wprice,
-          'paid': w.wcomplete,
-          'workrole': w.wrole,
+        final hasPwd = pwdList.any(
+          (p) =>
+              p.pid == w.wpid &&
+              p.hid == w.whid &&
+              normalizeToIsoDateString(p.workdate) == wd,
+        );
+        if (!hasPwd) {
+          final pwdBody = <String, dynamic>{
+            'pid': w.wpid,
+            'hid': w.whid,
+            'workdate': wd,
+            'dailywage': w.wprice,
+            'paid': w.wcomplete,
+            'workrole': role,
+          };
+          if (acknowledgeTroublePair) {
+            pwdBody[PlaceWorkDayFields.acknowledgeTroublePair] = true;
+          }
+          await _remote.placeWorkDayCreate(pwdBody);
+        }
+      }
+
+      WorkCostRead? existing;
+      final hid = w.whid ?? 0;
+      for (final c in wcs) {
+        if (c.whid == hid &&
+            c.wpid == w.wpid &&
+            normalizeToIsoDateString(c.wdate) == wd) {
+          existing = c;
+          break;
+        }
+      }
+      if (existing != null) {
+        await _remote.workCostPatch(
+          existing.wid,
+          <String, dynamic>{
+            'wprice': w.wprice,
+            'wrole': role,
+          },
+        );
+      } else {
+        await _remote.workCostCreate(<String, dynamic>{
+          'wpid': w.wpid,
+          'whid': w.whid ?? 0,
+          'wdate': w.wdate,
+          'wprice': w.wprice,
+          'wcomplete': w.wcomplete,
+          'wrole': role,
         });
       }
     }
@@ -142,8 +209,74 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
   }
 
   @override
+  Future<void> updateWorkCostPrice(int wid, int newPrice) async {
+    await _remote.workCostPatch(wid, <String, dynamic>{'wprice': newPrice});
+  }
+
+  @override
   Future<void> deleteWorkCost(int wid) {
     return _remote.workCostDelete(wid);
+  }
+
+  @override
+  Future<int?> findPlaceWorkDayPwdid({
+    required int pid,
+    required int hid,
+    required String dateKey,
+  }) async {
+    final list = await _remote.placeWorkDaysList();
+    final key = normalizeToIsoDateString(dateKey);
+    for (final p in list) {
+      if (p.pid == pid &&
+          p.hid == hid &&
+          normalizeToIsoDateString(p.workdate) == key) {
+        return p.pwdid;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<void> ensureWorkCostForPlaceWorkDay({
+    required int pid,
+    required int hid,
+    required String dateKey,
+    required int wprice,
+    required String wrole,
+  }) async {
+    final wd = normalizeToIsoDateString(dateKey);
+    final role = wrole.trim().isEmpty ? kWorkRoleManualAddDefault : wrole.trim();
+    final wcs = await _remote.workCostsList();
+    for (final c in wcs) {
+      if (c.whid == hid &&
+          c.wpid == pid &&
+          normalizeToIsoDateString(c.wdate) == wd) {
+        await _remote.workCostPatch(
+          c.wid,
+          <String, dynamic>{'wprice': wprice, 'wrole': role},
+        );
+        return;
+      }
+    }
+    await _remote.workCostCreate(<String, dynamic>{
+      'wpid': pid,
+      'whid': hid,
+      'wdate': wd,
+      'wprice': wprice,
+      'wcomplete': 0,
+      'wrole': role,
+    });
+  }
+
+  @override
+  Future<void> deleteWorkCostLinked({
+    required int wid,
+    int? pwdid,
+  }) async {
+    await _remote.workCostDelete(wid);
+    if (pwdid != null) {
+      await _remote.placeWorkDayDelete(pwdid);
+    }
   }
 
   @override

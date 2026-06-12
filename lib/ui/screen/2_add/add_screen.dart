@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:dropdown_search/dropdown_search.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -10,9 +11,10 @@ import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/ui/screen/2_add/material_cost_tab.dart';
 import 'package:w0001/ui/screen/2_add/work_cost_tab.dart';
+import 'package:w0001/theme/app_segmented_button.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// 현장 선택 첫 화면: 본문 하단(하단 탭바 바로 위)에서 띄울 간격 — 논리 픽셀(dp/pt), 해상도마다 동일 비율
 const double _kPlacePickerGapAboveBottomNav = 30;
@@ -126,15 +128,36 @@ class _AddScreenState extends ConsumerState<AddScreen>
 
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
+    final hasPlace = state.selectedPlace != null;
 
-    return DefaultTabController(
+    return BackButtonListener(
+      onBackButtonPressed: () async {
+        if (ref.read(addCostProvider).selectedPlace == null) return false;
+        FocusScope.of(context).unfocus();
+        return consumeAddCostBackNavigation();
+      },
+      child: _AddCostPlaceDetailBackGesture(
+        enabled: hasPlace,
+        onBack: () {
+          FocusScope.of(context).unfocus();
+          vm.clearSelectedPlace();
+        },
+        child: PopScope(
+      canPop: !hasPlace,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (ref.read(addCostProvider).selectedPlace == null) return;
+        FocusScope.of(context).unfocus();
+        vm.clearSelectedPlace();
+      },
+      child: DefaultTabController(
       length: 2,
       initialIndex: 0,
       child: GestureDetector(
         behavior: HitTestBehavior.deferToChild,
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
-          resizeToAvoidBottomInset: false,
+          resizeToAvoidBottomInset: true,
           body: AnimatedBuilder(
             animation: _openController,
             builder: (context, _) {
@@ -239,6 +262,9 @@ class _AddScreenState extends ConsumerState<AddScreen>
           ),
         ),
       ),
+      ),
+      ),
+      ),
     );
   }
 
@@ -253,14 +279,14 @@ class _AddScreenState extends ConsumerState<AddScreen>
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            24,
+          padding: EdgeInsets.fromLTRB(
+            context.rs(24),
             0,
-            24,
-            _kPlacePickerGapAboveBottomNav,
+            context.rs(24),
+            context.rs(_kPlacePickerGapAboveBottomNav),
           ),
           child: SizedBox(
-            width: math.min(w - 48, 400),
+            width: math.min(w - context.rs(48), context.rs(400)),
             child: state.selectedPlace == null
                 ? placeDropdown(
                     ref,
@@ -269,7 +295,7 @@ class _AddScreenState extends ConsumerState<AddScreen>
                     context,
                     openPopupAbove: true,
                   )
-                : const SizedBox(height: 54),
+                : SizedBox(height: context.rs(54)),
           ),
         ),
       ),
@@ -283,8 +309,10 @@ class _AddScreenState extends ConsumerState<AddScreen>
     AddCostState state,
   ) {
     final theme = Theme.of(context);
-    final headerColor = theme.appBarTheme.backgroundColor ??
-        theme.colorScheme.surface;
+    final tt = theme.textTheme;
+    final headerColor =
+        theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface;
+    final cs = theme.colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -292,14 +320,19 @@ class _AddScreenState extends ConsumerState<AddScreen>
         Material(
           color: headerColor,
           elevation: 1,
-          shadowColor: Colors.black26,
+          shadowColor: cs.shadow.withValues(alpha: 0.18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                  padding: ResponsiveLayout.only(
+                    context,
+                    left: 12,
+                    top: 6,
+                    right: 12,
+                  ),
                   child: placeDropdown(
                     ref,
                     vm,
@@ -309,12 +342,12 @@ class _AddScreenState extends ConsumerState<AddScreen>
                   ),
                 ),
               ),
-              const TabBar(
-                padding: EdgeInsets.symmetric(vertical: 5),
-                labelPadding: EdgeInsets.symmetric(vertical: 5),
+              TabBar(
+                padding: ResponsiveLayout.symmetric(context, vertical: 5),
+                labelPadding: ResponsiveLayout.symmetric(context, vertical: 5),
                 tabs: [
-                  Text('인건비', style: normalStyle),
-                  Text('자재비', style: normalStyle),
+                  Text('인건비', style: tt.titleSmall),
+                  Text('자재비', style: tt.titleSmall),
                 ],
               ),
             ],
@@ -331,7 +364,13 @@ class _AddScreenState extends ConsumerState<AddScreen>
         SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(15, 6, 15, 10),
+            padding: ResponsiveLayout.only(
+              context,
+              left: 15,
+              top: 6,
+              right: 15,
+              bottom: 10,
+            ),
             child: Row(
               children: [
                 Column(
@@ -339,11 +378,11 @@ class _AddScreenState extends ConsumerState<AddScreen>
                   children: [
                     Text(
                       '인건비 ${state.workCostList.length}건',
-                      style: size15Style,
+                      style: tt.bodyMedium,
                     ),
                     Text(
                       '자재비 ${state.materialCostList.length}건',
-                      style: size15Style,
+                      style: tt.bodyMedium,
                     ),
                   ],
                 ),
@@ -352,29 +391,32 @@ class _AddScreenState extends ConsumerState<AddScreen>
                       ? null
                       : () => vm.showClearDialog(context),
                   icon: Icon(
-                    size: 18,
+                    size: context.rsi(18),
                     Icons.cancel,
-                    color: state.isAllEmpty ? Colors.grey[400] : Colors.red,
+                    color: state.isAllEmpty
+                        ? cs.onSurfaceVariant.withValues(alpha: 0.45)
+                        : cs.error,
                   ),
                 ),
                 const Spacer(),
                 SizedBox(
-                  height: 35,
+                  height: context.rs(35),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      foregroundColor: Colors.white,
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(context.rs(10)),
                       ),
                     ),
-                    onPressed: state.workCostList.isEmpty &&
-                            state.materialCostList.isEmpty
+                    onPressed: (state.workCostList.isEmpty &&
+                                state.materialCostList.isEmpty) ||
+                            state.isSaving
                         ? null
                         : () => vm.insertCostLists(context),
-                    child: const Text(
-                      '저장하기',
-                      style: size15Style,
+                    child: Text(
+                      state.isSaving ? '저장 중...' : '저장하기',
+                      style: tt.labelLarge?.copyWith(color: cs.onPrimary),
                     ),
                   ),
                 ),
@@ -396,7 +438,8 @@ Widget placeDropdown(
 }) {
   final theme = Theme.of(context);
   final cs = theme.colorScheme;
-  final borderRadius = BorderRadius.circular(10);
+  final tt = theme.textTheme;
+  final borderRadius = BorderRadius.circular(context.rsi(10));
 
   return Column(
     mainAxisSize: MainAxisSize.min,
@@ -428,12 +471,9 @@ Widget placeDropdown(
               if (next.isEmpty) return;
               vm.setCostPlacePickerFilter(next.first);
             },
-            style: SegmentedButton.styleFrom(
+            style: AppSegmentedButton.styleFrom(
               visualDensity: VisualDensity.compact,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
           ),
         ),
@@ -470,31 +510,28 @@ Widget placeDropdown(
           ),
           dropdownDecoratorProps: DropDownDecoratorProps(
             textAlign: TextAlign.center,
-            baseStyle: TextStyle(
-              fontSize: 18,
+            baseStyle: tt.titleMedium?.copyWith(
               fontWeight: FontWeight.w500,
               color: cs.onSurface,
             ),
             dropdownSearchDecoration: InputDecoration(
               isDense: true,
               contentPadding: EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+                horizontal: context.rsi(12),
+                vertical: context.rsi(10),
               ),
               filled: true,
               fillColor: cs.surfaceContainerLow,
               prefixIcon: Icon(
                 Icons.home_work_outlined,
-                size: 20,
+                size: context.rs(20),
                 color: cs.onSurfaceVariant,
               ),
-              hintStyle: TextStyle(
+              hintStyle: tt.bodyMedium?.copyWith(
                 color: cs.outline,
-                fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
-              helperStyle: TextStyle(
-                fontSize: 11,
+              helperStyle: tt.labelSmall?.copyWith(
                 color: cs.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
@@ -539,6 +576,9 @@ Widget tempCostBuilder(
 ) {
   final state = ref.watch(addCostProvider);
   final vm = ref.read(addCostProvider.notifier);
+  final theme = Theme.of(context);
+  final cs = theme.colorScheme;
+  final tt = theme.textTheme;
 
   late final String dateStr;
   late final Widget title;
@@ -552,12 +592,12 @@ Widget tempCostBuilder(
       children: [
         Text(
           '[${item.mcategory}] ',
-          style: category2Style,
+          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
         ),
         Expanded(
           child: Text(
             item.mname,
-            style: normalStyle,
+            style: tt.bodyMedium,
           ),
         ),
       ],
@@ -573,12 +613,12 @@ Widget tempCostBuilder(
       children: [
         Text(
           item.hname!,
-          style: normalStyle,
+          style: tt.bodyMedium,
         ),
         if (item.wrole.isNotEmpty)
           Text(
             item.wrole,
-            style: categoryStyle,
+            style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
           ),
       ],
     );
@@ -593,7 +633,7 @@ Widget tempCostBuilder(
       children: [
         SlidableAction(
           borderRadius: BorderRadius.circular(10),
-          backgroundColor: Colors.red,
+          backgroundColor: cs.error,
           icon: Icons.delete,
           label: '삭제',
           onPressed: (slidableCtx) => showDialog<void>(
@@ -618,10 +658,16 @@ Widget tempCostBuilder(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+              padding: EdgeInsets.symmetric(
+                horizontal: context.rsi(15),
+                vertical: context.rsi(5),
+              ),
               child: Text(
                 formatDateTimeWeekDayToString(DateTime.parse(dateStr)),
-                style: blueTitleStyle,
+                style: tt.titleSmall?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const Divider(height: 0),
@@ -630,11 +676,11 @@ Widget tempCostBuilder(
               title: title,
               subtitle: Text(
                 pname,
-                style: categoryStyle,
+                style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
               ),
               trailing: Text(
                 getPrice(price: price),
-                style: normalStyle,
+                style: tt.bodyMedium,
               ),
             ),
           ],
@@ -642,4 +688,62 @@ Widget tempCostBuilder(
       ),
     ),
   );
+}
+
+/// iOS: 쉘 탭 안에는 네비게이터 스택이 없어 시스템 스와이프 뒤로가기가 없음 → 왼쪽 가장자리 스와이프로 현장 선택 해제.
+class _AddCostPlaceDetailBackGesture extends StatefulWidget {
+  const _AddCostPlaceDetailBackGesture({
+    required this.enabled,
+    required this.onBack,
+    required this.child,
+  });
+
+  final bool enabled;
+  final VoidCallback onBack;
+  final Widget child;
+
+  @override
+  State<_AddCostPlaceDetailBackGesture> createState() =>
+      _AddCostPlaceDetailBackGestureState();
+}
+
+class _AddCostPlaceDetailBackGestureState
+    extends State<_AddCostPlaceDetailBackGesture> {
+  double _dragDx = 0;
+
+  bool get _useIosEdgeSwipe =>
+      widget.enabled && defaultTargetPlatform == TargetPlatform.iOS;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_useIosEdgeSwipe) return widget.child;
+
+    final edgeW =
+        (MediaQuery.sizeOf(context).width * 0.08).clamp(20.0, 36.0);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        widget.child,
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: edgeW,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragStart: (_) => _dragDx = 0,
+            onHorizontalDragUpdate: (d) {
+              if (d.delta.dx > 0) _dragDx += d.delta.dx;
+            },
+            onHorizontalDragEnd: (_) {
+              if (_dragDx >= 56) widget.onBack();
+              _dragDx = 0;
+            },
+            onHorizontalDragCancel: () => _dragDx = 0,
+          ),
+        ),
+      ],
+    );
+  }
 }

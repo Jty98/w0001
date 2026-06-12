@@ -1,5 +1,7 @@
+import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
@@ -7,10 +9,12 @@ import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/ui/screen/2_add/add_worker_dialog.dart';
 import 'package:w0001/ui/screen/2_add/place_recent_workers_sheet.dart';
-import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
+import 'package:w0001/ui/screen/2_add/work_role_chip_panel.dart';
+import 'package:w0001/ui/screen/2_add/work_role_suggestions.dart';
 import 'package:w0001/ui/widget/date_card_widget.dart';
+import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class WorkCostTab extends ConsumerStatefulWidget {
   const WorkCostTab({super.key});
@@ -26,103 +30,106 @@ class _WorkCostTabState extends ConsumerState<WorkCostTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final n = ref.read(addCostProvider.notifier);
-      n.syncNonPresetWorkRoleToCustomField();
       n.refreshPlaceRecentWorkers();
+      n.refreshProcessTasksOnSelectedDay();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AddCostState>(addCostProvider, (prev, next) {
-      if (prev?.selectedWorkRole != next.selectedWorkRole) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          ref
-              .read(addCostProvider.notifier)
-              .syncNonPresetWorkRoleToCustomField();
-        });
-      }
-    });
-
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SelectDateButton(),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: humanDropdownSearch(context, ref)),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 48,
-                width: 48,
-                child: OutlinedButton(
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => const AddWorkerDialog(),
-                  ).then((_) => vm.clearDialogText()),
-                  style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+      padding: ResponsiveLayout.only(context, left: 12, top: 10, right: 12),
+      child: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SelectDateButton(),
+                rsV(context, 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: humanDropdownSearch(context, ref)),
+                    rsH(context, 8),
+                    SizedBox(
+                      height: context.rs(48),
+                      width: context.rs(48),
+                      child: OutlinedButton(
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => const AddWorkerDialog(),
+                        ).then((_) => vm.clearDialogText()),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(context.rs(12)),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.person_add_alt_1,
+                          color: cs.primary,
+                          size: context.rsi(22),
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Icon(
-                    Icons.person_add_alt_1,
-                    color: Colors.blue[700],
-                    size: 22,
-                  ),
+                  ],
+                ),
+                rsV(context, 8),
+                _placeRecentWorkersSection(context, ref),
+              ],
+            ),
+          ),
+          if (state.workCostList.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text(
+                  '추가한 인원이 없습니다.',
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _placeRecentWorkersSection(context, ref),
-          Expanded(
-            child: state.workCostList.isEmpty
-                ? Center(
-                    child: Text(
-                      '추가한 인원이 없습니다.',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.only(top: 6, bottom: 10),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemCount: state.workCostList.length,
-                    itemBuilder: (context, index) {
-                      final originalIndex =
-                          state.workCostList.length - 1 - index;
-                      final item = state.workCostList[originalIndex];
-                      return _WorkCostProfileCard(
-                        item: item,
-                        onEdit: () => _showEditPendingWorkCostDialog(
-                          context,
-                          ref,
-                          originalIndex,
-                          item,
-                        ),
-                        onDelete: () => _confirmDeleteWorkCost(
-                          context,
-                          ref,
-                          originalIndex,
-                        ),
-                      );
-                    },
-                  ),
-          ),
+            )
+          else
+            SliverPadding(
+              padding: ResponsiveLayout.only(context, top: 6, bottom: 10),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  mainAxisSpacing: context.rsi(6),
+                  crossAxisSpacing: context.rsi(6),
+                  childAspectRatio: 1.18,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final originalIndex =
+                        state.workCostList.length - 1 - index;
+                    final item = state.workCostList[originalIndex];
+                    return WorkCostProfileCard(
+                      item: item,
+                      onEdit: () => _showEditPendingWorkCostDialog(
+                        context,
+                        ref,
+                        originalIndex,
+                        item,
+                      ),
+                      onDelete: () => _confirmDeleteWorkCost(
+                        context,
+                        ref,
+                        originalIndex,
+                      ),
+                    );
+                  },
+                  childCount: state.workCostList.length,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -138,7 +145,7 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
 
   if (state.selectedPlace == null) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: ResponsiveLayout.only(context, bottom: 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
@@ -148,15 +155,15 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          padding: ResponsiveLayout.symmetric(context, vertical: 14, horizontal: 12),
           child: Row(
             children: [
-              Icon(Icons.place_outlined, size: 26, color: cs.onSurfaceVariant),
-              const SizedBox(width: 12),
+              Icon(Icons.place_outlined, size: context.rsi(26), color: cs.onSurfaceVariant),
+              rsH(context, 12),
               Expanded(
                 child: Text(
                   '현장을 먼저 선택하면 이전에 투입했던 인원이 여기 표시됩니다.',
-                  style: smallStyle.copyWith(
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: cs.onSurfaceVariant,
                     height: 1.3,
                   ),
@@ -171,7 +178,7 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
 
   if (recent.isEmpty) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: ResponsiveLayout.only(context, bottom: 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
@@ -181,15 +188,15 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          padding: ResponsiveLayout.symmetric(context, vertical: 14, horizontal: 12),
           child: Row(
             children: [
-              Icon(Icons.history_rounded, size: 26, color: cs.onSurfaceVariant),
-              const SizedBox(width: 12),
+              Icon(Icons.history_rounded, size: context.rsi(26), color: cs.onSurfaceVariant),
+              rsH(context, 12),
               Expanded(
                 child: Text(
                   '이 현장에 기록된 인원이 없습니다. 위에서 선택하면 최근 목록에 쌓입니다.',
-                  style: smallStyle.copyWith(
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: cs.onSurfaceVariant,
                     height: 1.3,
                   ),
@@ -203,7 +210,7 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
   }
 
   return Padding(
-    padding: const EdgeInsets.only(bottom: 8),
+    padding: ResponsiveLayout.only(context, bottom: 8),
     child: DecoratedBox(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
@@ -213,7 +220,7 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: cs.shadow.withValues(alpha: 0.06),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -222,19 +229,21 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
       child: ClipRRect(
         borderRadius: radius,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: ResponsiveLayout.only(context, left: 12, top: 10, right: 12, bottom: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
                   Icon(Icons.history_rounded,
-                      size: 18, color: cs.onSurfaceVariant),
-                  const SizedBox(width: 6),
+                      size: context.rsi(18), color: cs.onSurfaceVariant),
+                  rsH(context, 6),
                   Expanded(
                     child: Text(
                       '이 현장에서 일했던 인원',
-                      style: categoryStyle.copyWith(color: cs.onSurfaceVariant),
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
                     ),
                   ),
                   TextButton(
@@ -302,7 +311,10 @@ Future<void> _confirmDeleteRecentWorker(
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('삭제', style: TextStyle(color: Colors.red)),
+          child: Text(
+            '삭제',
+            style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+          ),
         ),
       ],
     ),
@@ -330,7 +342,10 @@ Future<void> _confirmDeleteWorkCost(
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('삭제', style: TextStyle(color: Colors.red)),
+          child: Text(
+            '삭제',
+            style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+          ),
         ),
       ],
     ),
@@ -340,18 +355,6 @@ Future<void> _confirmDeleteWorkCost(
   }
 }
 
-/// 목록에 넣기 전 항목의 역할 문자열 → 다이얼로그 초기 칩 선택값.
-String? _dialogInitialRoleForEdit(
-  String wrole,
-  TextEditingController custom,
-) {
-  if (wrole.isEmpty) return null;
-  final fixed = kWorkRolePresets.where((e) => e != '직접입력').toSet();
-  if (fixed.contains(wrole)) return wrole;
-  custom.text = wrole;
-  return '직접입력';
-}
-
 Future<void> _showEditPendingWorkCostDialog(
   BuildContext context,
   WidgetRef ref,
@@ -359,82 +362,148 @@ Future<void> _showEditPendingWorkCostDialog(
   WorkCostModel item,
 ) async {
   final vm = ref.read(addCostProvider.notifier);
+  final addState = ref.read(addCostProvider);
+  final processTasks = addState.processTasksOnSelectDay;
+  HumanModel? editHuman;
+  for (final w in addState.selectedWorkers) {
+    if (w.hid == item.whid) {
+      editHuman = w;
+      break;
+    }
+  }
+  if (editHuman == null && item.whid != null) {
+    try {
+      final all = await ref.read(humanUseCaseProvider).getAllWorkers();
+      for (final h in all) {
+        if (h.hid == item.whid) {
+          editHuman = h;
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+  final workerSkills = workerSkillRoleSuggestions(
+    editHuman != null ? [editHuman] : const [],
+  );
+  final priceFormatter = CurrencyTextInputFormatter.currency(
+    decimalDigits: 0,
+    symbol: '',
+  );
   final nameController = TextEditingController(text: item.hname ?? '');
-  final priceController = TextEditingController(text: item.wprice.toString());
+  final priceController = TextEditingController(
+    text: item.wprice > 0
+        ? priceFormatter.formatDouble(item.wprice.toDouble())
+        : '',
+  );
   final customRoleController = TextEditingController();
-  var dialogRole = _dialogInitialRoleForEdit(item.wrole, customRoleController);
+  final (initChip, customFill) = workRoleInitialSelection(
+    item.wrole,
+    processTasks: processTasks,
+    workerSkills: workerSkills,
+  );
+  customRoleController.text = customFill;
+  var dialogRole = initChip;
 
+  if (!context.mounted) return;
   await showDialog<void>(
     context: context,
     builder: (ctx) {
       return StatefulBuilder(
         builder: (ctx, setLocal) {
-          final showCustomRole = dialogRole == '직접입력';
+          final displayName = item.hname?.trim();
+          final cs = Theme.of(ctx).colorScheme;
+          final tt = Theme.of(ctx).textTheme;
           return AlertDialog(
-            title: const Text('항목 수정'),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            titlePadding: ResponsiveLayout.only(ctx, left: 20, top: 18, right: 20),
+            contentPadding: ResponsiveLayout.only(ctx, left: 20, top: 12, right: 20, bottom: 8),
+            actionsPadding: ResponsiveLayout.only(ctx, left: 12, right: 12, bottom: 12),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName?.isNotEmpty == true ? displayName! : '항목 수정',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                rsV(ctx, 2),
+                Text(
+                  '오늘 한 일과 금액을 입력하세요',
+                  style: tt.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
             content: SizedBox(
               width: double.maxFinite,
-              child: SingleChildScrollView(
+              child: KeyboardAwareScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: '이름',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '역할',
-                      style: Theme.of(ctx).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 6),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (var i = 0; i < kWorkRolePresets.length; i++) ...[
-                            if (i > 0) const SizedBox(width: 6),
-                            ChoiceChip(
-                              label: Text(
-                                kWorkRolePresets[i],
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              selected: dialogRole == kWorkRolePresets[i],
-                              onSelected: (_) => setLocal(() {
-                                dialogRole = kWorkRolePresets[i];
-                                if (kWorkRolePresets[i] != '직접입력') {
-                                  customRoleController.clear();
-                                }
-                              }),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (showCustomRole) ...[
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: customRoleController,
-                        decoration: const InputDecoration(
-                          hintText: '역할 직접 입력',
-                          isDense: true,
-                          border: OutlineInputBorder(),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: cs.outlineVariant.withValues(alpha: 0.25),
                         ),
                       ),
-                    ],
+                      child: Padding(
+                        padding: ResponsiveLayout.all(ctx, 12),
+                        child: WorkRoleChipPanel(
+                          dense: true,
+                          showApplyHint: false,
+                          selectedWorkRole: dialogRole,
+                          processTasks: processTasks,
+                          workerSkills: workerSkills,
+                          processTasksLoading: addState.processTasksLoading,
+                          customRoleController: customRoleController,
+                          onSelectRole: (role) => setLocal(() {
+                            dialogRole = role;
+                            if (role != '직접입력') {
+                              customRoleController.clear();
+                            }
+                          }),
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 12),
+                    TextField(
+                      scrollPadding: keyboardScrollPadding(ctx),
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: '이름',
+                        isDense: true,
+                        filled: true,
+                        fillColor: cs.surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     TextField(
                       controller: priceController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
+                      textAlign: TextAlign.right,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        priceFormatter,
+                        LengthLimitingTextInputFormatter(13),
+                      ],
+                      decoration: InputDecoration(
                         labelText: '금액',
                         isDense: true,
-                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: cs.surface,
+                        suffixText: '원',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ],
@@ -446,7 +515,7 @@ Future<void> _showEditPendingWorkCostDialog(
                 onPressed: () => Navigator.of(ctx).pop(),
                 child: const Text('취소'),
               ),
-              TextButton(
+              FilledButton(
                 onPressed: () {
                   final name = nameController.text.trim();
                   if (name.isEmpty) {
@@ -455,8 +524,9 @@ Future<void> _showEditPendingWorkCostDialog(
                     );
                     return;
                   }
-                  var priceStr =
-                      priceController.text.trim().replaceAll(RegExp(r'[,원\s]'), '');
+                  var priceStr = priceController.text
+                      .trim()
+                      .replaceAll(RegExp(r'[,원\s]'), '');
                   final price = int.tryParse(priceStr);
                   if (price == null || price < 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -498,8 +568,9 @@ Future<void> _showEditPendingWorkCostDialog(
   customRoleController.dispose();
 }
 
-class _WorkCostProfileCard extends StatelessWidget {
-  const _WorkCostProfileCard({
+class WorkCostProfileCard extends StatelessWidget {
+  const WorkCostProfileCard({
+    super.key,
     required this.item,
     required this.onEdit,
     required this.onDelete,
@@ -512,11 +583,19 @@ class _WorkCostProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = item.hname ?? '';
-    final initial =
-        name.isNotEmpty ? String.fromCharCode(name.runes.first) : '?';
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     return Card(
-      elevation: 1,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: cs.surfaceContainerLowest.withValues(alpha: 0.9),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.rs(10)),
+        side: BorderSide(
+          color: cs.outlineVariant.withValues(alpha: 0.38),
+        ),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         clipBehavior: Clip.none,
@@ -527,48 +606,53 @@ class _WorkCostProfileCard extends StatelessWidget {
               child: InkWell(
                 onTap: onEdit,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 10, 6, 6),
+                  padding: EdgeInsets.fromLTRB(
+                    context.rsi(6),
+                    context.rsi(8),
+                    context.rsi(6),
+                    context.rsi(6),
+                  ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      CircleAvatar(
-                        radius: 18,
-                        child: Text(
-                          initial,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
                       Text(
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                        style: tt.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          height: 1.1,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: context.rsi(2)),
                       Text(
-                        item.wrole.isEmpty ? '—' : item.wrole,
+                        item.wrole.isEmpty ? '오늘 한 일 입력' : item.wrole,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.blueGrey[700],
+                        style: tt.labelSmall?.copyWith(
+                          fontSize: context.rs(10.5),
+                          fontWeight: item.wrole.isEmpty
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: item.wrole.isEmpty
+                              ? cs.primary
+                              : cs.onSurfaceVariant,
+                          height: 1.1,
                         ),
                       ),
-                      const Spacer(),
+                      SizedBox(height: context.rsi(4)),
                       Text(
                         getPrice(price: item.wprice),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+                        style: tt.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.1,
                         ),
                       ),
                     ],
@@ -578,14 +662,14 @@ class _WorkCostProfileCard extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: -10,
-            right: -10,
+            top: -6,
+            right: -6,
             child: IconButton(
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              iconSize: 14,
+              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              iconSize: 13,
               onPressed: onDelete,
-              icon: const Icon(Icons.close, color: Colors.grey),
+              icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
             ),
           ),
         ],
@@ -597,9 +681,11 @@ class _WorkCostProfileCard extends StatelessWidget {
 Widget humanDropdownSearch(BuildContext context, WidgetRef ref) {
   final state = ref.watch(addCostProvider);
   final vm = ref.read(addCostProvider.notifier);
+  final tt = Theme.of(context).textTheme;
+  final cs = Theme.of(context).colorScheme;
 
   return SizedBox(
-    height: 48,
+    height: context.rs(48),
     child: DropdownSearch<HumanModel>.multiSelection(
       asyncItems: (text) => ref.read(humanUseCaseProvider).getAllWorkers(),
       itemAsString: (item) => item.hname,
@@ -620,25 +706,28 @@ Widget humanDropdownSearch(BuildContext context, WidgetRef ref) {
       dropdownBuilder: (context, selected) {
         final n = (selected as List<HumanModel>?)?.length ?? 0;
         if (n == 0) {
-          return const Text(
+          return Text(
             '사람 선택',
-            style: TextStyle(fontSize: 14, color: Colors.black54),
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
             overflow: TextOverflow.ellipsis,
           );
         }
         return Text(
           '$n명 선택됨',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           overflow: TextOverflow.ellipsis,
         );
       },
       dropdownDecoratorProps: DropDownDecoratorProps(
         dropdownSearchDecoration: InputDecoration(
-          labelStyle: const TextStyle(fontSize: 14),
-          hintStyle: const TextStyle(fontSize: 14),
+          labelStyle: tt.bodyMedium,
+          hintStyle: tt.bodyMedium,
           isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          contentPadding: ResponsiveLayout.symmetric(
+            context,
+            horizontal: 12,
+            vertical: 12,
+          ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           hintText: '사람 선택',
         ),
@@ -652,12 +741,12 @@ Widget humanDropdownSearch(BuildContext context, WidgetRef ref) {
         showSelectedItems: false,
         searchFieldProps: TextFieldProps(
           controller: TextEditingController(),
-          decoration: const InputDecoration(
-            constraints: BoxConstraints(maxHeight: 40),
+          decoration: InputDecoration(
+            constraints: BoxConstraints(maxHeight: context.rs(40)),
             hintText: '사람을 검색하세요.',
             isDense: true,
-            hintStyle: TextStyle(fontSize: 13),
-            labelStyle: TextStyle(fontSize: 13),
+            hintStyle: tt.bodySmall,
+            labelStyle: tt.bodySmall,
             border: OutlineInputBorder(gapPadding: 100),
           ),
         ),

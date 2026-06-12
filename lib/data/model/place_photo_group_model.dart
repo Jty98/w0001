@@ -4,7 +4,7 @@ class PlacePhotoGroupModel {
   final int pgid;
   final int pid;
   final String photoDate; // yyyy-MM-dd
-  final String photoType; // site | drawing
+  final String photoType; // site | drawing | estimate …
   final String title;
   final int sortOrder;
   final int createdAtMs;

@@ -56,7 +56,8 @@ class MonthlySummaryModel {
       costAmount: dashReadInt(j, 'costAmount'),
       newProjectCount: dashReadInt(j, 'newProjectCount'),
       completedProjectCount: dashReadInt(j, 'completedProjectCount'),
-      completedContractMarginPct: dashReadDouble(j, 'completedContractMarginPct'),
+      completedContractMarginPct:
+          dashReadDouble(j, 'completedContractMarginPct'),
       completedProfitAmount: dashReadInt(j, 'completedProfitAmount'),
     );
   }

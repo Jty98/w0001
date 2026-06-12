@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/presentation/viewmodel/profile_super_admin_members_state.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// 회원 카드 액션: 다이얼로그·스낵바는 상위에서 처리.
 class SuperAdminMemberHandlers {
@@ -21,58 +22,47 @@ class SuperAdminMemberHandlers {
   final Future<void> Function(UserRead u) deleteUser;
 }
 
-/// 슈퍼관리자 회원 한 줄 카드. (구역 제목으로 맥락이 구분되므로 승인·활동 상태 칩은 표시하지 않음.)
+/// 슈퍼관리자 회원 한 줄 카드 — 목록에는 이름·주특기·전화번호만 표시.
 class SuperAdminMemberCard extends StatelessWidget {
   const SuperAdminMemberCard({
     super.key,
     required this.user,
     required this.handlers,
+    required this.primarySpecialty,
+    this.onOpenDetail,
   });
 
   final UserRead user;
   final SuperAdminMemberHandlers handlers;
+  final String primarySpecialty;
+  final VoidCallback? onOpenDetail;
 
-  static const double _actionHeight = 44;
-  static const double _radius = 18;
+  static const double _actionHeight = 30;
+  static const double _radius = 10;
 
-  ButtonStyle _filledPrimary(ColorScheme cs) {
-    return FilledButton.styleFrom(
-      minimumSize: const Size(0, _actionHeight),
-      maximumSize: const Size(double.infinity, _actionHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 0,
-      foregroundColor: cs.onPrimary,
-      backgroundColor: cs.primary,
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-    );
-  }
-
-  ButtonStyle _outlined(
-    ColorScheme cs, {
-    required Color foreground,
-    required Color borderColor,
+  ButtonStyle _compactAction(
+    BuildContext context, {
+    Color? foreground,
+    Color? background,
+    Color? border,
   }) {
-    return OutlinedButton.styleFrom(
-      minimumSize: const Size(0, _actionHeight),
-      maximumSize: const Size(double.infinity, _actionHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      side: BorderSide(color: borderColor),
-      foregroundColor: foreground,
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-    );
-  }
-
-  ButtonStyle _tonal(ColorScheme cs) {
-    return FilledButton.styleFrom(
-      minimumSize: const Size(0, _actionHeight),
-      maximumSize: const Size(double.infinity, _actionHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      visualDensity: VisualDensity.standard,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 0,
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+    final cs = Theme.of(context).colorScheme;
+    return TextButton.styleFrom(
+      minimumSize: Size(0, context.rs(_actionHeight)),
+      maximumSize: Size(double.infinity, context.rs(_actionHeight)),
+      padding: EdgeInsets.symmetric(horizontal: context.rsi(8)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      foregroundColor: foreground ?? cs.primary,
+      backgroundColor: background,
+      side: border == null ? null : BorderSide(color: border),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.rs(8)),
+      ),
+      textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
     );
   }
 
@@ -81,20 +71,29 @@ class SuperAdminMemberCard extends StatelessWidget {
 
     if (user.approvalStatus == UserApprovalStatus.pending) {
       return [
-        FilledButton.icon(
-          onPressed: () => handlers.approve(user),
-          icon: const Icon(Icons.check_rounded, size: 20),
-          label: const Text('승인'),
-          style: _filledPrimary(cs),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: () => handlers.approve(user),
+            icon: Icon(Icons.check_rounded, size: context.rs(15)),
+            label: const Text('승인'),
+            style: _compactAction(
+              context,
+              foreground: cs.onPrimary,
+              background: cs.primary,
+            ),
+          ),
         ),
-        OutlinedButton.icon(
-          onPressed: () => handlers.reject(user),
-          icon: const Icon(Icons.close_rounded, size: 20),
-          label: const Text('거절'),
-          style: _outlined(
-            cs,
-            foreground: cs.error,
-            borderColor: cs.error.withValues(alpha: 0.45),
+        SizedBox(width: context.rsi(6)),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => handlers.reject(user),
+            icon: Icon(Icons.close_rounded, size: context.rs(15)),
+            label: const Text('거절'),
+            style: _compactAction(
+              context,
+              foreground: cs.error,
+              border: cs.error.withValues(alpha: 0.4),
+            ),
           ),
         ),
       ];
@@ -102,20 +101,29 @@ class SuperAdminMemberCard extends StatelessWidget {
 
     if (user.approvalStatus == UserApprovalStatus.rejected) {
       return [
-        FilledButton.icon(
-          onPressed: () => handlers.approve(user),
-          icon: const Icon(Icons.refresh_rounded, size: 20),
-          label: const Text('다시 승인'),
-          style: _filledPrimary(cs),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: () => handlers.approve(user),
+            icon: Icon(Icons.refresh_rounded, size: context.rs(15)),
+            label: const Text('재승인'),
+            style: _compactAction(
+              context,
+              foreground: cs.onPrimary,
+              background: cs.primary,
+            ),
+          ),
         ),
-        OutlinedButton.icon(
-          onPressed: () => handlers.deleteUser(user),
-          icon: const Icon(Icons.delete_outline_rounded, size: 20),
-          label: const Text('데이터에서 제거'),
-          style: _outlined(
-            cs,
-            foreground: cs.error,
-            borderColor: cs.error.withValues(alpha: 0.42),
+        SizedBox(width: context.rsi(6)),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => handlers.deleteUser(user),
+            icon: Icon(Icons.delete_outline_rounded, size: context.rs(15)),
+            label: const Text('제거'),
+            style: _compactAction(
+              context,
+              foreground: cs.error,
+              border: cs.error.withValues(alpha: 0.38),
+            ),
           ),
         ),
       ];
@@ -124,51 +132,63 @@ class SuperAdminMemberCard extends StatelessWidget {
     if (user.approvalStatus == UserApprovalStatus.approved) {
       if (!user.isActive) {
         return [
-          FilledButton.tonalIcon(
-            onPressed: () => handlers.activate(user),
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            label: const Text('재활성화'),
-            style: _tonal(cs),
+          Expanded(
+            child: FilledButton.tonalIcon(
+              onPressed: () => handlers.activate(user),
+              icon: Icon(Icons.refresh_rounded, size: context.rs(15)),
+              label: const Text('재활성'),
+              style: _compactAction(context),
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => handlers.deleteUser(user),
-            icon: const Icon(Icons.delete_outline_rounded, size: 20),
-            label: const Text('데이터에서 제거'),
-            style: _outlined(
-              cs,
-              foreground: cs.error,
-              borderColor: cs.error.withValues(alpha: 0.4),
+          SizedBox(width: context.rsi(6)),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => handlers.deleteUser(user),
+              icon: Icon(Icons.delete_outline_rounded, size: context.rs(15)),
+              label: const Text('제거'),
+              style: _compactAction(
+                context,
+                foreground: cs.error,
+                border: cs.error.withValues(alpha: 0.38),
+              ),
             ),
           ),
         ];
       }
 
-      if (isSuperAdminUser(user)) return [];
+      if (isProtectedAdminUser(user)) return [];
 
       return [
-        OutlinedButton.icon(
-          onPressed: () => handlers.suspend(user),
-          icon: const Icon(Icons.block_rounded, size: 20),
-          label: const Text('활동 정지'),
-          style: _outlined(
-            cs,
-            foreground: cs.error,
-            borderColor: cs.error.withValues(alpha: 0.38),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => handlers.suspend(user),
+            icon: Icon(Icons.block_rounded, size: context.rs(15)),
+            label: const Text('정지'),
+            style: _compactAction(
+              context,
+              foreground: cs.error,
+              border: cs.error.withValues(alpha: 0.35),
+            ),
           ),
         ),
-        OutlinedButton.icon(
-          onPressed: () => handlers.flipRole(user),
-          icon: Icon(
-            user.role == UserRole.worker
-                ? Icons.admin_panel_settings_rounded
-                : Icons.construction_rounded,
-            size: 20,
-          ),
-          label: Text(user.role == UserRole.worker ? '관리자로' : '작업자로'),
-          style: _outlined(
-            cs,
-            foreground: cs.primary,
-            borderColor: cs.primary.withValues(alpha: 0.4),
+        SizedBox(width: context.rsi(6)),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => handlers.flipRole(user),
+            icon: Icon(
+              user.role == UserRole.worker
+                  ? Icons.admin_panel_settings_outlined
+                  : Icons.construction_outlined,
+              size: context.rs(15),
+            ),
+            label: Text(
+              user.role == UserRole.worker ? '관리자' : '작업자',
+            ),
+            style: _compactAction(
+              context,
+              foreground: cs.primary,
+              border: cs.primary.withValues(alpha: 0.35),
+            ),
           ),
         ),
       ];
@@ -177,128 +197,97 @@ class SuperAdminMemberCard extends StatelessWidget {
     return [];
   }
 
-  Widget _actionsLayout(List<Widget> actions) {
-    if (actions.isEmpty) return const SizedBox.shrink();
-    if (actions.length == 1) {
-      return SizedBox(width: double.infinity, child: actions.first);
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < actions.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(child: actions[i]),
-        ],
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final actions = _actionButtons(context);
+    final phone = user.phoneMasked?.trim();
+    final hasPhone = phone != null && phone.isNotEmpty;
+    final hasSpecialty = primarySpecialty != '주특기 미등록';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(_radius),
-          color: cs.surfaceContainerLowest.withValues(alpha: 0.92),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.5),
+      padding: EdgeInsets.only(bottom: context.rsi(6)),
+      child: Material(
+        color: cs.surfaceContainerLowest.withValues(alpha: 0.88),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.rs(_radius)),
+          side: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.38),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.04),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: cs.outlineVariant.withValues(alpha: 0.55),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpenDetail,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              context.rsi(10),
+              context.rsi(8),
+              context.rsi(6),
+              context.rsi(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.uname,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.25,
+                              height: 1.15,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: context.rsi(2)),
+                          Text(
+                            primarySpecialty,
+                            style: tt.labelMedium?.copyWith(
+                              color: hasSpecialty
+                                  ? cs.primary
+                                  : cs.onSurfaceVariant.withValues(alpha: 0.75),
+                              fontWeight:
+                                  hasSpecialty ? FontWeight.w700 : FontWeight.w500,
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: context.rsi(2)),
+                          Text(
+                            hasPhone ? phone : '전화번호 미등록',
+                            style: tt.labelSmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 24,
-                      backgroundColor:
-                          cs.primaryContainer.withValues(alpha: 0.65),
-                      child: Text(
-                        user.uname.isNotEmpty
-                            ? String.fromCharCodes(user.uname.runes.take(1))
-                                .toUpperCase()
-                            : '?',
-                        style: tt.titleMedium?.copyWith(
-                          color: cs.onPrimaryContainer,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                        ),
+                    if (onOpenDetail != null)
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: context.rs(20),
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.55),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user.uname,
-                          style: tt.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.35,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user.uid,
-                          style: tt.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures(),
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          user.role.labelKo,
-                          style: tt.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (actions.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: cs.outlineVariant.withValues(alpha: 0.35),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                _actionsLayout(actions),
+                if (actions.isNotEmpty) ...[
+                  SizedBox(height: context.rsi(8)),
+                  Row(children: actions),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

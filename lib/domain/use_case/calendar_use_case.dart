@@ -14,4 +14,3 @@ class CalendarUseCase {
     return _repository.getTotalCostsByDate(dateTime);
   }
 }
-

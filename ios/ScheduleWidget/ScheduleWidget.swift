@@ -15,6 +15,8 @@ struct ScheduleItem: Codable {
     let taskDate: String
     let taskTime: String
     var done: Bool
+    /// 구버전 JSON 호환 — 없으면 nil
+    let memo: String?
 }
 
 struct WeeklyScheduleEntry: TimelineEntry {
@@ -204,11 +206,11 @@ struct ScheduleWidgetEntryView : View {
         let maxRows: Int = {
             switch family {
             case .systemMedium:
-                return 6
+                return 8
             case .systemLarge:
-                return 12
+                return 14
             case .systemExtraLarge:
-                return 18
+                return 22
             default:
                 return 6
             }
@@ -217,7 +219,7 @@ struct ScheduleWidgetEntryView : View {
         let shownCount = sections.reduce(0) { $0 + $1.items.count }
         let remainingCount = max(0, entry.schedules.count - shownCount)
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 5) {
             header
             contentAreaForSections(sections)
             if remainingCount > 0 {
@@ -278,7 +280,7 @@ struct ScheduleWidgetEntryView : View {
                 }
 
                 if let next = nextScheduleForAccessory {
-                    Text("\(toShortDate(next.taskDate)) \(formattedTime(next.taskTime)) \(next.title)")
+                    Text("\(toShortDate(next.taskDate)) \(formattedTime(next.taskTime)) \(schedulePrimaryLine(next))")
                         .font(.system(size: 10, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -341,9 +343,9 @@ struct ScheduleWidgetEntryView : View {
                     .foregroundColor(widgetSubtleColor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text("\(toShortDate(section.date)) (\(weekdayShort(section.date)))")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(widgetSubtleColor)
@@ -430,11 +432,19 @@ struct ScheduleWidgetEntryView : View {
                 Text(formattedTime(item.taskTime))
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(widgetSubtleColor)
-                Text(item.title)
+                Text(schedulePrimaryLine(item))
                     .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                     .strikethrough(item.done, color: .secondary)
                     .foregroundColor(widgetSubtleColor)
+                if let memoLine = scheduleMemoLine(item) {
+                    Text(memoLine)
+                        .font(.system(size: 9, weight: .medium))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .foregroundColor(widgetSubtleColor.opacity(0.92))
+                }
             }
             Spacer(minLength: 0)
         }
@@ -488,6 +498,23 @@ struct ScheduleWidget: Widget {
             .accessoryRectangular
         ])
     }
+}
+
+private func schedulePrimaryLine(_ item: ScheduleItem) -> String {
+    let t = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !t.isEmpty { return t }
+    let m = (item.memo ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if m.isEmpty { return "제목 없음" }
+    return String(m.prefix(120))
+}
+
+private func scheduleMemoLine(_ item: ScheduleItem) -> String? {
+    let t = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let m = (item.memo ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !m.isEmpty else { return nil }
+    if t.isEmpty { return nil }
+    if m == t { return nil }
+    return m
 }
 
 private func mondayOf(_ date: Date) -> Date {
@@ -654,6 +681,6 @@ private func limitedGroupedSchedules(
     return out
 }
 
-private let widgetPrimaryColor = Color(red: 0.13, green: 0.35, blue: 0.83)
-private let widgetSubtleColor = Color(red: 0.27, green: 0.32, blue: 0.41)
-private let widgetSurfaceColor = Color(red: 0.91, green: 0.95, blue: 1.0)
+private let widgetPrimaryColor = Color(red: 0.95, green: 0.55, blue: 0.22) // #F28C38
+private let widgetSubtleColor = Color(red: 0.35, green: 0.23, blue: 0.14) // #5A3A24
+private let widgetSurfaceColor = Color(red: 0.98, green: 0.96, blue: 0.94) // #FAF5F0

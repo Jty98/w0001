@@ -38,4 +38,3 @@ class RevenueUseCase {
     return _repository.deleteRevenue(revenueId, placeId);
   }
 }
-

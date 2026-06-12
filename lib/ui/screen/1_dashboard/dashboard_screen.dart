@@ -1,6 +1,10 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/access/user_role_access.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_view_model.dart';
@@ -8,7 +12,13 @@ import 'package:w0001/util/funtions.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_metric_chart_sheet.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_outstanding_sheet.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_global_announcement_card.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_summary_card.dart';
+import 'package:w0001/presentation/viewmodel/user_notifications_providers.dart';
+import 'package:w0001/ui/widget/notification_bell_button.dart';
+import 'package:w0001/util/responsive_layout.dart';
+
+// 프로필 버튼 제거 - 설정 탭으로 이동
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -18,19 +28,42 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  final GlobalKey<DashboardGlobalAnnouncementCardState> _globalAnnouncementCardKey =
+      GlobalKey<DashboardGlobalAnnouncementCardState>();
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessionIfNeeded());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSessionIfNeeded();
+      _ensureDashboardDataLoaded(force: true);
+      ref.invalidate(userNotificationInboxProvider);
+    });
+  }
+
+  /// 공지 카드처럼 화면 진입 시 KPI·일정을 직접 불러온다 (provider auth 리스너만으로는 누락될 수 있음).
+  void _ensureDashboardDataLoaded({bool force = false}) {
+    if (!mounted) return;
+    final u = ref.read(authSessionProvider).asData?.value;
+    if (u == null || u.isWorker) return;
+    unawaited(ref.read(dashboardProvider.notifier).fetch(
+      force: force,
+      isWorker: u.isWorker,
+    ));
+    unawaited(
+      ref.read(dashboardScheduleProvider.notifier).ensureWeekLoaded(force: force),
+    );
   }
 
   /// 토큰만 있고 [authSessionProvider]가 비어 있을 때(앱 재실행·자동 로그인 등) GET `/auth/me`로 채움
   void _loadSessionIfNeeded() {
     if (!mounted) return;
     final s = ref.read(authSessionProvider);
-    if (s.isLoading) return;
     if (s.maybeWhen(data: (u) => u != null, orElse: () => false)) return;
-    ref.read(authSessionProvider.notifier).loadCurrentUser();
+    if (s.isLoading) return;
+    unawaited(
+      ref.read(authSessionProvider.notifier).loadCurrentUser(awaitWarmUp: true),
+    );
   }
 
   void _showOutstandingSheet(BuildContext context, WidgetRef ref) {
@@ -58,19 +91,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UserRead?>>(authSessionProvider, (prev, next) {
+      final u = next.asData?.value;
+      if (u == null || u.isWorker) return;
+      if (prev?.asData?.value?.uid == u.uid) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureDashboardDataLoaded(force: true);
+      });
+    });
+
     final state = ref.watch(dashboardProvider);
     final vm = ref.read(dashboardProvider.notifier);
     final cs = Theme.of(context).colorScheme;
 
     final kpi = state.kpi;
+    final tt = Theme.of(context).textTheme;
+    final padH = context.rs(12);
+    final gridGap = context.rs(8);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('상황판'),
-        actions: [
-          IconButton(onPressed: () {
-            context.push('/dashboard/profile');
-          }, icon: const Icon(Icons.person)),
+        actions: const [
+          NotificationBellButton(),
         ],
       ),
       floatingActionButton: state.isLoading
@@ -90,46 +133,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               },
               child: const Icon(Icons.edit_note_rounded),
             ),
-      body: state.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+      body: RefreshIndicator(
               onRefresh: () async {
                 await vm.fetch();
                 await ref.read(dashboardScheduleProvider.notifier).refresh();
+                await _globalAnnouncementCardKey.currentState?.reloadPublic();
               },
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  const SliverToBoxAdapter(
+              child: Skeletonizer(
+                enabled: state.isLoading,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(12, 8, 12, 0),
-                      child: DashboardScheduleCompactCard(),
+                      padding: EdgeInsets.fromLTRB(padH, context.rs(8), padH, 0),
+                      child: const DashboardScheduleCompactCard(),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 14)),
+                  SliverToBoxAdapter(child: rsV(context, 14)),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(padH, 0, padH, context.rs(14)),
+                      child: DashboardGlobalAnnouncementCard(
+                        key: _globalAnnouncementCardKey,
+                      ),
+                    ),
+                  ),
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
+                    padding: EdgeInsets.fromLTRB(0, 0, 0, context.rs(28)),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                          padding: EdgeInsets.fromLTRB(padH, 0, padH, context.rs(4)),
                           child: Text(
                             '${kpi.year}년 ${kpi.month}월 기준',
-                            style: TextStyle(
-                              fontSize: 12,
+                            style: tt.labelMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: cs.onSurfaceVariant,
                             ),
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: EdgeInsets.symmetric(horizontal: padH),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
-                              final w = (constraints.maxWidth - 8) / 2;
+                              final w = (constraints.maxWidth - gridGap) / 2;
                               return Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
+                                spacing: gridGap,
+                                runSpacing: gridGap,
                                 children: [
                                   SizedBox(
                                     width: w,
@@ -152,7 +203,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     child: DashboardSummaryCard(
                                       title: '공사원가',
                                       value: getPrice(price: kpi.monthlyCost),
-                                      color: Colors.orange[700]!,
+                                      color: cs.tertiaryContainer,
                                       icon: Icons.payments_outlined,
                                       onTap: () => _showMetricChart(
                                         context,
@@ -168,7 +219,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       title: '수금액',
                                       value: getPrice(
                                           price: kpi.monthlyCollection),
-                                      color: Colors.teal[700]!,
+                                      color: cs.primary,
                                       icon:
                                           Icons.account_balance_wallet_outlined,
                                       onTap: () => _showMetricChart(
@@ -186,7 +237,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       value: getPrice(
                                         price: kpi.outstandingReceivable,
                                       ),
-                                      color: Colors.deepPurple[700]!,
+                                      color: cs.secondary,
                                       icon: Icons.request_quote_outlined,
                                       onTap: () => _showOutstandingSheet(
                                         context,
@@ -223,7 +274,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       subtitle: '진행중 · 완료',
                                       value: '${kpi.inProgressPlaces}곳',
                                       valueSecondary: '${kpi.completedPlaces}곳',
-                                      color: Colors.blueGrey[700]!,
+                                      color: cs.onSurfaceVariant,
                                       icon: Icons.construction_outlined,
                                       onTap: () => _showMetricChart(
                                         context,
@@ -238,13 +289,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             },
                           ),
                         ),
-                        const SizedBox(height: 72),
+                        rsV(context, 72),
                       ]),
                     ),
                   ),
                 ],
+                ),
               ),
-            ),
+      ),
     );
   }
 }

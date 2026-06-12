@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class DashboardSummaryCard extends StatelessWidget {
   const DashboardSummaryCard({
@@ -17,6 +18,7 @@ class DashboardSummaryCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String? subtitle;
+
   /// 금액 행 오른쪽 (이익률 등). 한 줄 안에서 금액은 말줄임으로 잘립니다.
   final String? valueSecondary;
   final VoidCallback? onTap;
@@ -24,15 +26,22 @@ class DashboardSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final child = Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: ResponsiveLayout.only(
+        context,
+        left: 12,
+        top: 10,
+        right: 12,
+        bottom: 10,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: cs.onSurfaceVariant),
-              const SizedBox(width: 6),
+              Icon(icon, size: context.rsi(14), color: cs.onSurfaceVariant),
+              rsH(context, 6),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,8 +50,7 @@ class DashboardSummaryCard extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
+                      style: tt.labelSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: cs.onSurfaceVariant,
                         height: 1.0,
@@ -53,8 +61,7 @@ class DashboardSummaryCard extends StatelessWidget {
                         subtitle!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 9,
+                        style: tt.labelSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: cs.onSurfaceVariant.withValues(alpha: 0.85),
                           height: 1.15,
@@ -66,14 +73,14 @@ class DashboardSummaryCard extends StatelessWidget {
               if (onTap != null)
                 Icon(
                   Icons.chevron_right_rounded,
-                  size: 20,
+                  size: context.rsi(20),
                   color: cs.onSurfaceVariant,
                 ),
             ],
           ),
-          const SizedBox(height: 6),
+          rsV(context, 6),
           SizedBox(
-            height: 22,
+            height: context.rs(22),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -86,8 +93,7 @@ class DashboardSummaryCard extends StatelessWidget {
                             alignment: Alignment.centerLeft,
                             child: Text(
                               value,
-                              style: TextStyle(
-                                fontSize: 15,
+                              style: tt.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w900,
                                 color: cs.onSurface,
                                 height: 1.0,
@@ -98,8 +104,7 @@ class DashboardSummaryCard extends StatelessWidget {
                             value,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 15,
+                            style: tt.titleMedium?.copyWith(
                               fontWeight: FontWeight.w900,
                               color: cs.onSurface,
                               height: 1.0,
@@ -108,12 +113,11 @@ class DashboardSummaryCard extends StatelessWidget {
                   ),
                 ),
                 if (valueSecondary != null) ...[
-                  const SizedBox(width: 6),
+                  rsH(context, 6),
                   Text(
                     valueSecondary!,
                     maxLines: 1,
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: tt.labelMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: cs.primary,
                       height: 1.0,
@@ -127,20 +131,21 @@ class DashboardSummaryCard extends StatelessWidget {
       ),
     );
 
+    final radius = context.rs(14);
     final box = DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
       ),
       child: onTap == null
           ? child
           : Material(
               type: MaterialType.transparency,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(radius),
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(radius),
                 child: child,
               ),
             ),

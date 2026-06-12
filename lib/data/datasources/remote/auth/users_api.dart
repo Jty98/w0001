@@ -40,6 +40,22 @@ final class UsersRemoteApi {
     await _http.delete<dynamic>(ApiEndpoint.usersUid(uid));
   }
 
+  /// `PUT /users/me/fcm-device` — FCM 토큰 upsert (작업자·관리자 JWT).
+  Future<void> putMyFcmDevice({
+    required String fcmToken,
+    required String platform,
+    String deviceId = '',
+  }) async {
+    await _http.put<dynamic>(
+      ApiEndpoint.usersMeFcmDevice,
+      data: <String, dynamic>{
+        'fcm_token': fcmToken,
+        'platform': platform,
+        'device_id': deviceId,
+      },
+    );
+  }
+
   /// `GET /users/pending` — 승인 대기 ([q] 선택: 이름 부분 검색)
   Future<List<UserRead>> listPending({String? q}) async {
     final qp = <String, dynamic>{};
@@ -110,8 +126,8 @@ final class UsersRemoteApi {
     UserRole role, {
     required String adminActionToken,
   }) async {
-    if (role == UserRole.superAdmin) {
-      throw ArgumentError('super_admin 역할로 변경할 수 없습니다.');
+    if (role != UserRole.admin && role != UserRole.worker) {
+      throw ArgumentError('admin 또는 worker 역할만 지정할 수 있습니다.');
     }
     final r = await _http.post<dynamic>(
       ApiEndpoint.usersUidRole(uid),

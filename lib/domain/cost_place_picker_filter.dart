@@ -2,8 +2,10 @@
 enum CostPlacePickerFilter {
   /// 진행 + 완료 (삭제 제외)
   all,
+
   /// 진행중 (`pcomplete == 0`)
   inProgress,
+
   /// 완료 (`pcomplete == 1`)
   completed,
 }

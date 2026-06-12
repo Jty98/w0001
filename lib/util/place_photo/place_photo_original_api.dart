@@ -60,10 +60,9 @@ class PlacePhotoOriginalPayload {
 
 String? filenameFromContentDisposition(String? header) {
   if (header == null || header.isEmpty) return null;
-  final star =
-      RegExp(r"filename\*=UTF-8''([^;\r\n]+)", caseSensitive: false)
-          .firstMatch(header)
-          ?.group(1);
+  final star = RegExp(r"filename\*=UTF-8''([^;\r\n]+)", caseSensitive: false)
+      .firstMatch(header)
+      ?.group(1);
   if (star != null && star.isNotEmpty) {
     return Uri.decodeComponent(star);
   }
@@ -73,8 +72,7 @@ String? filenameFromContentDisposition(String? header) {
   if (fname != null) {
     final quoted = fname.group(1);
     final unquoted = fname.group(2);
-    final s =
-        quoted ?? (unquoted?.trim()) ?? '';
+    final s = quoted ?? (unquoted?.trim()) ?? '';
     if (s.isNotEmpty) return s.trim();
   }
   return null;

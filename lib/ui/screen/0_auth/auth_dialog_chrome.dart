@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// 인증·슈퍼관리자 계열 확인창 공통 레이아웃 (코너·여백·타이포·버튼 높이).
 abstract final class AuthDialogChromeTheme {
@@ -9,24 +10,25 @@ abstract final class AuthDialogChromeTheme {
   static RoundedRectangleBorder dialogShape(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: BorderRadius.circular(context.rs(radius)),
       side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.45)),
     );
   }
 
-  static EdgeInsets get outerInsets =>
-      const EdgeInsets.symmetric(horizontal: 20, vertical: 28);
+  static EdgeInsets outerInsets(BuildContext context) =>
+      ResponsiveLayout.symmetric(context, horizontal: 20, vertical: 28);
 
   static ButtonStyle secondaryButton(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return TextButton.styleFrom(
-      minimumSize: const Size(0, actionMinHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      minimumSize: Size(0, context.rs(actionMinHeight)),
+      padding: ResponsiveLayout.symmetric(context, horizontal: 16),
       foregroundColor: cs.onSurfaceVariant,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(context.rs(14)),
       ),
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+      textStyle: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 
@@ -36,16 +38,17 @@ abstract final class AuthDialogChromeTheme {
     Color? foregroundColor,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return FilledButton.styleFrom(
-      minimumSize: const Size(0, actionMinHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      minimumSize: Size(0, context.rs(actionMinHeight)),
+      padding: ResponsiveLayout.symmetric(context, horizontal: 20),
       elevation: 0,
       backgroundColor: backgroundColor ?? cs.primary,
       foregroundColor: foregroundColor ?? cs.onPrimary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(context.rs(14)),
       ),
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+      textStyle: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 
@@ -59,7 +62,7 @@ abstract final class AuthDialogChromeTheme {
   }) {
     final cs = Theme.of(context).colorScheme;
     final base = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(context.rs(14)),
     );
     return InputDecoration(
       labelText: labelText,
@@ -69,11 +72,15 @@ abstract final class AuthDialogChromeTheme {
       filled: true,
       fillColor: cs.surfaceContainerLow.withValues(alpha: 0.82),
       suffixIcon: suffixIcon,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: ResponsiveLayout.symmetric(
+        context,
+        horizontal: 16,
+        vertical: 14,
+      ),
       border: base.copyWith(borderSide: BorderSide.none),
       enabledBorder: base.copyWith(
-        borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+        borderSide:
+            BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
       ),
       focusedBorder: base.copyWith(
         borderSide: BorderSide(color: cs.primary.withValues(alpha: 0.65)),
@@ -120,13 +127,20 @@ class AuthDialogChrome extends StatelessWidget {
 
     return Dialog(
       backgroundColor: cs.surfaceContainerHigh.withValues(alpha: 0.98),
-      insetPadding: AuthDialogChromeTheme.outerInsets,
+      insetPadding: AuthDialogChromeTheme.outerInsets(context),
       shape: AuthDialogChromeTheme.dialogShape(context),
       child: ConstrainedBox(
-        constraints:
-            const BoxConstraints(maxWidth: AuthDialogChromeTheme.maxContentWidth),
+        constraints: BoxConstraints(
+          maxWidth: context.rs(AuthDialogChromeTheme.maxContentWidth),
+        ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+          padding: ResponsiveLayout.only(
+            context,
+            left: 24,
+            top: 24,
+            right: 24,
+            bottom: 22,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -147,12 +161,12 @@ class AuthDialogChrome extends StatelessWidget {
                       ],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Icon(icon, size: 26, color: iconFg),
+                      padding: EdgeInsets.all(context.rs(12)),
+                      child: Icon(icon, size: context.rsi(26), color: iconFg),
                     ),
                   ),
                 ),
-                const SizedBox(height: 18),
+                rsV(context, 18),
               ],
               DefaultTextStyle(
                 style: (tt.titleLarge ?? const TextStyle()).copyWith(
@@ -163,9 +177,9 @@ class AuthDialogChrome extends StatelessWidget {
                 ),
                 child: title,
               ),
-              const SizedBox(height: 14),
+              rsV(context, 14),
               content,
-              const SizedBox(height: 22),
+              rsV(context, 22),
               actions,
             ],
           ),
@@ -199,8 +213,8 @@ class AuthDialogActionsDual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final secondaryStyle =
-        secondaryStyleOverride ?? AuthDialogChromeTheme.secondaryButton(context);
+    final secondaryStyle = secondaryStyleOverride ??
+        AuthDialogChromeTheme.secondaryButton(context);
 
     final primaryStyle =
         primaryStyleOverride ?? AuthDialogChromeTheme.primaryFilled(context);
@@ -214,7 +228,7 @@ class AuthDialogActionsDual extends StatelessWidget {
             child: Text(secondaryLabel),
           ),
         ),
-        const SizedBox(width: 12),
+        rsH(context, 12),
         Expanded(
           child: FilledButton(
             style: primaryStyle,
@@ -245,8 +259,7 @@ class AuthDialogActionsSingle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final btn = FilledButton(
-      style:
-          styleOverride ?? AuthDialogChromeTheme.primaryFilled(context),
+      style: styleOverride ?? AuthDialogChromeTheme.primaryFilled(context),
       onPressed: onPressed,
       child: Text(label),
     );

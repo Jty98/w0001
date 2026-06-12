@@ -8,8 +8,27 @@ final class PlacePhotosRemoteApi {
 
   final AppHttpClient _http;
 
-  Future<List<PlacePhotoRead>> list() async {
-    final r = await _http.get<dynamic>(ApiEndpoint.placePhotos);
+  /// [pgid]가 있으면 `GET ...?pgid=` — 해당 묶음의 사진만. 그렇지 않으면 [pid]/[photoType].
+  ///
+  /// [pgid]가 우선 적용된다(물리 묶음 기준 필터).
+  Future<List<PlacePhotoRead>> list({
+    int? pid,
+    String? photoType,
+    int? pgid,
+  }) async {
+    final qp = <String, dynamic>{};
+    if (pgid != null) {
+      qp['pgid'] = pgid;
+    } else {
+      if (pid != null) qp['pid'] = pid;
+      if (photoType != null && photoType.isNotEmpty) {
+        qp['photo_type'] = photoType;
+      }
+    }
+    final r = await _http.get<dynamic>(
+      ApiEndpoint.placePhotos,
+      queryParameters: qp.isEmpty ? null : qp,
+    );
     return saMapList(r.data, PlacePhotoRead.fromJson);
   }
 

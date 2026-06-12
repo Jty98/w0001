@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:w0001/data/datasources/remote/auth/users_api.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
+import 'package:w0001/data/model/place_photo_entry.dart';
 import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/data/model/revenue_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
@@ -19,13 +21,17 @@ import 'package:w0001/domain/repository/workcost_abst.dart';
 import 'package:w0001/domain/use_case/materialcost_use_case.dart';
 import 'package:w0001/domain/use_case/revenue_use_case.dart';
 import 'package:w0001/domain/use_case/workcost_use_case.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
     show placeUseCaseProvider;
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/image_attachment/image_upload_result.dart';
+import 'package:w0001/util/image_attachment/upload_image_remote.dart';
 
 /// 선수금 제외 추가 수익 기본 라벨: `1차 잔금`, `2차 잔금`, …
 /// 수익 입력은 [PlaceRevenueScreen] 쪽 `TextEditingController`에서 관리(Provider dispose와 분리).
@@ -48,6 +54,8 @@ class PlaceDetailState {
     required this.totalCostList,
     required this.revenueList,
     required this.photoGroupList,
+    /// [photoGroupList]를 마지막으로 채운 `getPlacePhotoGroups`의 `photoType` (탭·새로고침 일치용).
+    required this.loadedPlacePhotoType,
     required this.alertText,
     required this.isLoading,
   });
@@ -59,6 +67,7 @@ class PlaceDetailState {
   final FilterType selectedFilterType;
   final String? selectedDropdownCategory;
   final DateTime dialogDateTime;
+
   /// 추가 수익 등록용. `null`이면 아직 캘린더에서 날짜를 확정하지 않은 상태.
   final DateTime? revenuePickedDay;
   final DateTime dialogRevenuePickedDay;
@@ -66,6 +75,7 @@ class PlaceDetailState {
   final List<TotalCostModel> totalCostList;
   final List<RevenueModel> revenueList;
   final List<PlacePhotoGroupModel> photoGroupList;
+  final String loadedPlacePhotoType;
   final String alertText;
   final bool isLoading;
 
@@ -73,7 +83,7 @@ class PlaceDetailState {
         pid: pid,
         dateTimeRange: getMonthDateRange(DateTime.now()),
         toggleState: const [false, false, true],
-        selectedDayType: DayTpye.whole,
+        selectedDayType: DayTpye.month,
         selectedFilterType: FilterType.all,
         selectedDropdownCategory: null,
         dialogDateTime: DateTime.now(),
@@ -83,6 +93,7 @@ class PlaceDetailState {
         totalCostList: const [],
         revenueList: const [],
         photoGroupList: const [],
+        loadedPlacePhotoType: 'site',
         alertText: '',
         isLoading: false,
       );
@@ -101,6 +112,7 @@ class PlaceDetailState {
     List<TotalCostModel>? totalCostList,
     List<RevenueModel>? revenueList,
     List<PlacePhotoGroupModel>? photoGroupList,
+    String? loadedPlacePhotoType,
     String? alertText,
     bool? isLoading,
   }) {
@@ -113,15 +125,16 @@ class PlaceDetailState {
       selectedDropdownCategory:
           selectedDropdownCategory ?? this.selectedDropdownCategory,
       dialogDateTime: dialogDateTime ?? this.dialogDateTime,
-      revenuePickedDay: setRevenuePicked
-          ? revenuePickedDay
-          : this.revenuePickedDay,
+      revenuePickedDay:
+          setRevenuePicked ? revenuePickedDay : this.revenuePickedDay,
       dialogRevenuePickedDay:
           dialogRevenuePickedDay ?? this.dialogRevenuePickedDay,
       photoPickedDay: photoPickedDay ?? this.photoPickedDay,
       totalCostList: totalCostList ?? this.totalCostList,
       revenueList: revenueList ?? this.revenueList,
       photoGroupList: photoGroupList ?? this.photoGroupList,
+      loadedPlacePhotoType:
+          loadedPlacePhotoType ?? this.loadedPlacePhotoType,
       alertText: alertText ?? this.alertText,
       isLoading: isLoading ?? this.isLoading,
     );
@@ -129,8 +142,7 @@ class PlaceDetailState {
 }
 
 final workCostRepositoryProvider = Provider<WorkCostRepository>(
-  (ref) =>
-      WorkCostRepositoryImpl(ref.read(superAdminRemoteRepositoryProvider)),
+  (ref) => WorkCostRepositoryImpl(ref.read(superAdminRemoteRepositoryProvider)),
 );
 final workCostUseCaseProvider = Provider<WorkCostUseCase>(
   (ref) => WorkCostUseCase(ref.read(workCostRepositoryProvider)),
@@ -186,9 +198,17 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     if (!_initialized) {
       _initialized = true;
       Future.microtask(() async {
-        await fetchTotalCostFromPlace();
-        await fetchAllRevenueFromPlace();
-        await fetchPlacePhotoGroups(photoType: 'site');
+        // 작업자는 전역 work-cost / revenue 조회 API가 막혀 있을 수 있음.
+        // 사진 등 일부 화면만 쓸 때 불필요한 403·예외를 막기 위해 로드하지 않는다.
+        final worker =
+            ref.read(authSessionProvider).asData?.value?.isWorker ?? false;
+        if (!worker) {
+          await fetchTotalCostFromPlace();
+          await fetchAllRevenueFromPlace();
+        }
+        // 문서 탭 종류(site/drawing/estimate)는 [PlaceImagesScreen] 등 각 화면에서
+        // 첫 진입 시점의 탭에 맞춰 fetch한다. 여기서 site를 강제로 불러오면
+        // 사용자가 도면 탭으로 바꾼 직후 비동기로 site 결과가 덮어씌워진다.
       });
     }
     return PlaceDetailState.initial(pid);
@@ -306,10 +326,10 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   List<TotalCostModel> get rangeFilterList => state.totalCostList
       .where((e) =>
-          e.getDateTime.isAfter(
-              state.dateTimeRange.start.subtract(const Duration(microseconds: 1))) &&
-          e.getDateTime.isBefore(
-              state.dateTimeRange.end.add(const Duration(days: 1))))
+          e.getDateTime.isAfter(state.dateTimeRange.start
+              .subtract(const Duration(microseconds: 1))) &&
+          e.getDateTime
+              .isBefore(state.dateTimeRange.end.add(const Duration(days: 1))))
       .toList();
 
   int get totalPrice => rangeFilterList.fold(0, (sum, e) => sum + e.price);
@@ -321,9 +341,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       case FilterType.all:
         return rangeFilterList;
       case FilterType.work:
-        return rangeFilterList
-            .where((e) => e.category == 'w')
-            .toList()
+        return rangeFilterList.where((e) => e.category == 'w').toList()
           ..sort((a, b) => a.wcomplete.compareTo(b.wcomplete));
       case FilterType.material:
         return rangeFilterList.where((e) => e.category != 'w').toList();
@@ -365,21 +383,33 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   }
 
   Future<void> fetchTotalCostFromPlace() async {
+    if (ref.read(authSessionProvider).asData?.value?.isWorker ?? false) {
+      state = state.copyWith(totalCostList: const [], isLoading: false);
+      return;
+    }
     state = state.copyWith(isLoading: true);
     final list = await _placeUseCase.getTotalCostsForPlace(pid);
     state = state.copyWith(totalCostList: list, isLoading: false);
   }
 
   Future<void> fetchAllRevenueFromPlace() async {
+    if (ref.read(authSessionProvider).asData?.value?.isWorker ?? false) {
+      state = state.copyWith(revenueList: const []);
+      return;
+    }
     final list = await _revenueUseCase.getAllRevenues(pid);
     state = state.copyWith(revenueList: list);
   }
 
   /// [FetchData.fetchAllData]용: `invalidate`로 notifier를 끊지 않고 목록·비용·사진만 다시 읽는다. (TextEditingController 유지)
   Future<void> refreshForGlobalFetch() async {
-    await fetchTotalCostFromPlace();
-    await fetchAllRevenueFromPlace();
-    await fetchPlacePhotoGroups(photoType: 'site');
+    final worker =
+        ref.read(authSessionProvider).asData?.value?.isWorker ?? false;
+    if (!worker) {
+      await fetchTotalCostFromPlace();
+      await fetchAllRevenueFromPlace();
+    }
+    await fetchPlacePhotoGroups(photoType: state.loadedPlacePhotoType);
   }
 
   Future<void> deleteRevenue({required int rid}) async {
@@ -389,12 +419,155 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   Future<void> fetchPlacePhotoGroups({required String photoType}) async {
     final fetchToken = ++_photoFetchToken;
-    final groups = await _placeUseCase.getPlacePhotoGroups(
+    var groups = await _placeUseCase.getPlacePhotoGroups(
       pid,
       photoType: photoType,
     );
+    groups = await _enrichPhotoAuthors(groups);
     if (fetchToken != _photoFetchToken) return;
-    state = state.copyWith(photoGroupList: groups);
+    state = state.copyWith(
+      photoGroupList: groups,
+      loadedPlacePhotoType: photoType,
+    );
+  }
+
+  Future<List<PlacePhotoGroupModel>> _enrichPhotoAuthors(
+    List<PlacePhotoGroupModel> groups,
+  ) async {
+    final me = ref.read(authSessionProvider).asData?.value;
+    final names = <String, String>{};
+    if (me != null && me.uid.isNotEmpty && me.uname.isNotEmpty) {
+      names[me.uid] = me.uname;
+    }
+
+    final toFetch = <String>{};
+    for (final g in groups) {
+      for (final p in g.photos) {
+        final u = p.createdByUid;
+        if (u == null || u.isEmpty) continue;
+        final inline = p.authorDisplayName?.trim();
+        if (inline != null && inline.isNotEmpty) continue;
+        if (!names.containsKey(u)) toFetch.add(u);
+      }
+    }
+
+    if (toFetch.isNotEmpty) {
+      final api = UsersRemoteApi(AppHttpClient.I);
+      for (final u in toFetch) {
+        try {
+          final user = await api.get(u);
+          names[u] = user.uname;
+        } catch (_) {}
+      }
+    }
+
+    return groups
+        .map(
+          (g) => PlacePhotoGroupModel(
+            pgid: g.pgid,
+            pid: g.pid,
+            photoDate: g.photoDate,
+            photoType: g.photoType,
+            title: g.title,
+            sortOrder: g.sortOrder,
+            createdAtMs: g.createdAtMs,
+            photos: g.photos.map(
+              (e) {
+                final uid = e.createdByUid;
+                var display = e.authorDisplayName?.trim();
+                if (display == null || display.isEmpty) {
+                  if (uid != null && uid.isNotEmpty) {
+                    display = names[uid];
+                  }
+                }
+                return PlacePhotoEntry(
+                  phid: e.phid,
+                  displayUrl: e.displayUrl,
+                  originalName: e.originalName,
+                  createdByUid: e.createdByUid,
+                  authorDisplayName: display,
+                  memo: e.memo,
+                );
+              },
+            ).toList(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> deletePlacePhotoGroup(int pgid,
+      {required String photoType}) async {
+    await _placeUseCase.deletePlacePhotoGroup(pgid, pid: pid);
+    await fetchPlacePhotoGroups(photoType: photoType);
+  }
+
+  Future<String?> patchPlacePhotoMemo({
+    required int phid,
+    required String memo,
+    required String photoType,
+  }) =>
+      patchPlacePhoto(
+        phid: phid,
+        memo: memo,
+        photoType: photoType,
+      );
+
+  /// 메모 수정·선택적으로 로컬에서 새 파일 업로드 후 이미지 URL 교체.
+  /// 성공 시 `null`, 실패 시 스낵바용 문구.
+  Future<String?> patchPlacePhoto({
+    required int phid,
+    required String photoType,
+    required String memo,
+    String? replacementLocalPath,
+  }) async {
+    try {
+      String? displayUrl;
+      String? originalUrl;
+      String? originalname;
+      final rp = replacementLocalPath?.trim();
+      if (rp != null && rp.isNotEmpty) {
+        final up = await uploadLocalImageFile(
+          rp,
+          category: ImageUploadCategory.fromPlacePhotoType(photoType),
+        );
+        displayUrl = up.displayUrl;
+        originalUrl = up.originalUrl;
+        originalname = up.originalname;
+      }
+      await _placeUseCase.patchPlacePhoto(
+        phid,
+        memo: memo,
+        displayUrl: displayUrl,
+        originalUrl: originalUrl,
+        originalname: originalname,
+      );
+      await fetchPlacePhotoGroups(photoType: photoType);
+      return null;
+    } catch (e) {
+      final h = unwrapHttpClientException(e);
+      return h?.message ?? e.toString();
+    }
+  }
+
+  /// 묶음 작업명·작업일(yyyy-MM-dd) 수정.
+  Future<String?> patchPlacePhotoGroupMeta({
+    required int pgid,
+    required String photoType,
+    String? title,
+    String? photoDate,
+  }) async {
+    try {
+      await _placeUseCase.patchPlacePhotoGroupMeta(
+        pgid,
+        title: title,
+        photoDate: photoDate,
+      );
+      await fetchPlacePhotoGroups(photoType: photoType);
+      return null;
+    } catch (e) {
+      final h = unwrapHttpClientException(e);
+      return h?.message ?? e.toString();
+    }
   }
 
   Future<void> addPlacePhotoGroup({required String photoType}) async {
@@ -426,6 +599,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     required String photoType,
     required DateTime photoDate,
     required List<String> localPaths,
+    List<String>? memosPerFile,
   }) async {
     if (localPaths.isEmpty) {
       return '첨부된 이미지가 없습니다.';
@@ -439,6 +613,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
         photoType: photoType,
         title: title.isEmpty ? '사진 묶음' : title,
         localFilePaths: localPaths,
+        memosPerFile: memosPerFile,
       );
       photoTitleController.clear();
       photoUrlsController.clear();
@@ -449,11 +624,6 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     } catch (e) {
       return e.toString();
     }
-  }
-
-  Future<void> deletePlacePhotoGroup(int pgid, {required String photoType}) async {
-    await _placeUseCase.deletePlacePhotoGroup(pgid);
-    await fetchPlacePhotoGroups(photoType: photoType);
   }
 
   Future<void> updateRevenue({
@@ -513,6 +683,29 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     await fetchTotalCostFromPlace();
   }
 
+  /// 인건비와 같은 날·현장·인력의 작업 투입(place-work-days) 연결 여부.
+  Future<int?> placeWorkDayPwdidForWorkCost(TotalCostModel item) {
+    final hid = item.whid;
+    final pid = item.wpid ?? state.pid;
+    if (hid == null || pid <= 0) return Future.value(null);
+    final dateKey =
+        item.date.length >= 10 ? item.date.substring(0, 10) : item.date;
+    return _workCostUseCase.findPlaceWorkDayPwdid(
+      pid: pid,
+      hid: hid,
+      dateKey: dateKey,
+    );
+  }
+
+  /// 인건비 삭제. [pwdid]가 있으면 작업 투입도 함께 삭제.
+  Future<void> deleteWorkCostLinked({
+    required int wid,
+    int? pwdid,
+  }) async {
+    await _workCostUseCase.deleteWorkCostLinked(wid: wid, pwdid: pwdid);
+    await fetchTotalCostFromPlace();
+  }
+
   Future<void> updateCost(String category, int id, String date) async {
     String priceString = mPriceController.text.trim();
     priceString = priceString.replaceAll(RegExp(r'[,원]'), '');
@@ -567,11 +760,11 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
     if (index == 0) {
       nextType = DayTpye.range;
-      nextRange =
-          await _pickRangeWithScrollableCalendar(context) ?? nextRange;
+      nextRange = await _pickRangeWithScrollableCalendar(context) ?? nextRange;
     } else if (index == 1) {
       nextType = DayTpye.whole;
-      nextRange = DateTimeRange(start: DateTime(2000), end: DateTime(2099, 12, 31));
+      nextRange =
+          DateTimeRange(start: DateTime(2000), end: DateTime(2099, 12, 31));
     } else {
       nextType = DayTpye.month;
       nextRange = getMonthDateRange(DateTime.now());
@@ -588,8 +781,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     final pid = state.pid;
     final dateTimeRange = state.dateTimeRange;
 
-    final detailQueryResult =
-        await _placeUseCase.getPlaceTotalCostsForCsv(dateTimeRange.start, dateTimeRange.end, pid);
+    final detailQueryResult = await _placeUseCase.getPlaceTotalCostsForCsv(
+        dateTimeRange.start, dateTimeRange.end, pid);
     final summaryQueryResult = await _placeUseCase.getPlaceSummaryForCsv(pid);
 
     if (detailQueryResult.isEmpty) return;
@@ -651,15 +844,14 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
     final appDocDir = await getApplicationDocumentsDirectory();
     final excelFilePath =
-        '${appDocDir.path}/$pname (${formatDateTimeRangeToString(dateTimeRange)}).xlsx';
+        '${appDocDir.path}/$pname (${formatDateTimeRangeToString(dateTimeRange, periodType: state.selectedDayType)}).xlsx';
     final bytes = excel.encode();
     final excelFile = File(excelFilePath);
     await excelFile.writeAsBytes(bytes!);
 
     await Share.shareXFiles(
       [XFile(excelFile.path)],
-      subject: '$pname (${formatDateTimeRangeToString(dateTimeRange)})',
+      subject: '$pname (${formatDateTimeRangeToString(dateTimeRange, periodType: state.selectedDayType)})',
     );
   }
 }
-

@@ -4,8 +4,9 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 import 'package:w0001/util/fetch_data.dart';
+import 'package:w0001/theme/app_segmented_button.dart';
 import 'package:w0001/util/funtions.dart';
-import 'package:w0001/util/text_style.dart';
+import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
@@ -54,9 +55,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
   }
 
   bool _canAddRevenue(PlaceDetailState state) {
-    final raw = _rPriceController.text
-        .trim()
-        .replaceAll(RegExp(r'[,원]'), '');
+    final raw = _rPriceController.text.trim().replaceAll(RegExp(r'[,원]'), '');
     if (raw.isEmpty) return false;
     if (state.revenuePickedDay == null) return false;
     return true;
@@ -73,8 +72,10 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
     );
 
     final screenH = MediaQuery.sizeOf(context).height;
-    final maxHeight = (screenH * 0.60).clamp(400.0, 520.0).toDouble();
-    final calHeight = (screenH * 0.34).clamp(240.0, 310.0).toDouble();
+    final maxHeight =
+        (screenH * 0.60).clamp(context.rs(400), context.rs(520)).toDouble();
+    final calHeight =
+        (screenH * 0.34).clamp(context.rs(240), context.rs(310)).toDouble();
 
     return showDialog<DateTime>(
       context: context,
@@ -85,18 +86,19 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxHeight: maxHeight),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: EdgeInsets.only(bottom: dialogCtx.rsi(8)),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
+                      Padding(
+                        padding:
+                            EdgeInsets.symmetric(vertical: dialogCtx.rsi(10)),
                         child: Text(
                           '날짜 선택',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(dialogCtx)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                       ScrollableCalendarWidget(
@@ -150,8 +152,8 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
       _rNameController.text = nextJangeumLabelForRevenueList(next.revenueList);
     });
     final cs = Theme.of(context).colorScheme;
-    final displayedRevenues = [...state.revenueList]
-      ..sort((a, b) {
+    final tt = Theme.of(context).textTheme;
+    final displayedRevenues = [...state.revenueList]..sort((a, b) {
         final da = parseFlexibleDateString(a.rdate);
         final db = parseFlexibleDateString(b.rdate);
         final cmp = _latestFirst ? db.compareTo(da) : da.compareTo(db);
@@ -161,8 +163,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
 
     final cumulativeByRid = <int, int>{};
     var additionalRunning = 0;
-    final forCumulative = [...state.revenueList]
-      ..sort((a, b) {
+    final forCumulative = [...state.revenueList]..sort((a, b) {
         final da = parseFlexibleDateString(a.rdate);
         final db = parseFlexibleDateString(b.rdate);
         final cmp = da.compareTo(db);
@@ -181,21 +182,24 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
       persistentFooterAlignment: AlignmentDirectional.topCenter,
       persistentFooterButtons: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: EdgeInsets.symmetric(horizontal: context.rsi(20)),
           child: Column(
             children: [
               buildSummaryItem(
+                context,
                 title: '공사 총액',
                 price: getPrice(price: placeInfo.pcontractTotal),
                 textColor: Colors.black,
               ),
               buildSummaryItem(
+                context,
                 title: '총 수익금',
                 price:
                     getPrice(price: placeInfo.pfirstrevenue + vm.totalRevenue),
                 textColor: Colors.green,
               ),
               buildSummaryItem(
+                context,
                 title: '잔금',
                 price: getPrice(
                   price: (placeInfo.pcontractTotal -
@@ -208,14 +212,16 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                 textColor: Colors.deepPurple,
               ),
               buildSummaryItem(
+                context,
                 title:
-                    '총 지출금 (${formatDateTimeRangeToString(state.dateTimeRange)})',
+                    '총 지출금 (${formatDateTimeRangeToString(state.dateTimeRange, periodType: state.selectedDayType)})',
                 price: getPrice(price: -vm.totalPrice),
                 textColor: Colors.red,
                 isTwoLine: true,
               ),
               const Divider(),
               buildSummaryItem(
+                context,
                 title: '순이익',
                 price: getPrice(
                   price: (placeInfo.pfirstrevenue + vm.totalRevenue) -
@@ -225,6 +231,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
               ),
               if (placeInfo.pcontractTotal > 0) ...[
                 buildSummaryItem(
+                  context,
                   title: '이익률',
                   price:
                       '${(((placeInfo.pfirstrevenue + vm.totalRevenue) - vm.totalPrice) / placeInfo.pcontractTotal * 100).toStringAsFixed(1)}%',
@@ -236,37 +243,43 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
         ),
       ],
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: EdgeInsets.symmetric(horizontal: context.rsi(10)),
         child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                vertical: context.rsi(5),
+                horizontal: context.rsi(10),
+              ),
               child: Text(
                 '선수금',
-                style: normalStyle,
+                style: tt.bodyLarge,
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
+              padding: EdgeInsets.symmetric(vertical: context.rsi(5)),
               child: Card(
                 child: ListTile(
                   leading: const Text(''),
                   title: const Text('선수금'),
                   trailing: Text(
                     getPrice(price: placeInfo.pfirstrevenue),
-                    style: normalStyle,
+                    style: tt.bodyLarge,
                   ),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+              padding: EdgeInsets.symmetric(
+                vertical: context.rsi(5),
+                horizontal: context.rsi(10),
+              ),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '추가 수익금',
-                      style: normalStyle,
+                      style: tt.bodyLarge,
                     ),
                   ),
                   SegmentedButton<bool>(
@@ -284,10 +297,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                     ],
                     selected: {_latestFirst},
                     showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    style: AppSegmentedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -305,8 +315,10 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                 itemBuilder: (context, index) {
                   if (index < displayedRevenues.length) {
                     final revenue = displayedRevenues[index];
-                    final additionalCumulative = cumulativeByRid[revenue.rid] ?? revenue.rprice;
-                    final totalCumulative = placeInfo.pfirstrevenue + additionalCumulative;
+                    final additionalCumulative =
+                        cumulativeByRid[revenue.rid] ?? revenue.rprice;
+                    final totalCumulative =
+                        placeInfo.pfirstrevenue + additionalCumulative;
                     final dateText = revenue.rdate.isEmpty
                         ? '-'
                         : formatDateTimeWeekDayToString(
@@ -367,15 +379,24 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                   mainAxisAlignment: MainAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Padding(
-                                      padding: EdgeInsets.only(top: 15),
-                                      child: Text('수정', style: bigStyle),
+                                    Padding(
+                                      padding: EdgeInsets.only(
+                                          top: dialogCtx.rsi(15)),
+                                      child: Text(
+                                        '수정',
+                                        style: Theme.of(dialogCtx)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 10,
-                                        left: 20,
-                                        right: 20,
+                                      padding: EdgeInsets.only(
+                                        top: dialogCtx.rsi(10),
+                                        left: dialogCtx.rsi(20),
+                                        right: dialogCtx.rsi(20),
                                       ),
                                       child: Row(
                                         children: [
@@ -385,8 +406,8 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                                 final picked =
                                                     await _pickDateWithScrollableCalendar(
                                                   dialogCtx,
-                                                  initialDay:
-                                                      state.dialogRevenuePickedDay,
+                                                  initialDay: state
+                                                      .dialogRevenuePickedDay,
                                                 );
                                                 if (picked != null) {
                                                   vm.setDialogRevenuePickedDay(
@@ -399,10 +420,9 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                                   borderRadius:
                                                       BorderRadius.circular(12),
                                                 ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  vertical: 10,
-                                                  horizontal: 8,
+                                                padding: EdgeInsets.symmetric(
+                                                  vertical: dialogCtx.rsi(10),
+                                                  horizontal: dialogCtx.rsi(8),
                                                 ),
                                               ),
                                               icon: const Icon(Icons.event),
@@ -418,15 +438,15 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                       ),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 10,
-                                        bottom: 3,
+                                      padding: EdgeInsets.only(
+                                        top: dialogCtx.rsi(10),
+                                        bottom: dialogCtx.rsi(3),
                                       ),
                                       child: AddTextField(
                                         tController: _dialogRNameController,
                                         labelText: '수익 내용',
                                         isPrice: false,
-                                        height: 60,
+                                        height: dialogCtx.rs(60),
                                         keyboardType: TextInputType.text,
                                         readOnly: false,
                                         onChanged: (_) {},
@@ -436,7 +456,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                       tController: _dialogRPriceController,
                                       labelText: '추가금',
                                       isPrice: true,
-                                      height: 60,
+                                      height: dialogCtx.rs(60),
                                       keyboardType: TextInputType.number,
                                       readOnly: false,
                                       onChanged: (_) {},
@@ -466,13 +486,13 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                                 0;
                                             vm
                                                 .updateRevenue(
-                                                    rid: revenue.rid,
-                                                    rname: _dialogRNameController
-                                                        .text,
-                                                    rprice: rp,
-                                                    revenueDate: state
-                                                        .dialogRevenuePickedDay,
-                                                )
+                                              rid: revenue.rid,
+                                              rname:
+                                                  _dialogRNameController.text,
+                                              rprice: rp,
+                                              revenueDate:
+                                                  state.dialogRevenuePickedDay,
+                                            )
                                                 .then((_) async {
                                               await FetchData.fetchAllData();
                                               if (dialogCtx.mounted) {
@@ -501,12 +521,11 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                         child: Card(
                           child: ListTile(
                             leading: CircleAvatar(
-                              radius: 15,
+                              radius: context.rs(15),
                               backgroundColor: cs.primaryContainer,
                               child: Text(
                                 '${index + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
+                                style: tt.labelMedium?.copyWith(
                                   fontWeight: FontWeight.w800,
                                   color: cs.onPrimaryContainer,
                                 ),
@@ -518,15 +537,14 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                               children: [
                                 Text(
                                   dateText,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                  style: tt.labelMedium?.copyWith(
                                     color: cs.onSurfaceVariant,
-                                    ),
+                                  ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: context.rsi(4)),
                                 Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
+                                  spacing: context.rsi(6),
+                                  runSpacing: context.rsi(4),
                                   children: [
                                     _smallInfoChip(
                                       context,
@@ -544,7 +562,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                             ),
                             trailing: Text(
                               getPrice(price: revenue.rprice),
-                              style: normalStyle,
+                              style: tt.bodyLarge,
                             ),
                           ),
                         ),
@@ -560,15 +578,17 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 5,
-                            horizontal: 20,
+                          padding: EdgeInsets.symmetric(
+                            vertical: context.rsi(5),
+                            horizontal: context.rsi(20),
                           ),
                           child: Column(
                             children: [
                               Padding(
-                                padding:
-                                    const EdgeInsets.only(top: 6, bottom: 6),
+                                padding: EdgeInsets.only(
+                                  top: context.rsi(6),
+                                  bottom: context.rsi(6),
+                                ),
                                 child: Row(
                                   children: [
                                     Expanded(
@@ -579,8 +599,8 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                           final picked =
                                               await _pickDateWithScrollableCalendar(
                                             context,
-                                            initialDay: current ??
-                                                DateTime.now(),
+                                            initialDay:
+                                                current ?? DateTime.now(),
                                           );
                                           if (picked != null) {
                                             vm.setRevenuePickedDay(picked);
@@ -591,12 +611,13 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                           ),
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                            horizontal: 8,
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: context.rsi(12),
+                                            horizontal: context.rsi(8),
                                           ),
                                         ),
-                                        icon: const Icon(Icons.event, size: 20),
+                                        icon: Icon(Icons.event,
+                                            size: context.rs(20)),
                                         label: Text(
                                           state.revenuePickedDay == null
                                               ? '날짜 선택'
@@ -659,7 +680,7 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
                                 await FetchData.fetchAllData();
                               }
                             : null,
-                        child: const Text('추가', style: normalStyle),
+                        child: Text('추가', style: tt.bodyLarge),
                       ),
                     ],
                   );
@@ -672,15 +693,17 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
     );
   }
 
-  Widget buildSummaryItem({
+  Widget buildSummaryItem(
+    BuildContext context, {
     required String title,
     required String price,
     required Color textColor,
     bool? isTwoLine,
     TextStyle? textStyle,
   }) {
+    final tt = Theme.of(context).textTheme;
     return SizedBox(
-      height: (isTwoLine ?? false) ? 40 : 25,
+      height: context.rs((isTwoLine ?? false) ? 40 : 25),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -688,16 +711,13 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
             child: Text(
               title,
               textAlign: TextAlign.start,
-              style: const TextStyle(
-                fontSize: 15,
-              ),
+              style: tt.bodyMedium,
             ),
           ),
           Text(
             price,
             style: textStyle ??
-                TextStyle(
-                  fontSize: 15,
+                tt.bodyMedium?.copyWith(
                   color: textColor,
                   fontWeight: FontWeight.bold,
                 ),
@@ -712,16 +732,19 @@ class _PlaceRevenueScreenState extends ConsumerState<PlaceRevenueScreen> {
     required String label,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.rsi(8),
+        vertical: context.rsi(3),
+      ),
       decoration: BoxDecoration(
         color: cs.secondaryContainer.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 10,
+        style: tt.labelSmall?.copyWith(
           fontWeight: FontWeight.w700,
           color: cs.onSecondaryContainer,
         ),

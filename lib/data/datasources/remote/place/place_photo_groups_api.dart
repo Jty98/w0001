@@ -8,8 +8,14 @@ final class PlacePhotoGroupsRemoteApi {
 
   final AppHttpClient _http;
 
-  Future<List<PlacePhotoGroupRead>> list() async {
-    final r = await _http.get<dynamic>(ApiEndpoint.placePhotoGroups);
+  /// [pid]가 있으면 `GET ...?pid=` — 해당 현장 묶음만. 없으면 권한 범위 내 전체.
+  Future<List<PlacePhotoGroupRead>> list({int? pid}) async {
+    final qp = <String, dynamic>{};
+    if (pid != null) qp['pid'] = pid;
+    final r = await _http.get<dynamic>(
+      ApiEndpoint.placePhotoGroups,
+      queryParameters: qp.isEmpty ? null : qp,
+    );
     return saMapList(r.data, PlacePhotoGroupRead.fromJson);
   }
 
@@ -19,7 +25,8 @@ final class PlacePhotoGroupsRemoteApi {
   }
 
   Future<PlacePhotoGroupRead> create(Map<String, dynamic> body) async {
-    final r = await _http.post<dynamic>(ApiEndpoint.placePhotoGroups, data: body);
+    final r =
+        await _http.post<dynamic>(ApiEndpoint.placePhotoGroups, data: body);
     return PlacePhotoGroupRead.fromJson(saParseObject(r.data));
   }
 

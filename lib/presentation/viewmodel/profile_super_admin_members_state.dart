@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/ui/screen/0_auth/super_admin_profile/profile_super_admin_members_limits.dart';
 
-bool isSuperAdminUser(UserRead u) => u.role == UserRole.superAdmin;
+/// 회원 관리에서 정지·권한 변경·삭제 대상에서 제외할 관리자 계정.
+bool isProtectedAdminUser(UserRead u) => u.role.isAdmin;
 
 @immutable
 class ProfileSuperAdminMembersState {
   const ProfileSuperAdminMembersState({
-    this.bootstrapDone = false,
     this.activeMembers = const [],
     this.pendingMembers = const [],
     this.suspendedMembers = const [],
@@ -18,9 +20,8 @@ class ProfileSuperAdminMembersState {
     this.busyActive = false,
     this.busyQueue = false,
     this.appliedActiveTrim = '',
+    this.activeVisibleCount = ProfileSuperAdminMembersLimits.activePageSize,
   });
-
-  final bool bootstrapDone;
 
   final List<UserRead> activeMembers;
   final List<UserRead> pendingMembers;
@@ -38,10 +39,12 @@ class ProfileSuperAdminMembersState {
   /// 마지막으로 활동 회원 조회에 성공한 검색어(trim).
   final String appliedActiveTrim;
 
+  /// 화면에 그릴 활동 회원 수 상한 ([loadMoreActiveMembers]로 증가).
+  final int activeVisibleCount;
+
   static const _u = Object();
 
   ProfileSuperAdminMembersState copyWith({
-    bool? bootstrapDone,
     List<UserRead>? activeMembers,
     List<UserRead>? pendingMembers,
     List<UserRead>? suspendedMembers,
@@ -53,9 +56,9 @@ class ProfileSuperAdminMembersState {
     bool? busyActive,
     bool? busyQueue,
     String? appliedActiveTrim,
+    int? activeVisibleCount,
   }) {
     return ProfileSuperAdminMembersState(
-      bootstrapDone: bootstrapDone ?? this.bootstrapDone,
       activeMembers: activeMembers ?? this.activeMembers,
       pendingMembers: pendingMembers ?? this.pendingMembers,
       suspendedMembers: suspendedMembers ?? this.suspendedMembers,
@@ -70,6 +73,7 @@ class ProfileSuperAdminMembersState {
       busyActive: busyActive ?? this.busyActive,
       busyQueue: busyQueue ?? this.busyQueue,
       appliedActiveTrim: appliedActiveTrim ?? this.appliedActiveTrim,
+      activeVisibleCount: activeVisibleCount ?? this.activeVisibleCount,
     );
   }
 }

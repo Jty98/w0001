@@ -174,6 +174,32 @@ class ProcessScheduleEditor {
     return off;
   }
 
+  /// [calendarDay]가 현재 열 범위에 들어오도록 [gridStart]·[dayCount]를 키운 뒤,
+  /// 기존 공정은 [remapToNewGrid]로 날짜 기준 유지.
+  static ProcessScheduleData expandGridToIncludeCalendarDay(
+    ProcessScheduleData d,
+    DateTime calendarDay,
+  ) {
+    final target = _calendarDay(calendarDay);
+    final g0 = _calendarDay(d.gridStart);
+    final lastIdx = d.dayCount - 1;
+    final g1 = lastIdx < 0
+        ? g0
+        : _calendarDay(
+            DateTime(g0.year, g0.month, g0.day + lastIdx),
+          );
+
+    var newStart = g0;
+    var newEnd = g1;
+    if (target.isBefore(newStart)) newStart = target;
+    if (target.isAfter(newEnd)) newEnd = target;
+
+    var newDayCount = newEnd.difference(newStart).inDays + 1;
+    newDayCount = newDayCount.clamp(1, 731);
+    if (newStart == g0 && newDayCount == d.dayCount) return d;
+    return remapToNewGrid(d, newStart, newDayCount, sortRows: true);
+  }
+
   /// 새 시작일·열 개수로 바꾸면서, 각 공정의 선택 칸을 **달력 날짜** 기준으로 옮김.
   /// 공사 기간 변경 등에 사용.
   static ProcessScheduleData remapToNewGrid(

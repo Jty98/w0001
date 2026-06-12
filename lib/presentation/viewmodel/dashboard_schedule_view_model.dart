@@ -1,18 +1,20 @@
-import 'dart:convert';
-import 'dart:io';
+import 'dart:async' show unawaited;
 
 import 'package:alarm/alarm.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/mappers/remote_mappers.dart';
+import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
+import 'package:w0001/util/schedule_memo_alarm_sync.dart';
 import 'package:w0001/util/widget_data_manager.dart';
 
 DateTime scheduleDateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-String scheduleDateKey(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-'
+String scheduleDateKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
     '${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
@@ -65,7 +67,7 @@ class DashboardScheduleState {
       selectedDay: today,
       weekMemos: const [],
       weekMemosByWeekKey: const {},
-      isWeekLoading: true,
+      isWeekLoading: false,
       fullMemos: null,
       isFullLoading: false,
     );
@@ -103,7 +105,8 @@ class DashboardScheduleState {
     final list = fullMemos!
         .where(
           (m) =>
-              m.taskDate.compareTo(fromKey) >= 0 && m.taskDate.compareTo(toKey) <= 0,
+              m.taskDate.compareTo(fromKey) >= 0 &&
+              m.taskDate.compareTo(toKey) <= 0,
         )
         .toList();
     list.sort((a, b) {
@@ -137,19 +140,24 @@ class DashboardScheduleState {
 }
 
 class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
-  static const _alarmNotification = NotificationSettings(
-    title: '일정 알람',
-    body: '등록한 일정 시간입니다.',
-    stopButton: '중지',
-  );
-
   static const _rangeHalfDays = 371;
-
   /// 좌우 주 스와이프: 과거 52주 + 미래 52주 + 이번 주 기준 한 칸 = 105페이지.
   static const int weekPagePastCount = 52;
   static const int weekPageFutureCount = 52;
-  static const int weekPageCount =
-      weekPagePastCount + weekPageFutureCount + 1;
+  static const int weekPageCount = weekPagePastCount + weekPageFutureCount + 1;
+
+  Future<void>? _weekReloadInFlight;
+
+  bool? _tryReadUserIsWorker() {
+    try {
+      return ref.read(authSessionProvider).asData?.value?.isWorker;
+    } catch (e) {
+      if (e is StateError && e.toString().contains('uninitialized provider')) {
+        return null;
+      }
+      rethrow;
+    }
+  }
 
   Future<List<ScheduleMemoModel>> _memosBetween(String from, String to) async {
     final r = ref.read(superAdminRemoteRepositoryProvider);
@@ -199,13 +207,49 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     return scheduleDateOnly(_anchorMonday().add(Duration(days: 7 * i)));
   }
 
+  void _onAuthSessionForSchedule(AsyncValue<UserRead?>? prev, AsyncValue<UserRead?> next) {
+    final u = next.asData?.value;
+    if (u == null) return;
+    if (u.isWorker) {
+      state = state.copyWith(
+        isWeekLoading: false,
+        weekMemos: const [],
+        weekMemosByWeekKey: const {},
+      );
+      return;
+    }
+    unawaited(Future<void>.microtask(() => _reloadWeek(isWorker: false)));
+  }
+
   @override
   DashboardScheduleState build() {
-    Future.microtask(_reloadWeek);
+    ref.listen<AsyncValue<UserRead?>>(authSessionProvider, _onAuthSessionForSchedule,
+        fireImmediately: true);
     return DashboardScheduleState.initial();
   }
 
-  Future<void> _reloadWeek() async {
+  Future<void> _reloadWeek({bool? isWorker}) async {
+    if (_weekReloadInFlight != null) {
+      return _weekReloadInFlight;
+    }
+    _weekReloadInFlight = _reloadWeekBody(isWorker: isWorker);
+    try {
+      await _weekReloadInFlight;
+    } finally {
+      _weekReloadInFlight = null;
+    }
+  }
+
+  Future<void> _reloadWeekBody({bool? isWorker}) async {
+    final worker = isWorker ?? _tryReadUserIsWorker();
+    if (worker == true) {
+      state = state.copyWith(isWeekLoading: false);
+      return;
+    }
+    if (worker == null) {
+      state = state.copyWith(isWeekLoading: false);
+      return;
+    }
     state = state.copyWith(isWeekLoading: true);
     try {
       final from = scheduleDateKey(state.weekStart);
@@ -231,6 +275,15 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   }
 
   Future<void> _reloadFullMemos() async {
+    final worker = _tryReadUserIsWorker();
+    if (worker == true) {
+      state = state.copyWith(isFullLoading: false);
+      return;
+    }
+    if (worker == null) {
+      state = state.copyWith(isFullLoading: false);
+      return;
+    }
     state = state.copyWith(isFullLoading: true);
     try {
       final today = scheduleDateOnly(DateTime.now());
@@ -249,6 +302,14 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     } finally {
       state = state.copyWith(isFullLoading: false);
     }
+  }
+
+  /// 상황판 진입·세션 확정 시 호출. [force]면 진행 중이던 주간 로드를 끊고 다시 시도한다.
+  Future<void> ensureWeekLoaded({bool force = false}) async {
+    if (force) {
+      _weekReloadInFlight = null;
+    }
+    await _reloadWeek();
   }
 
   Future<void> refresh() async {
@@ -277,8 +338,7 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
 
   void setWeekPageIndex(int pageIndex) {
     final nextStart = weekMondayAtPageIndex(pageIndex);
-    if (scheduleDateOnly(nextStart) ==
-        scheduleDateOnly(state.weekStart)) {
+    if (scheduleDateOnly(nextStart) == scheduleDateOnly(state.weekStart)) {
       return;
     }
     final weekEnd = nextStart.add(const Duration(days: 6));
@@ -321,8 +381,10 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   Future<void> _updateWidgetData() async {
     try {
       final thisMon = scheduleStartOfWeekMonday(DateTime.now());
-      final poolFrom = scheduleDateKey(thisMon.subtract(const Duration(days: 7 * 52)));
-      final poolTo = scheduleDateKey(thisMon.add(const Duration(days: 7 * 52 + 6)));
+      final poolFrom =
+          scheduleDateKey(thisMon.subtract(const Duration(days: 7 * 52)));
+      final poolTo =
+          scheduleDateKey(thisMon.add(const Duration(days: 7 * 52 + 6)));
       final poolList = await _memosBetween(poolFrom, poolTo);
       await WidgetDataManager.saveSchedulePool(poolList);
 
@@ -452,81 +514,7 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   }
 
   Future<void> _safeSyncAlarmForMemo(ScheduleMemoModel memo) async {
-    try {
-      await _syncAlarmForMemo(memo);
-    } catch (e, st) {
-      debugPrint('Alarm sync failed for sid=${memo.sid}: $e\n$st');
-    }
-  }
-
-  Future<void> _syncAlarmForMemo(ScheduleMemoModel memo) async {
-    final sid = memo.sid;
-    if (sid == null) return;
-
-    if (memo.done || !memo.alarmEnabled) {
-      await Alarm.stop(sid);
-      return;
-    }
-
-    final fireAt = _alarmDateTime(memo);
-    if (fireAt == null || !fireAt.isAfter(DateTime.now())) {
-      await Alarm.stop(sid);
-      return;
-    }
-
-    await Alarm.set(
-      alarmSettings: AlarmSettings(
-        id: sid,
-        dateTime: fireAt,
-        assetAudioPath: null,
-        loopAudio: true,
-        vibrate: true,
-        warningNotificationOnKill: Platform.isIOS,
-        androidFullScreenIntent: Platform.isAndroid,
-        androidStopAlarmOnTermination: !Platform.isAndroid,
-        volumeSettings: VolumeSettings.fade(
-          fadeDuration: const Duration(seconds: 5),
-          volume: 0.9,
-          volumeEnforced: false,
-        ),
-        notificationSettings: _alarmNotification.copyWith(
-          title: memo.title.trim().isEmpty ? '일정 알람' : memo.title.trim(),
-          body: memo.memo.trim().isEmpty ? '등록한 일정 시간입니다.' : memo.memo.trim(),
-        ),
-        payload: jsonEncode({
-          'title': memo.title.trim(),
-          'memo': memo.memo.trim(),
-          'taskDate': memo.taskDate,
-          'taskTime': memo.taskTime.trim(),
-          'alarmOffsetMinutes': memo.alarmOffsetMinutes,
-        }),
-      ),
-    );
-  }
-
-  DateTime? _alarmDateTime(ScheduleMemoModel memo) {
-    final time = memo.taskTime.trim();
-    if (time.isEmpty) return null;
-
-    final d = memo.taskDate.split('-');
-    final t = time.split(':');
-    if (d.length != 3 || t.length != 2) return null;
-
-    final year = int.tryParse(d[0]);
-    final month = int.tryParse(d[1]);
-    final day = int.tryParse(d[2]);
-    final hour = int.tryParse(t[0]);
-    final minute = int.tryParse(t[1]);
-    if (year == null ||
-        month == null ||
-        day == null ||
-        hour == null ||
-        minute == null) {
-      return null;
-    }
-
-    final taskAt = DateTime(year, month, day, hour, minute);
-    return taskAt.subtract(Duration(minutes: memo.alarmOffsetMinutes));
+    await syncScheduleMemoLocalAlarmSafe(memo);
   }
 }
 

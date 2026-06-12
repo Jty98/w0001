@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/enums.dart';
 
 String formatDateTimeToKorean(DateTime dateTime) {
   return ('${dateTime.year}년 ${dateTime.month}월 ${dateTime.day}일');
@@ -39,6 +40,19 @@ String formatDateTimeToIsoDate(DateTime dateTime) {
   return '${dateTime.year}-$m-$d';
 }
 
+/// API 등에서 온 날짜 문자열을 표시·정렬용 `yyyy-MM-dd` 로 맞춘다.
+String normalizeToIsoDateString(String raw) {
+  final v = raw.trim();
+  if (v.isEmpty) return v;
+  final isoPrefix = RegExp(r'^(\d{4}-\d{2}-\d{2})').firstMatch(v);
+  if (isoPrefix != null) return isoPrefix.group(1)!;
+  final dt = DateTime.tryParse(v);
+  if (dt != null) {
+    return formatDateTimeToIsoDate(DateTime(dt.year, dt.month, dt.day));
+  }
+  return v;
+}
+
 DateTime parseFlexibleDateString(String value, {DateTime? fallback}) {
   final v = value.trim();
   if (v.isEmpty) return fallback ?? DateTime.now();
@@ -58,25 +72,37 @@ DateTime parseFlexibleDateString(String value, {DateTime? fallback}) {
   }
 }
 
+bool isSameCalendarDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// 현장·인건비 등에서 「전체 기간」 조회에 쓰는 고정 범위(2000-01-01 ~ 2099-12-31).
+bool isFullPeriodDateRange(DateTimeRange range) {
+  return isSameCalendarDay(range.start, DateTime(2000, 1, 1)) &&
+      isSameCalendarDay(range.end, DateTime(2099, 12, 31));
+}
+
 String formatDateTimeRangeToString(
   DateTimeRange dateTimeRange, {
   bool showYear = true,
-} ) {
+  DayTpye? periodType,
+}) {
   final start = dateTimeRange.start;
   final end = dateTimeRange.end;
 
+  if (periodType == DayTpye.whole || isFullPeriodDateRange(dateTimeRange)) {
+    return '전체 기간';
+  }
+
   // 시작 날짜가 해당 달의 첫째 날인지, 끝 날짜가 해당 달의 마지막 날인지 확인
-  bool isFullMonth = (start.day == 1 && 
-                      end.year == start.year && 
-                      end.month == start.month &&
-                      end.day == DateTime(start.year, start.month + 1, 0).day);
+  bool isFullMonth = (start.day == 1 &&
+      end.year == start.year &&
+      end.month == start.month &&
+      end.day == DateTime(start.year, start.month + 1, 0).day);
 
   if (isFullMonth) {
     // "2024년 6월 전체" 형식으로 반환
     return showYear ? '${start.year}년 ${start.month}월' : '${start.month}월';
-  } else if(dateTimeRange.toString() == '2000-01-01 00:00:00.000 - 2099-12-31 00:00:00.000'){
-    return '전체 기간';
-  }else {
+  } else {
     // 범위를 "yyyy.MM.dd ~ yyyy.MM.dd" 형식으로 반환
     final startText = showYear
         ? formatDateTimeToStringByDot(start)
@@ -135,11 +161,17 @@ String formatIntegerWithComma(int value) {
   return formattedString;
 }
 
+/// 인건비·근로 현황 표시용 — [isTaxApply] true면 3.3% 원천징수 후 실수령(×0.967).
+int applyIncomeTaxNet(int grossAmount, {required bool isTaxApply}) {
+  if (!isTaxApply) return grossAmount;
+  return (grossAmount * 0.967).toInt();
+}
+
 String getPrice({required int price, bool? isTaxApply, bool? isContainWon}) {
-  // 세금 적용 여부에 따라 가격 계산
-  int price2 = (isTaxApply == null || isTaxApply == false)
-      ? price
-      : (price * 0.967).toInt();
+  final price2 = applyIncomeTaxNet(
+    price,
+    isTaxApply: isTaxApply == true,
+  );
 
   // 음수 여부 체크
   bool isNegative = price2 < 0;
@@ -171,11 +203,20 @@ String getPrice({required int price, bool? isTaxApply, bool? isContainWon}) {
   return formattedString;
 }
 
+/// 인건비 지급 완료 일시 표시 (`wcompleted_at` ISO 문자열).
+String formatWorkCostCompletedAt(String completedAt) {
+  try {
+    final dt = DateTime.parse(completedAt);
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  } catch (_) {
+    return completedAt;
+  }
+}
+
 DateTimeRange getMonthDateRange(DateTime now) {
   final startOfMonth = DateTime(now.year, now.month, 1);
   final endOfMonth = (startOfMonth.month < 12)
-      ? DateTime(now.year, now.month + 1, 1)
-          .subtract(const Duration(days: 1))
+      ? DateTime(now.year, now.month + 1, 1).subtract(const Duration(days: 1))
       : DateTime(now.year + 1, 1, 1).subtract(const Duration(days: 1));
 
   return DateTimeRange(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 class ProfileInfoRow extends StatelessWidget {
   const ProfileInfoRow({
@@ -6,11 +7,13 @@ class ProfileInfoRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -18,16 +21,20 @@ class ProfileInfoRow extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      padding: ResponsiveLayout.symmetric(
+        context,
+        horizontal: 14,
+        vertical: 11,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
             icon,
-            size: 20,
+            size: context.rsi(20),
             color: cs.primary,
           ),
-          const SizedBox(width: 12),
+          rsH(context, 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,7 +47,7 @@ class ProfileInfoRow extends StatelessWidget {
                     letterSpacing: 0.2,
                   ),
                 ),
-                const SizedBox(height: 4),
+                rsV(context, 4),
                 Text(
                   value,
                   style: tt.bodyLarge?.copyWith(
@@ -52,6 +59,10 @@ class ProfileInfoRow extends StatelessWidget {
               ],
             ),
           ),
+          if (trailing != null) ...[
+            rsH(context, 8),
+            trailing!,
+          ],
         ],
       ),
     );

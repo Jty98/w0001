@@ -12,9 +12,7 @@ import 'package:w0001/presentation/viewmodel/profile_super_admin_members_notifie
 /// 데이터는 [profileSuperAdminMembersProvider], 당김 새로고침은
 /// [reloadProfileSuperAdminMembers] 를 사용합니다.
 class ProfileSuperAdminUserSection extends ConsumerStatefulWidget {
-  const ProfileSuperAdminUserSection({super.key, this.reloadSession});
-
-  final VoidCallback? reloadSession;
+  const ProfileSuperAdminUserSection({super.key});
 
   @override
   ConsumerState<ProfileSuperAdminUserSection> createState() =>
@@ -42,7 +40,8 @@ class _ProfileSuperAdminUserSectionState
 
   void _onActiveSearchSignal() {
     final nextTrim = _searchController.text.trim();
-    final applied = ref.read(profileSuperAdminMembersProvider).appliedActiveTrim;
+    final applied =
+        ref.read(profileSuperAdminMembersProvider).appliedActiveTrim;
     if (nextTrim == applied) {
       _debounceHolder.cancel();
       return;
@@ -55,7 +54,9 @@ class _ProfileSuperAdminUserSectionState
           ref.read(profileSuperAdminMembersProvider).appliedActiveTrim;
       if (t == appliedNow) return;
       unawaited(
-        ref.read(profileSuperAdminMembersProvider.notifier).fetchActiveMembers(t),
+        ref
+            .read(profileSuperAdminMembersProvider.notifier)
+            .fetchActiveMembers(t),
       );
     });
   }
@@ -65,7 +66,6 @@ class _ProfileSuperAdminUserSectionState
     return ProfileSuperAdminMembersPanel(
       searchController: _searchController,
       debounceHolder: _debounceHolder,
-      reloadSession: widget.reloadSession,
     );
   }
 }

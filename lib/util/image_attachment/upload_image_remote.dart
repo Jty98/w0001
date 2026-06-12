@@ -8,7 +8,8 @@ import 'package:w0001/util/image_attachment/image_upload_result.dart';
 /// 기기 로컬 이미지를 [`POST /uploads/image`](`multipart/form-data`,
 /// 필드 `file` + 선택 `category`)로 올리고 메타를 돌려준다.
 ///
-/// [category]: `place_image` | `plan_image` (생략 시 서버 기본과 동일하게 [ImageUploadCategory.placeImage]).
+/// [category]: `place_image` | `plan_image` | `announcement_image`
+/// (생략 시 서버 기본과 동일하게 [ImageUploadCategory.placeImage]).
 ///
 /// Bearer 토큰은 [AppHttpClient] 인터셉터와 동일하게 붙는다.
 Future<ImageUploadResult> uploadLocalImageFile(

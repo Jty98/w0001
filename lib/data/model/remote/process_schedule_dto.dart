@@ -31,8 +31,8 @@ abstract final class ProcessScheduleDto {
 
   static ProcessScheduleData parseGet(Map<String, dynamic> m) {
     final n = DateTime.now();
-    final grid = parseGridDate(m['grid_start_date']) ??
-        DateTime(n.year, n.month, n.day);
+    final grid =
+        parseGridDate(m['grid_start_date']) ?? DateTime(n.year, n.month, n.day);
     final dayCount = (m['day_count'] as num?)?.toInt() ?? 28;
     final version = (m['version'] as num?)?.toInt();
     final sid = m['id'] ?? m['schedule_id'];
@@ -79,7 +79,8 @@ abstract final class ProcessScheduleDto {
     };
   }
 
-  static Map<String, dynamic> _taskToJson(ProcessScheduleTask t, int sortOrder) {
+  static Map<String, dynamic> _taskToJson(
+      ProcessScheduleTask t, int sortOrder) {
     final idNum = int.tryParse(t.serverId ?? '');
     return <String, dynamic>{
       if (idNum != null) 'id': idNum,

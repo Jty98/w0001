@@ -6,7 +6,9 @@ import 'package:w0001/data/model/monthly_summary_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_legend.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_line_charts.dart';
+import 'package:w0001/theme/app_segmented_button.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 /// 영업이익(선·면) — 청록 / 이익률(선) — 딥퍼플 (primary·indigo와 겹쳐 보이지 않게 구분)
 /// 영업이익 차트: 막대·범례용(밝은 배경에서도 식별 용이)
@@ -92,7 +94,7 @@ class _DashboardMetricChartSheetBodyState
 
   double _chartHeight(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
-    return (w * 0.52).clamp(240.0, 380.0);
+    return (w * 0.40).clamp(context.rs(200), context.rs(280));
   }
 
   String get _titleBase {
@@ -104,7 +106,7 @@ class _DashboardMetricChartSheetBodyState
       case DashboardMetricKind.cost:
         return '공사원가 추이';
       case DashboardMetricKind.profitAndMargin:
-        return '영업이익(공사금액-공사원가) · 이익률';
+        return '영업이익 · 이익률 [완료현장 기준 그래프]';
       case DashboardMetricKind.siteCounts:
         return '현장 현황 (진행중·완료)';
     }
@@ -195,7 +197,7 @@ class _DashboardMetricChartSheetBodyState
           ];
         case DashboardMetricKind.profitAndMargin:
           return [
-            DashboardLegend(
+            const DashboardLegend(
               items: [
                 DashboardLegendItem(
                   label: '영업이익',
@@ -360,7 +362,8 @@ class _DashboardMetricChartSheetBodyState
               bottomLabels: yearLabels,
               moneyValues:
                   y.map((e) => e.completedProfitTotal.toDouble()).toList(),
-              percentValues: y.map((e) => e.completedContractMarginPct).toList(),
+              percentValues:
+                  y.map((e) => e.completedContractMarginPct).toList(),
               moneyColor: _kProfitMoneyChartColor,
               percentColor: _kProfitMarginChartColor,
             ),
@@ -450,11 +453,12 @@ class _DashboardMetricChartSheetBodyState
     final showCharts = widget.kind != DashboardMetricKind.siteCounts &&
         widget.kind != DashboardMetricKind.collection;
 
+    final tt = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.paddingOf(context).bottom + 16,
+        left: context.rsi(16),
+        right: context.rsi(16),
+        bottom: MediaQuery.paddingOf(context).bottom + context.rsi(16),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -463,19 +467,18 @@ class _DashboardMetricChartSheetBodyState
           children: [
             Text(
               _titleBase,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             if (showCharts) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: context.rsi(4)),
               Text(
                 periodNote,
-                style: TextStyle(
-                  fontSize: 12,
+                style: tt.labelMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: context.rsi(12)),
               SegmentedButton<_SheetPeriod>(
                 segments: const [
                   ButtonSegment<_SheetPeriod>(
@@ -490,29 +493,24 @@ class _DashboardMetricChartSheetBodyState
                   ),
                 ],
                 selected: {_period},
-                style: SegmentedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
+                style: AppSegmentedButton.styleFrom(),
                 onSelectionChanged: (Set<_SheetPeriod> next) {
                   if (next.isEmpty) return;
                   setState(() => _period = next.first);
                 },
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: context.rsi(12)),
               ..._chartsForPeriod(context),
             ],
-            const SizedBox(height: 16),
+            SizedBox(height: context.rsi(16)),
             Text(
               '현장별 상세',
-              style: TextStyle(
+              style: tt.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
-                fontSize: 14,
                 color: cs.onSurface,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: context.rsi(8)),
             SegmentedButton<DashboardPlaceBreakdownFilter>(
               segments: const [
                 ButtonSegment(
@@ -529,11 +527,7 @@ class _DashboardMetricChartSheetBodyState
                 ),
               ],
               selected: {_placeFilter},
-              style: SegmentedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
+              style: AppSegmentedButton.styleFrom(),
               onSelectionChanged: (next) {
                 if (next.isEmpty) return;
                 setState(() => _placeFilter = next.first);
@@ -542,10 +536,10 @@ class _DashboardMetricChartSheetBodyState
             const SizedBox(height: 8),
             if (visibleRows.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: ResponsiveLayout.symmetric(context, vertical: 12),
                 child: Text(
                   '조건에 맞는 현장이 없습니다.',
-                  style: TextStyle(
+                  style: tt.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
@@ -656,7 +650,7 @@ class _DashboardMetricChartSheetBodyState
 
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: ResponsiveLayout.symmetric(context, horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(8),
@@ -682,8 +676,7 @@ class _DashboardMetricChartSheetBodyState
                   Expanded(
                     child: Text(
                       text,
-                      style: TextStyle(
-                        fontSize: 11,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: cs.onSurfaceVariant,
                       ),
@@ -720,6 +713,7 @@ class _DashboardMetricChartSheetBodyState
           children: [
             Expanded(
               child: _summaryStatTile(
+                context,
                 cs,
                 label: '공사원금',
                 value: getPrice(price: row.contractTotal),
@@ -731,6 +725,7 @@ class _DashboardMetricChartSheetBodyState
             const SizedBox(width: 6),
             Expanded(
               child: _summaryStatTile(
+                context,
                 cs,
                 label: '선수금',
                 value: getPrice(price: row.advanceCollected),
@@ -742,6 +737,7 @@ class _DashboardMetricChartSheetBodyState
             const SizedBox(width: 6),
             Expanded(
               child: _summaryStatTile(
+                context,
                 cs,
                 label: '미수금',
                 value: getPrice(price: row.outstanding),
@@ -752,19 +748,18 @@ class _DashboardMetricChartSheetBodyState
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        rsV(context, 8),
         if (detailRows.isEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: ResponsiveLayout.symmetric(context, horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(context.rs(8)),
             ),
             child: Text(
               '잔금 내역 없음',
-              style: TextStyle(
-                fontSize: 10,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: cs.onSurfaceVariant,
               ),
@@ -773,10 +768,10 @@ class _DashboardMetricChartSheetBodyState
         else
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: ResponsiveLayout.symmetric(context, horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(context.rs(8)),
               border:
                   Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
             ),
@@ -784,17 +779,17 @@ class _DashboardMetricChartSheetBodyState
               children: detailRows.asMap().entries.map((entry) {
                 final i = entry.key;
                 final d = entry.value;
+                final tt = Theme.of(context).textTheme;
                 return Padding(
                   padding: EdgeInsets.only(
-                      bottom: i == detailRows.length - 1 ? 0 : 6),
+                      bottom: i == detailRows.length - 1 ? 0 : context.rs(6)),
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 34,
+                        width: context.rs(34),
                         child: Text(
                           '${i + 1}차',
-                          style: TextStyle(
-                            fontSize: 10,
+                          style: tt.labelSmall?.copyWith(
                             fontWeight: FontWeight.w800,
                             color: cs.primary,
                           ),
@@ -803,8 +798,7 @@ class _DashboardMetricChartSheetBodyState
                       Expanded(
                         child: Text(
                           _formatMonthDay(d.date),
-                          style: TextStyle(
-                            fontSize: 10,
+                          style: tt.labelSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: cs.onSurfaceVariant,
                           ),
@@ -812,8 +806,7 @@ class _DashboardMetricChartSheetBodyState
                       ),
                       Text(
                         getPrice(price: d.amount),
-                        style: TextStyle(
-                          fontSize: 10,
+                        style: tt.labelSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                           color: cs.onSurface,
                         ),
@@ -829,6 +822,7 @@ class _DashboardMetricChartSheetBodyState
   }
 
   Widget _summaryStatTile(
+    BuildContext context,
     ColorScheme cs, {
     required String label,
     required String value,
@@ -836,31 +830,30 @@ class _DashboardMetricChartSheetBodyState
     Color? labelColor,
     Color? valueColor,
   }) {
+    final tt = Theme.of(context).textTheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: ResponsiveLayout.symmetric(context, horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: backgroundColor ?? cs.secondaryContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(context.rs(8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 9,
+            style: tt.labelSmall?.copyWith(
               fontWeight: FontWeight.w700,
               color:
                   labelColor ?? cs.onSecondaryContainer.withValues(alpha: 0.85),
             ),
           ),
-          const SizedBox(height: 2),
+          rsV(context, 2),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 10,
+            style: tt.labelSmall?.copyWith(
               fontWeight: FontWeight.w800,
               color: valueColor ?? cs.onSecondaryContainer,
             ),
@@ -906,37 +899,43 @@ class _DashboardMetricChartSheetBodyState
     required Map<int, dynamic> placeByPid,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(context.rs(12)),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
       ),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      padding: ResponsiveLayout.only(context, left: 10, top: 8, right: 10, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             '$title (${rows.length}곳)',
-            style: TextStyle(
-              fontSize: 12,
+            style: tt.labelMedium?.copyWith(
               fontWeight: FontWeight.w800,
               color: cs.onSurface,
             ),
           ),
-          const SizedBox(height: 6),
+          rsV(context, 6),
           ...rows.take(30).map(
                 (row) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
+                  padding: ResponsiveLayout.only(context, bottom: 6),
                   child: Material(
                     color: cs.surface.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(context.rs(10)),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(context.rs(10)),
                       onTap: () =>
                           _openPlaceDetail(context, placeByPid, row.pid),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                        padding: ResponsiveLayout.only(
+                          context,
+                          left: 10,
+                          top: 8,
+                          right: 10,
+                          bottom: 8,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
@@ -950,19 +949,21 @@ class _DashboardMetricChartSheetBodyState
                                           row.pname,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
+                                          style: tt.bodyMedium?.copyWith(
                                             fontWeight: FontWeight.w800,
-                                            fontSize: 14,
                                           ),
                                         ),
                                       ),
                                       if (widget.kind !=
                                           DashboardMetricKind.siteCounts)
                                         Padding(
-                                          padding:
-                                              const EdgeInsets.only(left: 8),
+                                          padding: ResponsiveLayout.only(
+                                            context,
+                                            left: 8,
+                                          ),
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(
+                                            padding: ResponsiveLayout.symmetric(
+                                              context,
                                               horizontal: 8,
                                               vertical: 4,
                                             ),
@@ -972,9 +973,9 @@ class _DashboardMetricChartSheetBodyState
                                                   BorderRadius.circular(999),
                                             ),
                                             child: Text(
-                                              getPrice(price: _metricValue(row)),
-                                              style: TextStyle(
-                                                fontSize: 11,
+                                              getPrice(
+                                                  price: _metricValue(row)),
+                                              style: tt.labelSmall?.copyWith(
                                                 fontWeight: FontWeight.w800,
                                                 color: cs.onPrimaryContainer,
                                               ),
@@ -983,15 +984,15 @@ class _DashboardMetricChartSheetBodyState
                                         ),
                                     ],
                                   ),
-                                  const SizedBox(height: 2),
+                                  rsV(context, 2),
                                   _rowSubtitleWidget(row, cs),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 4),
+                            rsH(context, 4),
                             Icon(
                               Icons.chevron_right_rounded,
-                              size: 18,
+                              size: context.rsi(18),
                               color: cs.onSurfaceVariant,
                             ),
                           ],

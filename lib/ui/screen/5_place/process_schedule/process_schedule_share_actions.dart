@@ -9,6 +9,7 @@ import 'package:w0001/domain/process_schedule/process_schedule_editor.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_chart_views.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_excel_export.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 String _sanitizeFileStem(String raw) =>
     raw.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
@@ -38,7 +39,12 @@ Future<void> showProcessScheduleShareSheet({
     builder: (sheetCtx) {
       return SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          padding: EdgeInsets.fromLTRB(
+            sheetCtx.rsi(8),
+            0,
+            sheetCtx.rsi(8),
+            sheetCtx.rsi(8),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -154,8 +160,8 @@ Future<void> _shareImage({
     for (final t in data.tasks) ProcessScheduleEditor.labelCenterDayIndices(t),
   ];
 
-  final w = chartContentW(data);
-  final h = chartContentH(data);
+  final w = chartContentW(context, data);
+  final h = chartContentH(context, data);
   final shot = ScreenshotController();
 
   final Uint8List pngBytes;

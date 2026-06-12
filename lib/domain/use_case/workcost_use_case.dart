@@ -29,8 +29,14 @@ class WorkCostUseCase {
     );
   }
 
-  Future<bool> addWorkCosts(List<WorkCostModel> wCostList) {
-    return _repository.addWorkCosts(wCostList);
+  Future<bool> addWorkCosts(
+    List<WorkCostModel> wCostList, {
+    bool acknowledgeTroublePair = false,
+  }) {
+    return _repository.addWorkCosts(
+      wCostList,
+      acknowledgeTroublePair: acknowledgeTroublePair,
+    );
   }
 
   Future<void> updateWorkCostItem(WorkCostModel workCost) {
@@ -45,8 +51,47 @@ class WorkCostUseCase {
     return _repository.updateWorkCostsToComplete(widList);
   }
 
+  Future<void> updateWorkCostPrice(int wid, int newPrice) {
+    return _repository.updateWorkCostPrice(wid, newPrice);
+  }
+
   Future<void> deleteWorkCost(int wid) {
     return _repository.deleteWorkCost(wid);
+  }
+
+  Future<int?> findPlaceWorkDayPwdid({
+    required int pid,
+    required int hid,
+    required String dateKey,
+  }) {
+    return _repository.findPlaceWorkDayPwdid(
+      pid: pid,
+      hid: hid,
+      dateKey: dateKey,
+    );
+  }
+
+  Future<void> ensureWorkCostForPlaceWorkDay({
+    required int pid,
+    required int hid,
+    required String dateKey,
+    required int wprice,
+    required String wrole,
+  }) {
+    return _repository.ensureWorkCostForPlaceWorkDay(
+      pid: pid,
+      hid: hid,
+      dateKey: dateKey,
+      wprice: wprice,
+      wrole: wrole,
+    );
+  }
+
+  Future<void> deleteWorkCostLinked({
+    required int wid,
+    int? pwdid,
+  }) {
+    return _repository.deleteWorkCostLinked(wid: wid, pwdid: pwdid);
   }
 
   Future<List<Map<String, dynamic>>> getWorkCostDetailsForCsv(

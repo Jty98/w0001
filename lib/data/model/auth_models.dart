@@ -1,6 +1,11 @@
-/// 서버 `role` 문자열과 대응 (`super_admin` | `admin` | `worker`)
+import 'package:w0001/data/model/terms_models.dart';
+import 'package:w0001/data/model/worker_profile_model.dart';
+import 'package:w0001/util/phone_number_format.dart';
+import 'package:w0001/util/resident_registration_format.dart';
+import 'package:w0001/util/worker_skills_parse.dart';
+
+/// 서버 `role` 문자열과 대응 (`admin` | `worker`)
 enum UserRole {
-  superAdmin('super_admin'),
   admin('admin'),
   worker('worker');
 
@@ -10,9 +15,10 @@ enum UserRole {
 
   static UserRole parse(String raw) {
     switch (raw) {
-      case 'super_admin':
-        return UserRole.superAdmin;
       case 'admin':
+      // 마이그레이션 호환 — 서버는 더 이상 내려주지 않음.
+      case 'super_admin':
+      case 'tax_admin':
         return UserRole.admin;
       case 'worker':
         return UserRole.worker;
@@ -24,8 +30,6 @@ enum UserRole {
   /// UI 표시용 (한국어)
   String get labelKo {
     switch (this) {
-      case UserRole.superAdmin:
-        return '슈퍼관리자';
       case UserRole.admin:
         return '관리자';
       case UserRole.worker:
@@ -94,6 +98,7 @@ class LoginResponse {
 
   final String accessToken;
   final String refreshToken;
+
   /// 기본 `"bearer"`
   final String tokenType;
 
@@ -199,15 +204,42 @@ class UserRead {
     required this.role,
     this.approvalStatus = UserApprovalStatus.approved,
     this.isActive = true,
+    this.workerHid,
+    this.primarySpecialty,
+    this.specialties = const [],
+    this.workerRank = '',
+    this.career = '',
+    this.phoneMasked,
+    this.phoneVerified = false,
   });
 
   final String uid;
   final String uname;
   final UserRole role;
+
   /// 서버에 필드 없으면 [UserApprovalStatus.approved] 로 간주 (레거시 호환).
   final UserApprovalStatus approvalStatus;
+
   /// `is_active`. 서버에 필드 없으면 true.
   final bool isActive;
+
+  /// `/worker-management/*`·인력(hid) 연동용. 서버가 `worker_hid` 등으로 내려주면 사용.
+  final int? workerHid;
+
+  /// `GET /users`·`GET /users/{uid}` — 워커 프로필(또는 [humans] 동기화값).
+  final String? primarySpecialty;
+
+  final List<String> specialties;
+
+  /// `GET /auth/me` — 워커 프로필과 동기화.
+  final String workerRank;
+  final String career;
+  
+  /// 전화번호 (마스킹된 형태)
+  final String? phoneMasked;
+  
+  /// 전화번호 인증 여부
+  final bool phoneVerified;
 
   factory UserRead.fromJson(Map<String, dynamic> json) {
     bool parseActive(dynamic v) {
@@ -220,16 +252,42 @@ class UserRead {
       return true;
     }
 
+    int? parseWorkerHid() {
+      for (final k in [
+        'worker_hid',
+        'workerHid',
+        'human_hid',
+        'humanHid',
+      ]) {
+        final v = json[k];
+        if (v is int) return v > 0 ? v : null;
+        if (v is num) {
+          final i = v.toInt();
+          return i > 0 ? i : null;
+        }
+        if (v is String) {
+          final i = int.tryParse(v.trim());
+          if (i != null && i > 0) return i;
+        }
+      }
+      return null;
+    }
+
     final approvalRaw = json['approval_status'] ?? json['approvalStatus'];
     final activeRaw = json['is_active'] ?? json['isActive'];
-    final hasApprovalKey =
-        json.containsKey('approval_status') ||
-            json.containsKey('approvalStatus');
+    final hasApprovalKey = json.containsKey('approval_status') ||
+        json.containsKey('approvalStatus');
     final hasActiveKey =
         json.containsKey('is_active') || json.containsKey('isActive');
 
     final approvalWire =
         approvalRaw is String ? approvalRaw : approvalRaw?.toString();
+
+    final skills = parseWorkerSkillsFromMap(json);
+    final rankRaw = json['worker_rank'] ?? json['workerRank'];
+    final careerRaw = json['career'];
+    final phoneMaskedRaw = json['phone_masked'] ?? json['phoneMasked'];
+    final phoneVerifiedRaw = json['phone_verified'] ?? json['phoneVerified'];
 
     return UserRead(
       uid: json['uid'] as String,
@@ -238,30 +296,73 @@ class UserRead {
       approvalStatus: hasApprovalKey
           ? UserApprovalStatus.parse(approvalWire)
           : UserApprovalStatus.approved,
-      isActive:
-          hasActiveKey ? parseActive(activeRaw) : true,
+      isActive: hasActiveKey ? parseActive(activeRaw) : true,
+      workerHid: parseWorkerHid(),
+      primarySpecialty: skills.primary,
+      specialties: skills.specialties,
+      workerRank: rankRaw is String ? rankRaw.trim() : '',
+      career: careerRaw is String ? careerRaw.trim() : '',
+      phoneMasked: phoneMaskedRaw is String ? phoneMaskedRaw.trim() : null,
+      phoneVerified: phoneVerifiedRaw == true,
     );
   }
 }
 
-Map<String, dynamic> loginRequestBody(String uid, String upw) => <String, dynamic>{
+Map<String, dynamic> loginRequestBody(String uid, String upw) =>
+    <String, dynamic>{
       'uid': uid,
       'upw': upw,
     };
 
 /// `POST /auth/signup` — role 없음 (서버에서 worker·pending 처리).
+/// 작업자 스킬은 [workerProfile] 로 함께 전달(서버가 `primary_specialty`·`specialties` 저장).
 Map<String, dynamic> signupRequestBody({
   required String uid,
   required String upw,
   required String uname,
-}) =>
-    <String, dynamic>{
-      'uid': uid,
-      'upw': upw,
-      'uname': uname,
-    };
+  WorkerProfileRead? workerProfile,
+  String? phone,
+  String? phoneVerificationToken,
+  String? hnumber,
+  List<TermAgreementInput>? termsAgreements,
+  String? phoneForMatching,
+}) {
+  final body = <String, dynamic>{
+    'uid': uid,
+    'upw': upw,
+    'uname': uname,
+  };
+  if (termsAgreements != null && termsAgreements.isNotEmpty) {
+    body['terms_agreements'] =
+        termsAgreements.map((a) => a.toJson()).toList(growable: false);
+  }
+  final phoneNorm = phone == null ? '' : normalizeKoreanMobilePhone(phone);
+  if (phoneNorm.isNotEmpty) {
+    body['phone'] = phoneNorm;
+  }
+  final token = phoneVerificationToken?.trim() ?? '';
+  if (token.isNotEmpty) {
+    body['phone_verification_token'] = token;
+  }
+  final hnum = hnumber == null
+      ? ''
+      : formatResidentRegistrationDisplay(hnumber).trim();
+  if (hnum.isNotEmpty) {
+    body['hnumber'] = hnum;
+  }
+  if (phoneForMatching != null && phoneForMatching.trim().isNotEmpty) {
+    body['phone_for_matching'] = phoneForMatching.trim();
+  }
+  final profile = workerProfile;
+  if (profile != null) {
+    final json = profile.toJson();
+    body.addAll(json);
+  }
+  return body;
+}
 
 /// 서버 계약: `POST /auth/refresh` 본문 필드명은 `refresh_token` 만 사용 (extra=forbid 호환).
-Map<String, dynamic> refreshRequestBody(String refreshToken) => <String, dynamic>{
+Map<String, dynamic> refreshRequestBody(String refreshToken) =>
+    <String, dynamic>{
       'refresh_token': refreshToken,
     };
