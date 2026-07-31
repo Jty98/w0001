@@ -1,5 +1,8 @@
 import 'package:w0001/data/datasources/remote/http_client.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
+import 'package:w0001/data/datasources/remote/remote_list_pages.dart';
 import 'package:w0001/data/datasources/remote/super_admin/super_admin_api_common.dart';
+import 'package:w0001/data/model/paged_result.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/util/api_endpoint.dart';
 
@@ -8,10 +11,18 @@ final class PlaceWorkDaysRemoteApi {
 
   final AppHttpClient _http;
 
-  Future<List<PlaceWorkDayRead>> list() async {
-    final r = await _http.get<dynamic>(ApiEndpoint.placeWorkDays);
-    return saMapList(r.data, PlaceWorkDayRead.fromJson);
+  Future<PagedResult<PlaceWorkDayRead>> listPage(ListQuery query) async {
+    final r = await _http.get<dynamic>(
+      ApiEndpoint.placeWorkDays,
+      queryParameters: query.toQueryParameters(),
+    );
+    return saParsePagedList(r.data, PlaceWorkDayRead.fromJson);
   }
+
+  Future<List<PlaceWorkDayRead>> listAll(ListQuery query) =>
+      fetchAllListPages(listPage, query);
+
+  Future<List<PlaceWorkDayRead>> list() => listAll(const ListQuery());
 
   Future<PlaceWorkDayRead> get(int pwdid) async {
     final r = await _http.get<dynamic>(ApiEndpoint.placeWorkDaysId(pwdid));

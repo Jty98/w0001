@@ -1,10 +1,12 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/access/user_role_capabilities.dart';
 import 'package:w0001/data/model/terms_models.dart';
+import 'package:w0001/presentation/viewmodel/large_text_mode_provider.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/terms_providers.dart';
 import 'package:w0001/presentation/viewmodel/theme_mode_providers.dart';
@@ -30,7 +32,7 @@ class _OperatorSettingsScreenState
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (ctx) => const AppLoadingIndicator(),
     );
 
     try {
@@ -46,7 +48,8 @@ class _OperatorSettingsScreenState
         return;
       }
 
-      final detail = await ref.read(termsUseCaseProvider).getTermDetail(term.id);
+      final detail =
+          await ref.read(termsUseCaseProvider).getTermDetail(term.id);
 
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -66,8 +69,10 @@ class _OperatorSettingsScreenState
     final colorScheme = Theme.of(context).colorScheme;
     final session = ref.watch(authSessionProvider);
     final user = session.asData?.value;
-    final canAccessWorkerMgmt = user?.role.canAccessWorkerManagementMenus ?? false;
+    final canAccessWorkerMgmt =
+        user?.role.canAccessWorkerManagementMenus ?? false;
     final canManageMemberAccounts = user?.role.canManageMemberAccounts ?? false;
+    final canManageExtras = user?.role.canManageExtras ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -170,7 +175,35 @@ class _OperatorSettingsScreenState
                           Icons.chevron_right_rounded,
                           size: context.rsi(20),
                         ),
-                        onTap: () => context.push('/dashboard/worker-mgmt/memos'),
+                        onTap: () =>
+                            context.push('/dashboard/worker-mgmt/memos'),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: context.rsi(48),
+                        color: colorScheme.outlineVariant,
+                      ),
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.payments_outlined,
+                          color: colorScheme.primary,
+                          size: context.rsi(22),
+                        ),
+                        title: Text(
+                          '역할별 기본 일당',
+                          style: TextStyle(fontSize: context.rs(14)),
+                        ),
+                        subtitle: Text(
+                          '조공·준기공·기공·반장·감리 역할별 인건비',
+                          style: TextStyle(fontSize: context.rs(12)),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rsi(20),
+                        ),
+                        onTap: () =>
+                            context.push('/dashboard/worker-mgmt/rank-wages'),
                       ),
                       Divider(
                         height: 1,
@@ -196,7 +229,8 @@ class _OperatorSettingsScreenState
                           Icons.chevron_right_rounded,
                           size: context.rsi(20),
                         ),
-                        onTap: () => context.push('/dashboard/worker-mgmt/troubles'),
+                        onTap: () =>
+                            context.push('/dashboard/worker-mgmt/troubles'),
                       ),
                     ],
                   ),
@@ -234,6 +268,95 @@ class _OperatorSettingsScreenState
                 ),
               ],
 
+              if (canManageExtras) ...[
+                SizedBox(height: context.rsi(20)),
+                const ProfileSectionTitle('부가기능'),
+                SizedBox(height: context.rsi(8)),
+                ProfileInsetPanel(
+                  padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.format_quote_rounded,
+                          color: colorScheme.primary,
+                          size: context.rsi(22),
+                        ),
+                        title: Text(
+                          '오늘의 명언',
+                          style: TextStyle(fontSize: context.rs(14)),
+                        ),
+                        subtitle: Text(
+                          '명언 풀·자동 선정·오늘 직접 지정',
+                          style: TextStyle(fontSize: context.rs(12)),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rsi(20),
+                        ),
+                        onTap: () =>
+                            context.push('/dashboard/extras/daily-quotes'),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: context.rsi(48),
+                        color: colorScheme.outlineVariant,
+                      ),
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.menu_book_outlined,
+                          color: colorScheme.primary,
+                          size: context.rsi(22),
+                        ),
+                        title: Text(
+                          '현장 지식 사전',
+                          style: TextStyle(fontSize: context.rs(14)),
+                        ),
+                        subtitle: Text(
+                          '자재·용어·베스트·워스트 사례',
+                          style: TextStyle(fontSize: context.rs(12)),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rsi(20),
+                        ),
+                        onTap: () =>
+                            context.push('/dashboard/extras/knowledge'),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: context.rsi(48),
+                        color: colorScheme.outlineVariant,
+                      ),
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.local_phone_outlined,
+                          color: colorScheme.primary,
+                          size: context.rsi(22),
+                        ),
+                        title: Text(
+                          '공용 거래처 전화번호',
+                          style: TextStyle(fontSize: context.rs(14)),
+                        ),
+                        subtitle: Text(
+                          '관리자 공용 거래처 연락처 관리부',
+                          style: TextStyle(fontSize: context.rs(12)),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rsi(20),
+                        ),
+                        onTap: () =>
+                            context.push('/dashboard/extras/vendor-phones'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               SizedBox(height: context.rsi(20)),
 
               // 앱 정보 섹션
@@ -252,7 +375,7 @@ class _OperatorSettingsScreenState
                           dense: true,
                           leading: Icon(
                             isDark ? Icons.dark_mode : Icons.light_mode,
-                            color: colorScheme.onSurfaceVariant,
+                            color: colorScheme.primary,
                             size: context.rsi(22),
                           ),
                           title: Text(
@@ -280,21 +403,35 @@ class _OperatorSettingsScreenState
                       indent: context.rsi(48),
                       color: colorScheme.outlineVariant,
                     ),
-                    ListTile(
-                      dense: true,
-                      leading: Icon(
-                        Icons.info_outline,
-                        color: colorScheme.onSurfaceVariant,
-                        size: context.rsi(22),
-                      ),
-                      title: Text(
-                        '앱 버전',
-                        style: TextStyle(fontSize: context.rs(14)),
-                      ),
-                      subtitle: Text(
-                        _appVersion,
-                        style: TextStyle(fontSize: context.rs(12)),
-                      ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final largeText = ref.watch(largeTextModeProvider);
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            Icons.text_fields_rounded,
+                            color: colorScheme.primary,
+                            size: context.rsi(22),
+                          ),
+                          title: Text(
+                            '큰 글씨 모드',
+                            style: TextStyle(fontSize: context.rs(14)),
+                          ),
+                          subtitle: Text(
+                            largeText ? '큰 글씨 적용됨' : '일반 글씨 크기',
+                            style: TextStyle(fontSize: context.rs(12)),
+                          ),
+                          trailing: Switch(
+                            value: largeText,
+                            onChanged: (value) {
+                              ref
+                                  .read(largeTextModeProvider.notifier)
+                                  .setEnabled(value);
+                            },
+                            activeColor: colorScheme.primary,
+                          ),
+                        );
+                      },
                     ),
                     Divider(
                       height: 1,
@@ -305,7 +442,7 @@ class _OperatorSettingsScreenState
                       dense: true,
                       leading: Icon(
                         Icons.description_outlined,
-                        color: colorScheme.onSurfaceVariant,
+                        color: colorScheme.primary,
                         size: context.rsi(22),
                       ),
                       title: Text(
@@ -329,7 +466,7 @@ class _OperatorSettingsScreenState
                       dense: true,
                       leading: Icon(
                         Icons.privacy_tip_outlined,
-                        color: colorScheme.onSurfaceVariant,
+                        color: colorScheme.primary,
                         size: context.rsi(22),
                       ),
                       title: Text(
@@ -342,6 +479,27 @@ class _OperatorSettingsScreenState
                       ),
                       onTap: () => unawaited(
                         _showTermsDetail(context, TermType.privacy),
+                      ),
+                    ),
+                    Divider(
+                      height: 1,
+                      indent: context.rsi(48),
+                      color: colorScheme.outlineVariant,
+                    ),
+                    ListTile(
+                      dense: true,
+                      leading: Icon(
+                        Icons.info_outline,
+                        color: colorScheme.primary,
+                        size: context.rsi(22),
+                      ),
+                      title: Text(
+                        '앱 버전',
+                        style: TextStyle(fontSize: context.rs(14)),
+                      ),
+                      subtitle: Text(
+                        _appVersion,
+                        style: TextStyle(fontSize: context.rs(12)),
                       ),
                     ),
                   ],

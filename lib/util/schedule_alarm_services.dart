@@ -6,7 +6,8 @@ final scheduleAlarmServicesReady = Completer<void>();
 Future<void> whenScheduleAlarmServicesReady() async {
   if (scheduleAlarmServicesReady.isCompleted) return;
   try {
-    await scheduleAlarmServicesReady.future.timeout(const Duration(seconds: 30));
+    await scheduleAlarmServicesReady.future
+        .timeout(const Duration(seconds: 30));
   } catch (_) {
     // init 타임아웃이어도 동기화는 시도한다.
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/ui/screen/0_auth/auth_dialog_chrome.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 TextStyle _bodyStyle(BuildContext context) {
   final cs = Theme.of(context).colorScheme;
@@ -87,7 +88,7 @@ class _SuperAdminConfirmWithNoteDialogState
           children: [
             Text(widget.body, style: _bodyStyle(context)),
             const SizedBox(height: 16),
-            TextField(
+            AppTextField(
               controller: _noteCtrl,
               decoration: AuthDialogChromeTheme.inputDecoration(
                 context: context,
@@ -224,7 +225,7 @@ class _SuperAdminSensitiveActionPasswordDialogState
           children: [
             Text(widget.body, style: _bodyStyle(context)),
             const SizedBox(height: 16),
-            TextField(
+            AppTextField(
               controller: _pwCtrl,
               autofocus: true,
               obscureText: _obscure,

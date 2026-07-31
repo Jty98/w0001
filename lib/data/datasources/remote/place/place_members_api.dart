@@ -14,7 +14,7 @@ final class PlaceMembersApi {
     final r = await _http.get<dynamic>(
       '${ApiEndpoint.places}/$pid/members',
     );
-    
+
     final data = r.data;
     final List<dynamic> list;
     if (data is List) {
@@ -37,15 +37,23 @@ final class PlaceMembersApi {
       final m = Map<String, dynamic>.from(e);
       out.add(PlaceMemberRead.fromJson(m));
     }
-    
+
     return out;
   }
 
   /// 작업자 초대.
-  Future<PlaceMemberAddResponse> addMember(int pid, String workerUid) async {
+  ///
+  /// [autoAdded] true — 작업 투입 후 자동 멤버 추가(초대 알림 생략 요청).
+  Future<PlaceMemberAddResponse> addMember(
+    int pid,
+    String workerUid, {
+    bool autoAdded = false,
+  }) async {
     final r = await _http.post<dynamic>(
       '${ApiEndpoint.places}/$pid/members/$workerUid',
-      data: <String, dynamic>{},
+      data: autoAdded
+          ? <String, dynamic>{'auto_added': true}
+          : <String, dynamic>{},
     );
     return PlaceMemberAddResponse.fromJson(_unwrapMemberEnvelope(r.data));
   }

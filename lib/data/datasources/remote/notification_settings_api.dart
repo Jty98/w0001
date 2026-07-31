@@ -13,7 +13,7 @@ class NotificationSettingsApi {
     final res = await _http.get<dynamic>(
       ApiEndpoint.usersMeNotificationSettings,
     );
-    
+
     final data = res.data;
     if (data is! Map<String, dynamic>) {
       throw const FormatException('알림 설정 응답 형식이 올바르지 않습니다.');

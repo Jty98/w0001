@@ -15,6 +15,12 @@ abstract final class PlaceWorkforceSchedule {
   /// 캘린더 하단 점: 인력 투입이 있는 날 — 공정만 함께 있어도 이 색 점 1개만.
   static const Color _workforceDayDot = Color(0xFF16A34A);
 
+  /// 공정 점/범례 공용 색.
+  static Color get scheduleDayDotColor => _scheduleDayDot;
+
+  /// 인력 투입 점/범례 공용 색.
+  static Color get workforceDayDotColor => _workforceDayDot;
+
   /// 전역 캘린더 탭: 현장 일정(공정·투입)만 있는 날.
   static const Color _siteDayDot = Color(0xFF6B7280);
 
@@ -250,11 +256,11 @@ abstract final class PlaceWorkforceSchedule {
   }
 }
 
-/// 인력·투입 화면 캘린더 높이. 작은 기기에서는 비율을 낮춰 아래 투입 목록 영역을 넓힙니다.
+/// 인력·투입 화면 캘린더 — [ScrollableCalendarWidget.adaptiveHeightForWeekModes] 상한 힌트.
 double workforceCalendarHeight(BuildContext context) {
   final h = MediaQuery.sizeOf(context).height;
   if (h < 720) {
-    return (h * 0.36).clamp(220.0, 320.0);
+    return (h * 0.30).clamp(220.0, 300.0);
   }
-  return (h * 0.40).clamp(260.0, 420.0);
+  return (h * 0.34).clamp(260.0, 380.0);
 }

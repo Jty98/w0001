@@ -19,8 +19,12 @@ final class PlaceMembersRepositoryImpl implements PlaceMembersRepository {
   }
 
   @override
-  Future<PlaceMemberAddResponse> addMember(int pid, String workerUid) =>
-      _api.addMember(pid, workerUid);
+  Future<PlaceMemberAddResponse> addMember(
+    int pid,
+    String workerUid, {
+    bool autoAdded = false,
+  }) =>
+      _api.addMember(pid, workerUid, autoAdded: autoAdded);
 
   @override
   Future<PlaceMemberRemoveResponse> removeMember(int pid, String workerUid) =>

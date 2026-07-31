@@ -81,6 +81,23 @@ bool isFullPeriodDateRange(DateTimeRange range) {
       isSameCalendarDay(range.end, DateTime(2099, 12, 31));
 }
 
+bool isFullYearDateRange(DateTimeRange range) {
+  final s = range.start;
+  final e = range.end;
+  return s.year == e.year &&
+      s.month == 1 &&
+      s.day == 1 &&
+      e.month == 12 &&
+      e.day == 31;
+}
+
+DateTimeRange getYearDateRange(int year) {
+  return DateTimeRange(
+    start: DateTime(year, 1, 1),
+    end: DateTime(year, 12, 31),
+  );
+}
+
 String formatDateTimeRangeToString(
   DateTimeRange dateTimeRange, {
   bool showYear = true,
@@ -91,6 +108,10 @@ String formatDateTimeRangeToString(
 
   if (periodType == DayTpye.whole || isFullPeriodDateRange(dateTimeRange)) {
     return '전체 기간';
+  }
+
+  if (periodType == DayTpye.year || isFullYearDateRange(dateTimeRange)) {
+    return '${start.year}년';
   }
 
   // 시작 날짜가 해당 달의 첫째 날인지, 끝 날짜가 해당 달의 마지막 날인지 확인
@@ -203,14 +224,105 @@ String getPrice({required int price, bool? isTaxApply, bool? isContainWon}) {
   return formattedString;
 }
 
+/// 좁은 UI용 원화 축약 — 억·만·천·백 조합 (소수점 없음).
+///
+/// 길이에 따라 자릿수를 줄인다 (정확한 값은 [getPrice]·Tooltip).
+/// * **1억 미만 · 1천만 미만** — `63만 5천원` (만 + 천·백)
+/// * **1천만 이상 · 1억 미만** — `1,234만원` (만까지만)
+/// * **1억 이상** — `1억 2,345만원` (억·만까지만, `1억 5천원` 예외)
+String formatCompactKrw(int price, {bool includeWon = true}) {
+  final suffix = includeWon ? '원' : '';
+  final negative = price < 0;
+  final n = price.abs();
+  final sign = negative ? '-' : '';
+
+  String comma(int v) => getPrice(price: v, isContainWon: false);
+
+  if (n < 1000) {
+    return '$sign${comma(n)}$suffix';
+  }
+  if (n < 10000) {
+    final underMan = _formatKrwUnderMan(n);
+    return underMan.isEmpty
+        ? '$sign${comma(n)}$suffix'
+        : '$sign$underMan$suffix';
+  }
+
+  // 1억 이상 — 억·만 (만 미만은 억 단위만 있을 때만 천·백 표시)
+  if (n >= 100000000) {
+    final parts = <String>['${comma(n ~/ 100000000)}억'];
+    var rest = n % 100000000;
+    if (rest >= 10000) {
+      parts.add('${comma(rest ~/ 10000)}만');
+      rest %= 10000;
+    }
+    if (rest > 0) {
+      parts.add(_formatKrwUnderMan(rest));
+    }
+    return '$sign${parts.join(' ')}$suffix';
+  }
+
+  // 1천만 이상 — 만 단위까지만 (칸 너비 절약)
+  if (n >= 10000000) {
+    return '$sign${comma(n ~/ 10000)}만$suffix';
+  }
+
+  // 1천만 미만 — 만 + 천·백
+  final parts = <String>['${comma(n ~/ 10000)}만'];
+  final rest = n % 10000;
+  if (rest > 0) {
+    parts.add(_formatKrwUnderMan(rest));
+  }
+  return '$sign${parts.join(' ')}$suffix';
+}
+
+/// 1만 원 미만 — `5천`, `5천 5백`, `5,678` 등 한국어 단위 조합.
+String _formatKrwUnderMan(int amount) {
+  if (amount <= 0) return '';
+
+  final parts = <String>[];
+  var rest = amount;
+
+  final cheon = rest ~/ 1000;
+  if (cheon > 0) {
+    parts.add('$cheon천');
+    rest %= 1000;
+  }
+  if (rest <= 0) return parts.join(' ');
+
+  if (rest >= 100 && rest % 100 == 0) {
+    parts.add('${rest ~/ 100}백');
+    return parts.join(' ');
+  }
+
+  parts.add(getPrice(price: rest, isContainWon: false));
+  return parts.join(' ');
+}
+
 /// 인건비 지급 완료 일시 표시 (`wcompleted_at` ISO 문자열).
 String formatWorkCostCompletedAt(String completedAt) {
   try {
-    final dt = DateTime.parse(completedAt);
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    final dt = DateTime.parse(completedAt).toLocal();
+    final y = dt.year % 100;
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final mi = dt.minute.toString().padLeft(2, '0');
+    return '$y.$m.$d $h시$mi분';
   } catch (_) {
     return completedAt;
   }
+}
+
+String formatWorkCostWorkDate(String raw) {
+  final ymd = normalizeToIsoDateString(raw);
+  final parsed = DateTime.tryParse(ymd);
+  if (parsed == null) return raw;
+  final local = parsed.toLocal();
+  final y = local.year % 100;
+  return '${y.toString().padLeft(2, '0')}.'
+      '${local.month.toString().padLeft(2, '0')}.'
+      '${local.day.toString().padLeft(2, '0')}';
 }
 
 DateTimeRange getMonthDateRange(DateTime now) {

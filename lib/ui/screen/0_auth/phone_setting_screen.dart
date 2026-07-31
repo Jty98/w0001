@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -8,6 +9,8 @@ import 'package:w0001/presentation/viewmodel/user_account_providers.dart';
 import 'package:w0001/util/auth_api_user_messages.dart';
 import 'package:w0001/util/phone_number_format.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/theme/app_section_card.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 작업자 전화번호 설정/인증 화면
 class PhoneSettingScreen extends ConsumerStatefulWidget {
@@ -20,7 +23,7 @@ class PhoneSettingScreen extends ConsumerStatefulWidget {
 class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
   final _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  
+
   var _isVerifying = false;
   var _verificationStarted = false;
 
@@ -46,11 +49,11 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
     try {
       final phone = _phoneController.text.trim();
       final notifier = ref.read(phoneMoVerificationNotifierProvider.notifier);
-      
+
       await notifier.startVerification(phone);
-      
+
       if (!mounted) return;
-      
+
       setState(() {
         _verificationStarted = true;
         _isVerifying = false;
@@ -88,7 +91,7 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
   Future<void> _waitForVerification() async {
     final phone = _phoneController.text.trim();
     final notifier = ref.read(phoneMoVerificationNotifierProvider.notifier);
-    
+
     try {
       final token = await notifier.waitForVerification(phone);
 
@@ -96,23 +99,23 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
             phone: phone,
             phoneVerificationToken: token,
           );
-      
+
       if (!mounted) return;
-      
+
       await Future.wait([
         ref.read(authSessionProvider.notifier).loadCurrentUser(),
         ref.read(userAccountProvider.notifier).reload(),
       ]);
-      
+
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('전화번호가 등록되었습니다.'),
           backgroundColor: Colors.green,
         ),
       );
-      
+
       context.pop();
     } catch (e) {
       if (!mounted) return;
@@ -146,15 +149,8 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
               // 현재 등록된 전화번호
               if (account?.phoneMasked != null &&
                   account!.phoneMasked!.isNotEmpty) ...[
-                Container(
+                AppInsetCard(
                   padding: EdgeInsets.all(context.rsi(16)),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.42),
-                    ),
-                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -232,7 +228,7 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
               rsV(context, 16),
 
               // 전화번호 입력
-              TextFormField(
+              AppTextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
                 enabled: !_verificationStarted && !_isVerifying,
@@ -265,10 +261,7 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
                       ? SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: cs.onPrimary,
-                          ),
+                          child: const HammerLoadingIndicator(size: 20),
                         )
                       : const Icon(Icons.verified_user_rounded),
                   label: Text(_isVerifying ? '인증 시작 중...' : '인증 시작'),
@@ -280,20 +273,13 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
 
               // 인증 대기 중
               if (_verificationStarted) ...[
-                Container(
+                AppInsetTile(
+                  borderRadius: BorderRadius.circular(12),
+                  backgroundColor: cs.primaryContainer.withValues(alpha: 0.3),
                   padding: EdgeInsets.all(context.rsi(16)),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: cs.primary.withValues(alpha: 0.3),
-                    ),
-                  ),
                   child: Column(
                     children: [
-                      CircularProgressIndicator(
-                        color: cs.primary,
-                      ),
+                      const HammerLoadingIndicator(size: 44),
                       rsV(context, 16),
                       Text(
                         '문자앱에서 인증을 완료해주세요',
@@ -325,12 +311,9 @@ class _PhoneSettingScreenState extends ConsumerState<PhoneSettingScreen> {
               rsV(context, 24),
 
               // 안내 사항
-              Container(
+              AppInsetTile(
+                borderRadius: BorderRadius.circular(8),
                 padding: EdgeInsets.all(context.rsi(12)),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
-                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

@@ -173,8 +173,8 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
                                         decoration: BoxDecoration(
                                           color: cs.surfaceContainerHighest
                                               .withValues(alpha: 0.45),
-                                          borderRadius:
-                                              BorderRadius.circular(context.rs(8)),
+                                          borderRadius: BorderRadius.circular(
+                                              context.rs(8)),
                                           border: Border.all(
                                             color: cs.outlineVariant
                                                 .withValues(alpha: 0.4),

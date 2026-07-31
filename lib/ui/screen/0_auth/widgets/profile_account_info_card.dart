@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/profile_info_row.dart';
-import 'package:w0001/ui/screen/0_auth/widgets/profile_row_divider.dart';
 
 class ProfileAccountInfoCard extends StatelessWidget {
   const ProfileAccountInfoCard({
@@ -23,14 +23,7 @@ class ProfileAccountInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.42),
-        ),
-      ),
+    return AppInsetCard(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -39,13 +32,13 @@ class ProfileAccountInfoCard extends StatelessWidget {
             label: '아이디',
             value: user.uid,
           ),
-          const ProfileRowDivider(),
+          const AppInsetDivider(),
           ProfileInfoRow(
             icon: Icons.person_outline_rounded,
             label: '이름',
             value: user.uname,
           ),
-          const ProfileRowDivider(),
+          const AppInsetDivider(),
           ProfileInfoRow(
             icon: Icons.verified_user_outlined,
             label: '권한',
@@ -54,11 +47,10 @@ class ProfileAccountInfoCard extends StatelessWidget {
           if (showPhone &&
               user.phoneMasked != null &&
               user.phoneMasked!.isNotEmpty) ...[
-            const ProfileRowDivider(),
+            const AppInsetDivider(),
             InkWell(
-              onTap: user.isWorker
-                  ? () => context.push(phoneSettingRoute)
-                  : null,
+              onTap:
+                  user.isWorker ? () => context.push(phoneSettingRoute) : null,
               borderRadius: BorderRadius.circular(12),
               child: ProfileInfoRow(
                 icon: Icons.phone_outlined,
@@ -89,7 +81,7 @@ class ProfileAccountInfoCard extends StatelessWidget {
               ),
             ),
           ] else if (showPhone && user.isWorker) ...[
-            const ProfileRowDivider(),
+            const AppInsetDivider(),
             InkWell(
               onTap: () => context.push(phoneSettingRoute),
               borderRadius: BorderRadius.circular(12),
@@ -108,7 +100,7 @@ class ProfileAccountInfoCard extends StatelessWidget {
           if (showWorkerMeta &&
               user.isWorker &&
               (user.workerRank.isNotEmpty || user.career.isNotEmpty)) ...[
-            const ProfileRowDivider(),
+            const AppInsetDivider(),
             if (user.workerRank.isNotEmpty)
               ProfileInfoRow(
                 icon: Icons.badge_outlined,
@@ -116,7 +108,7 @@ class ProfileAccountInfoCard extends StatelessWidget {
                 value: user.workerRank,
               ),
             if (user.workerRank.isNotEmpty && user.career.isNotEmpty)
-              const ProfileRowDivider(),
+              const AppInsetDivider(),
             if (user.career.isNotEmpty)
               ProfileInfoRow(
                 icon: Icons.history_edu_outlined,

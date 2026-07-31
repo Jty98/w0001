@@ -16,7 +16,8 @@ const _forcedSignOutSnackThrottle = Duration(seconds: 12);
 ///
 /// 동시에 여러 API가 401이어도 처리·스낵바는 한 번만 수행한다.
 Future<void> performAuthForcedSignOut(String userMessage) {
-  return _forcedSignOutInFlight ??= _runForcedSignOut(userMessage).whenComplete(() {
+  return _forcedSignOutInFlight ??=
+      _runForcedSignOut(userMessage).whenComplete(() {
     _forcedSignOutInFlight = null;
   });
 }
@@ -38,7 +39,8 @@ Future<void> _runForcedSignOut(String userMessage) async {
 void _showForcedSignOutSnackBarOnce(String message) {
   final now = DateTime.now();
   if (_lastForcedSignOutSnackAt != null &&
-      now.difference(_lastForcedSignOutSnackAt!) < _forcedSignOutSnackThrottle) {
+      now.difference(_lastForcedSignOutSnackAt!) <
+          _forcedSignOutSnackThrottle) {
     return;
   }
   _lastForcedSignOutSnackAt = now;

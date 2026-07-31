@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_theme_colors.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/screen/2_add/work_role_suggestions.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 금액추가·항목 수정 — 공정 / 인력 역할 / 자주 쓰는 역할(직접입력 포함).
 class WorkRoleChipPanel extends StatelessWidget {
@@ -58,7 +62,7 @@ class WorkRoleChipPanel extends StatelessWidget {
               minHeight: 2,
               borderRadius: BorderRadius.circular(2),
               color: cs.primary.withValues(alpha: 0.45),
-              backgroundColor: cs.surfaceContainerHighest,
+              backgroundColor: cs.appMutedFill,
             ),
           ),
         if (processTasks.isNotEmpty)
@@ -79,7 +83,7 @@ class WorkRoleChipPanel extends StatelessWidget {
           SizedBox(height: context.rsi(dense ? 10 : 12)),
           _RoleSection(
             icon: Icons.engineering_outlined,
-            title: '이 인력 역할',
+            title: '이 인력이 주로하는 역할',
             accent: cs.primary,
             dense: dense,
             child: _HorizontalRoleChips(
@@ -94,7 +98,7 @@ class WorkRoleChipPanel extends StatelessWidget {
         SizedBox(height: context.rsi(dense ? 10 : 12)),
         _RoleSection(
           icon: Icons.apps_rounded,
-          title: '자주 쓰는 역할',
+          title: '역할 설정',
           accent: cs.secondary,
           dense: dense,
           child: Column(
@@ -109,7 +113,7 @@ class WorkRoleChipPanel extends StatelessWidget {
               ),
               if (showCustomField) ...[
                 SizedBox(height: context.rsi(dense ? 8 : 10)),
-                TextField(
+                AppTextField(
                   controller: customRoleController,
                   style: tt.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
@@ -189,10 +193,7 @@ class _RoleSection extends StatelessWidget {
               width: context.rs(22),
               height: context.rs(22),
               alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(context.rsi(6)),
-              ),
+              decoration: AppSectionCardStyles.iconBadgeDecoration(context, cs),
               child: Icon(icon, size: context.rs(13), color: accent),
             ),
             SizedBox(width: context.rsi(7)),
@@ -232,14 +233,8 @@ class _HorizontalRoleChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(context.rsi(12)),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.22),
-        ),
-      ),
+    return AppInsetTile(
+      borderRadius: BorderRadius.circular(context.rsi(12)),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(context.rsi(12)),
         child: SizedBox(

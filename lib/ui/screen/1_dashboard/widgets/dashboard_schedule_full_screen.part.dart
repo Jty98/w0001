@@ -15,6 +15,7 @@ class _DashboardScheduleFullScreenState
   int _spanIndex = 0;
   int _weekNavDirection = 1;
   late DateTime _monthViewMonth;
+  late DashboardScheduleViewModel _scheduleVm;
   var _fullScreenMemosRequested = false;
 
   PageController? _monthPageCtrl;
@@ -26,10 +27,11 @@ class _DashboardScheduleFullScreenState
     super.didChangeDependencies();
     if (!_fullScreenMemosRequested) {
       _fullScreenMemosRequested = true;
+      _scheduleVm = ref.read(dashboardScheduleProvider.notifier);
       final st = ref.read(dashboardScheduleProvider);
       _monthViewMonth = DateTime(st.weekStart.year, st.weekStart.month, 1);
       Future.microtask(() {
-        ref.read(dashboardScheduleProvider.notifier).loadFullMemosIfNeeded();
+        _scheduleVm.loadFullMemosIfNeeded();
       });
     }
   }
@@ -92,7 +94,8 @@ class _DashboardScheduleFullScreenState
         return SizedBox(
           height: sheetHeight,
           child: Padding(
-            padding: ResponsiveLayout.only(ctx, left: 14, top: 4, right: 14, bottom: 16),
+            padding: ResponsiveLayout.only(ctx,
+                left: 14, top: 4, right: 14, bottom: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -124,7 +127,8 @@ class _DashboardScheduleFullScreenState
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(context.rs(12)),
+                              borderRadius:
+                                  BorderRadius.circular(context.rs(12)),
                               color: isSelected
                                   ? cs.primaryContainer
                                   : cs.surfaceContainerHighest
@@ -225,6 +229,9 @@ class _DashboardScheduleFullScreenState
 
   @override
   void dispose() {
+    if (_fullScreenMemosRequested) {
+      _scheduleVm.flushPendingDonePatches();
+    }
     _fullScrollCtrl.dispose();
     _monthPageCtrl?.dispose();
     super.dispose();
@@ -303,9 +310,9 @@ class _DashboardScheduleFullScreenState
                   child: Text(
                     '${d.year}년 ${d.month}월',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: cs.onSurface,
-                    ),
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                        ),
                   ),
                 );
               },
@@ -361,9 +368,9 @@ class _DashboardScheduleFullScreenState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: cs.onSurface,
-                ),
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface,
+                    ),
               ),
             ),
             IconButton(
@@ -423,7 +430,8 @@ class _DashboardScheduleFullScreenState
             color: cs.surfaceContainerLow,
             elevation: 0,
             child: Padding(
-              padding: ResponsiveLayout.only(context, left: 12, top: 4, right: 12, bottom: 10),
+              padding: ResponsiveLayout.only(context,
+                  left: 12, top: 4, right: 12, bottom: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -485,14 +493,16 @@ class _DashboardScheduleFullScreenState
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Icon(Icons.today_outlined, size: context.rsi(18), color: cs.primary),
+                      Icon(Icons.today_outlined,
+                          size: context.rsi(18), color: cs.primary),
                       rsH(context, 6),
                       Expanded(
                         child: Text(
                           '${_selectedDayHeading(state.selectedDay)} 기준',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
                         ),
                       ),
                       TextButton(
@@ -600,8 +610,7 @@ class _DashboardScheduleFullScreenState
       bottom: bottomPad,
     );
     if (state.isFullLoading || state.fullMemos == null) {
-      final mon =
-          scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
+      final mon = scheduleDateOnly(scheduleStartOfWeekMonday(state.weekStart));
       return Skeletonizer(
         enabled: true,
         child: SingleChildScrollView(

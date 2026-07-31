@@ -4,12 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_view_model.dart';
-import 'package:w0001/util/funtions.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_global_announcement_card.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_metric_chart_sheet.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_outstanding_sheet.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
-import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_summary_card.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_kpi_section.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/management_dashboard_section_shell.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 관리자·슈퍼관리자 전용 **상황판** (`/dashboard` — 작업자는 [DashboardScreen]에서 분기되어 오지 않음).
@@ -26,6 +27,15 @@ class _ManagementDashboardScreenState
   final GlobalKey<DashboardGlobalAnnouncementCardState>
       _globalAnnouncementCardKey =
       GlobalKey<DashboardGlobalAnnouncementCardState>();
+  final ScrollController _scrollController = ScrollController();
+  static const _scrollStorageKey =
+      PageStorageKey<String>('management_dashboard_scroll');
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _showOutstandingSheet(BuildContext context, WidgetRef ref) {
     final places = ref.read(dashboardProvider).places;
@@ -52,221 +62,125 @@ class _ManagementDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(dashboardProvider);
-    final vm = ref.read(dashboardProvider.notifier);
     final cs = Theme.of(context).colorScheme;
-
-    final kpi = state.kpi;
-    final tt = Theme.of(context).textTheme;
+    final showBlockingLoad = ref.watch(
+      dashboardProvider.select(
+        (s) => s.isLoading && s.monthly.isEmpty && s.yearly.isEmpty,
+      ),
+    );
+    final vm = ref.read(dashboardProvider.notifier);
+    final padH = context.rsi(16);
+    final gap = context.rsi(12);
 
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('상황판'),
+        centerTitle: false,
+        scrolledUnderElevation: 0,
+        backgroundColor: cs.surface,
+        surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
-              onPressed: () {
-                context.push('/dashboard/profile');
-              },
-              icon: const Icon(Icons.person)),
+            onPressed: () => context.push('/dashboard/profile'),
+            icon: const Icon(Icons.person_outline_rounded),
+          ),
         ],
       ),
-      floatingActionButton: state.isLoading
-          ? null
-          : FloatingActionButton(
-              heroTag: 'dashboard_home_schedule_fab',
-              tooltip: '일정 추가',
-              onPressed: () {
-                final st = ref.read(dashboardScheduleProvider);
-                if (st.isWeekLoading) return;
-                openDashboardMemoEditor(
-                  context,
-                  ref,
-                  existing: null,
-                  initialDateOverride: st.selectedDay,
-                );
-              },
-              child: const Icon(Icons.edit_note_rounded),
-            ),
-      body: RefreshIndicator(
-              onRefresh: () async {
-                await vm.fetch();
-                await ref.read(dashboardScheduleProvider.notifier).refresh();
-                await _globalAnnouncementCardKey.currentState?.reloadPublic();
-              },
-              child: Skeletonizer(
-                enabled: state.isLoading,
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        context.rsi(12),
-                        context.rsi(8),
-                        context.rsi(12),
-                        0,
+      body: AppRefreshIndicator(
+        enabled: !showBlockingLoad,
+        onRefresh: () async {
+          await vm.fetch(silent: true);
+          await ref.read(dashboardScheduleProvider.notifier).refresh();
+          await _globalAnnouncementCardKey.currentState?.reloadPublic();
+        },
+        child: Skeletonizer(
+          enabled: showBlockingLoad,
+          child: CustomScrollView(
+            key: _scrollStorageKey,
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(padH, gap, padH, 0),
+                  child: ManagementDashboardSectionShell(
+                    icon: Icons.event_note_outlined,
+                    title: '일정 · 메모',
+                    denseHeader: true,
+                    trailing: IconButton(
+                      tooltip: '일정 추가',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.add,
+                        size: context.rsi(22),
+                        color: cs.onSurfaceVariant,
                       ),
-                      child: const DashboardScheduleCompactCard(),
-                    ),
-                  ),
-                  SliverToBoxAdapter(child: SizedBox(height: context.rsi(14))),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        context.rsi(12),
-                        0,
-                        context.rsi(12),
-                        context.rsi(14),
-                      ),
-                      child: DashboardGlobalAnnouncementCard(
-                        key: _globalAnnouncementCardKey,
-                      ),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(0, 0, 0, context.rsi(28)),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            context.rsi(12),
-                            0,
-                            context.rsi(12),
-                            context.rsi(4),
-                          ),
-                          child: Text(
-                            '${kpi.year}년 ${kpi.month}월 기준',
-                            style: tt.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: context.rsi(12)),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final gap = context.rsi(8);
-                              final w = (constraints.maxWidth - gap) / 2;
-                              return Wrap(
-                                spacing: gap,
-                                runSpacing: gap,
-                                children: [
-                                  SizedBox(
-                                    width: w,
-                                    child: DashboardSummaryCard(
-                                      title: '공사금액',
-                                      value:
-                                          getPrice(price: kpi.monthlyContract),
-                                      color: cs.tertiary,
-                                      icon: Icons.description_outlined,
-                                      onTap: () => _showMetricChart(
-                                        context,
-                                        ref,
-                                        DashboardMetricKind.construction,
-                                        DashboardPlaceBreakdownFilter.all,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: w,
-                                    child: DashboardSummaryCard(
-                                      title: '공사원가',
-                                      value: getPrice(price: kpi.monthlyCost),
-                                      color: cs.tertiaryContainer,
-                                      icon: Icons.payments_outlined,
-                                      onTap: () => _showMetricChart(
-                                        context,
-                                        ref,
-                                        DashboardMetricKind.cost,
-                                        DashboardPlaceBreakdownFilter.all,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: w,
-                                    child: DashboardSummaryCard(
-                                      title: '수금액',
-                                      value: getPrice(
-                                          price: kpi.monthlyCollection),
-                                      color: cs.primary,
-                                      icon:
-                                          Icons.account_balance_wallet_outlined,
-                                      onTap: () => _showMetricChart(
-                                        context,
-                                        ref,
-                                        DashboardMetricKind.collection,
-                                        DashboardPlaceBreakdownFilter.all,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: w,
-                                    child: DashboardSummaryCard(
-                                      title: '미수금 잔액',
-                                      value: getPrice(
-                                        price: kpi.outstandingReceivable,
-                                      ),
-                                      color: cs.secondary,
-                                      icon: Icons.request_quote_outlined,
-                                      onTap: () => _showOutstandingSheet(
-                                        context,
-                                        ref,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: w,
-                                    child: DashboardSummaryCard(
-                                      title: '영업이익',
-                                      value: getPrice(
-                                        price: kpi.completedContractProfitTotal,
-                                      ),
-                                      valueSecondary: kpi
-                                                  .completedSitesInKpiMonth ==
-                                              0
-                                          ? '—'
-                                          : '${kpi.completedContractMarginPct.toStringAsFixed(1)}%',
-                                      color: cs.primary,
-                                      icon: Icons.trending_up_rounded,
-                                      onTap: () => _showMetricChart(
-                                        context,
-                                        ref,
-                                        DashboardMetricKind.profitAndMargin,
-                                        DashboardPlaceBreakdownFilter.all,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: w,
-                                    child: DashboardSummaryCard(
-                                      title: '현장 현황',
-                                      subtitle: '진행중 · 완료',
-                                      value: '${kpi.inProgressPlaces}곳',
-                                      valueSecondary: '${kpi.completedPlaces}곳',
-                                      color: cs.onSurfaceVariant,
-                                      icon: Icons.construction_outlined,
-                                      onTap: () => _showMetricChart(
-                                        context,
-                                        ref,
-                                        DashboardMetricKind.siteCounts,
-                                        DashboardPlaceBreakdownFilter.all,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                      onPressed: showBlockingLoad
+                          ? null
+                          : () {
+                              final st = ref.read(dashboardScheduleProvider);
+                              if (st.isWeekLoading) return;
+                              openDashboardMemoEditor(
+                                context,
+                                ref,
+                                existing: null,
+                                initialDateOverride: st.selectedDay,
                               );
                             },
-                          ),
-                        ),
-                        const SizedBox(height: 72),
-                      ]),
                     ),
+                    child: const DashboardScheduleCompactBody(),
                   ),
-                ],
                 ),
               ),
+              SliverToBoxAdapter(child: SizedBox(height: gap)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: padH),
+                  child: ManagementDashboardSectionShell(
+                    icon: Icons.campaign_outlined,
+                    title: '작업자 전체 공지',
+                    subtitle: '가입 작업자 전원에게 표시',
+                    denseHeader: true,
+                    trailing: IconButton(
+                      tooltip: '새 공지',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.add_circle_outline,
+                        size: context.rsi(20),
+                        color: cs.onSurfaceVariant,
+                      ),
+                      onPressed: showBlockingLoad
+                          ? null
+                          : () => _globalAnnouncementCardKey.currentState
+                              ?.openCreate(),
+                    ),
+                    child: DashboardGlobalAnnouncementCard(
+                      key: _globalAnnouncementCardKey,
+                      embedded: true,
+                    ),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(child: SizedBox(height: gap)),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(padH, 0, padH, context.rsi(24)),
+                sliver: SliverToBoxAdapter(
+                  child: ManagementDashboardSectionShell(
+                    icon: Icons.insights_outlined,
+                    title: '경영 지표',
+                    subtitle: '월별·연도별 현장 실적 요약',
+                    child: DashboardKpiSection(
+                      horizontalPadding: 0,
+                      onMetricChart: _showMetricChart,
+                      onOutstanding: _showOutstandingSheet,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

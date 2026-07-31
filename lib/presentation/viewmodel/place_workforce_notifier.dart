@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
@@ -18,22 +19,20 @@ List<HumanModel> humanModelsFromPlaceWorkRows(List<PlaceWorkDayRead> rows) {
       byHid[r.hid] = r;
     }
   }
-  final list = byHid.values
-      .map((r) {
-        final role = r.workrole.trim();
-        final name = role.isNotEmpty ? role : '작업자 #${r.hid}';
-        return HumanModel(
-          hid: r.hid,
-          hname: name,
-          hnumber: '',
-          hmemo: null,
-          hdailyWage: r.dailywage,
-          hdefaultRole: role,
-          hstar: 0,
-          hdelete: 0,
-        );
-      })
-      .toList(growable: false);
+  final list = byHid.values.map((r) {
+    final role = r.workrole.trim();
+    final name = role.isNotEmpty ? role : '작업자 #${r.hid}';
+    return HumanModel(
+      hid: r.hid,
+      hname: name,
+      hnumber: '',
+      hmemo: null,
+      hdailyWage: r.dailywage,
+      hdefaultRole: role,
+      hstar: 0,
+      hdelete: 0,
+    );
+  }).toList(growable: false);
   list.sort((a, b) => a.hname.compareTo(b.hname));
   return list;
 }
@@ -136,11 +135,11 @@ class PlaceWorkforceNotifier extends Notifier<PlaceWorkforceState> {
     }
 
     try {
-      final allDays =
-          await ref.read(superAdminRemoteUseCaseProvider).placeWorkDaysList();
-      final forPlace =
-          allDays.where((e) => e.pid == pid).toList(growable: false);
-      forPlace.sort((a, b) => b.workdate.compareTo(a.workdate));
+      final forPlace = await ref
+          .read(superAdminRemoteUseCaseProvider)
+          .placeWorkDaysQuery(ListQuery(pid: pid));
+      final sorted = forPlace.toList(growable: false)
+        ..sort((a, b) => b.workdate.compareTo(a.workdate));
 
       final me = ref.read(authSessionProvider).asData?.value;
       final tryHumanDirectory = me?.isManagementRole ?? false;
@@ -148,16 +147,19 @@ class PlaceWorkforceNotifier extends Notifier<PlaceWorkforceState> {
       List<HumanModel> humans;
       if (tryHumanDirectory) {
         try {
-          humans = await ref.read(humanUseCaseProvider).getAllWorkers();
+          final hids = sorted.map((r) => r.hid).where((hid) => hid > 0).toSet();
+          humans = hids.isEmpty
+              ? const []
+              : await ref.read(humanUseCaseProvider).getWorkersByHids(hids);
         } catch (_) {
-          humans = humanModelsFromPlaceWorkRows(forPlace);
+          humans = humanModelsFromPlaceWorkRows(sorted);
         }
       } else {
-        humans = humanModelsFromPlaceWorkRows(forPlace);
+        humans = humanModelsFromPlaceWorkRows(sorted);
       }
 
       state = state.copyWith(
-        rows: forPlace,
+        rows: sorted,
         humans: humans,
         initialLoading: false,
         refreshing: false,

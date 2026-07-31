@@ -2,6 +2,9 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
+import 'package:w0001/presentation/viewmodel/material_name_history_providers.dart';
+import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_theme_colors.dart';
 import 'package:w0001/ui/screen/2_add/add_screen.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/material_name_presets.dart';
@@ -19,13 +22,30 @@ class MaterialCostTab extends ConsumerStatefulWidget {
 class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
   String _selectedPreset = '직접입력';
 
+  static const _directInputLabel = '직접입력';
+
+  void _selectPreset(String name, AddCostViewModel vm) {
+    setState(() => _selectedPreset = name);
+    if (name == _directInputLabel) {
+      vm.mNameController.clear();
+      vm.mNameFocus.requestFocus();
+      return;
+    }
+    vm.mNameController.text = name;
+    vm.mNameController.selection = TextSelection.fromPosition(
+      TextPosition(offset: vm.mNameController.text.length),
+    );
+    vm.mPriceFocus.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-    final fieldH = context.rs(52);
+    final fieldH = context.rs(46);
     final btnH = context.rs(44);
+    final gap = context.rsi(10);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -41,73 +61,70 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
             child: Column(
               children: [
                 const SelectDateButton(),
-                SizedBox(height: context.rsi(10)),
+                SizedBox(height: gap),
                 _categoryDropdownSearch(context, ref),
-                SizedBox(height: context.rsi(5)),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 6,
-                      child: AddTextField(
-                        tController: vm.mNameController,
-                        focusNode: vm.mNameFocus,
-                        onSubmitted: (value) => vm.mPriceFocus.requestFocus(),
-                        labelText: '자재 이름',
-                        keyboardType: TextInputType.text,
-                        isPrice: false,
-                        height: fieldH,
-                        witdh: double.infinity,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                SizedBox(height: gap),
+                SizedBox(
+                  height: fieldH,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: AddTextField(
+                          tController: vm.mNameController,
+                          focusNode: vm.mNameFocus,
+                          onSubmitted: (value) => vm.mPriceFocus.requestFocus(),
+                          labelText: '자재 이름',
+                          keyboardType: TextInputType.text,
+                          isPrice: false,
+                          height: fieldH,
+                          witdh: double.infinity,
+                          compact: true,
+                          omitBottomMargin: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          readOnly: false,
                         ),
-                        readOnly: false,
                       ),
-                    ),
-                    SizedBox(width: context.rsi(8)),
-                    Expanded(
-                      flex: 4,
-                      child: AddTextField(
-                        tController: vm.mPriceController,
-                        focusNode: vm.mPriceFocus,
-                        labelText: '금액',
-                        keyboardType: TextInputType.number,
-                        onSubmitted: (value) => vm.addMaterialCostList(context),
-                        isPrice: true,
-                        height: fieldH,
-                        witdh: double.infinity,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      SizedBox(width: context.rsi(8)),
+                      Expanded(
+                        flex: 6,
+                        child: AddTextField(
+                          tController: vm.mPriceController,
+                          focusNode: vm.mPriceFocus,
+                          labelText: '금액',
+                          keyboardType: TextInputType.number,
+                          onSubmitted: (value) =>
+                              vm.addMaterialCostList(context),
+                          isPrice: true,
+                          height: fieldH,
+                          witdh: double.infinity,
+                          compact: true,
+                          omitBottomMargin: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          readOnly: false,
                         ),
-                        readOnly: false,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                SizedBox(height: context.rsi(6)),
-                _MaterialNamePresetButtons(
+                SizedBox(height: context.rsi(8)),
+                _MaterialRecentNameChips(
                   selectedCategory: state.selectedCategory,
                   selectedPreset: _selectedPreset,
-                  onSelect: (name) {
-                    setState(() => _selectedPreset = name);
-                    if (name == '직접입력') {
-                      vm.mNameController.clear();
-                      vm.mNameFocus.requestFocus();
-                      return;
-                    }
-                    vm.mNameController.text = name;
-                    vm.mNameController.selection = TextSelection.fromPosition(
-                      TextPosition(offset: vm.mNameController.text.length),
-                    );
-                    vm.mPriceFocus.requestFocus();
-                  },
+                  onSelect: (name) => _selectPreset(name, vm),
                 ),
+                SizedBox(height: gap),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOutCubic,
                   margin: EdgeInsets.only(
-                    bottom: keyboardInset > 0
-                        ? keyboardInset + context.rsi(8)
-                        : 0,
+                    bottom:
+                        keyboardInset > 0 ? keyboardInset + context.rsi(8) : 0,
                   ),
                   child: SizedBox(
                     height: btnH,
@@ -134,7 +151,7 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
                     ),
                   ),
                 ),
-                SizedBox(height: context.rsi(6)),
+                SizedBox(height: context.rsi(8)),
               ],
             ),
           ),
@@ -152,31 +169,40 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
   Widget _categoryDropdownSearch(BuildContext context, WidgetRef ref) {
     final state = ref.watch(addCostProvider);
     final vm = ref.read(addCostProvider.notifier);
+    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final itemStyle = tt.bodySmall?.copyWith(fontSize: 13);
 
     return SizedBox(
-      height: context.rs(52),
+      height: context.rs(42),
       child: DropdownSearch<String>(
         items: categoryList,
         onChanged: (value) {
           if (value == null) return;
           vm.categoryChangeAction(value);
-          setState(() => _selectedPreset = '직접입력');
+          setState(() => _selectedPreset = _directInputLabel);
         },
         selectedItem: state.selectedCategory,
         dropdownDecoratorProps: DropDownDecoratorProps(
           dropdownSearchDecoration: InputDecoration(
-            labelStyle: tt.bodyMedium,
-            hintStyle: tt.bodyMedium,
+            labelText: '카테고리',
+            labelStyle: tt.labelSmall,
+            floatingLabelStyle: tt.labelSmall,
+            hintStyle: itemStyle,
             isDense: true,
             contentPadding: EdgeInsets.symmetric(
-              horizontal: context.rsi(12),
-              vertical: context.rsi(12),
+              horizontal: context.rsi(10),
+              vertical: context.rsi(8),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            hintText: '카테고리 선택',
+          ),
+        ),
+        popupProps: PopupProps.menu(
+          showSearchBox: false,
+          menuProps: MenuProps(
+            backgroundColor: cs.surface,
           ),
         ),
       ),
@@ -184,8 +210,9 @@ class _MaterialCostTabState extends ConsumerState<MaterialCostTab> {
   }
 }
 
-class _MaterialNamePresetButtons extends StatelessWidget {
-  const _MaterialNamePresetButtons({
+/// 카테고리별 최근 자재명 칩 — 담기 시 로컬 저장 (최대 10).
+class _MaterialRecentNameChips extends ConsumerWidget {
+  const _MaterialRecentNameChips({
     required this.selectedCategory,
     required this.selectedPreset,
     required this.onSelect,
@@ -195,72 +222,96 @@ class _MaterialNamePresetButtons extends StatelessWidget {
   final String selectedPreset;
   final void Function(String name) onSelect;
 
+  static const _directInputLabel = '직접입력';
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final category = selectedCategory;
     if (category == null ||
         materialPresetExcludedCategories.contains(category)) {
       return const SizedBox.shrink();
     }
-    final presets = materialNamePresetsByCategory[category];
-    if (presets == null || presets.isEmpty) return const SizedBox.shrink();
-    final items = ['직접입력', ...presets.take(10)];
+
+    ref.watch(materialNameHistoryProvider);
+    final recent = ref
+        .read(materialNameHistoryProvider.notifier)
+        .namesForCategory(category);
+    final items = [_directInputLabel, ...recent];
 
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-        context.rsi(10),
-        context.rsi(8),
-        context.rsi(10),
-        context.rsi(10),
-      ),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$category 대표 자재',
-            style: tt.labelSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: cs.onSurface,
+    final chipLabel = tt.labelSmall?.copyWith(
+      fontSize: 11,
+      height: 1.0,
+      fontWeight: FontWeight.w600,
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          '최근',
+          style: tt.labelSmall?.copyWith(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(width: context.rsi(6)),
+        Expanded(
+          child: SizedBox(
+            height: context.rs(30),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => SizedBox(width: context.rsi(5)),
+              itemBuilder: (context, index) {
+                final name = items[index];
+                final isDirect = name == _directInputLabel;
+                final selected = selectedPreset == name;
+
+                return InputChip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: EdgeInsets.symmetric(horizontal: context.rsi(4)),
+                  label: Text(
+                    name,
+                    style: chipLabel?.copyWith(
+                      color: selected ? cs.onSecondaryContainer : cs.onSurface,
+                    ),
+                  ),
+                  selected: selected,
+                  showCheckmark: false,
+                  selectedColor: cs.secondaryContainer,
+                  backgroundColor: cs.appMutedFill,
+                  side: BorderSide(
+                    color: selected
+                        ? cs.secondary
+                        : cs.outlineVariant.withValues(alpha: 0.55),
+                  ),
+                  onPressed: () => onSelect(name),
+                  onDeleted: isDirect
+                      ? null
+                      : () async {
+                          await ref
+                              .read(materialNameHistoryProvider.notifier)
+                              .remove(category, name);
+                          if (selectedPreset == name) {
+                            onSelect(_directInputLabel);
+                          }
+                        },
+                  deleteIcon: isDirect
+                      ? null
+                      : Icon(
+                          Icons.close_rounded,
+                          size: context.rsi(14),
+                          color: cs.onSurfaceVariant,
+                        ),
+                );
+              },
             ),
           ),
-          SizedBox(height: context.rsi(8)),
-          Wrap(
-            spacing: context.rsi(6),
-            runSpacing: context.rsi(6),
-            children: items
-                .map(
-                  (name) => ChoiceChip(
-                    selected: selectedPreset == name,
-                    label: Text(
-                      name,
-                      style: tt.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: selectedPreset == name
-                            ? cs.onPrimaryContainer
-                            : cs.onSurface,
-                      ),
-                    ),
-                    selectedColor: cs.primaryContainer,
-                    side: BorderSide(
-                      color: selectedPreset == name
-                          ? cs.primary
-                          : cs.outlineVariant.withValues(alpha: 0.7),
-                    ),
-                    onSelected: (_) => onSelect(name),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

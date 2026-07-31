@@ -7,6 +7,7 @@ import 'package:w0001/ui/widget/add_text_field.dart';
 import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/ui/widget/round_text_field.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 class AddWorkerDialog extends ConsumerStatefulWidget {
   const AddWorkerDialog({super.key});
@@ -127,7 +128,7 @@ class _AddWorkerDialogState extends ConsumerState<AddWorkerDialog> {
               ),
               if (_dialogRole == '직접입력') ...[
                 SizedBox(height: context.rsi(8)),
-                TextField(
+                AppTextField(
                   controller: _dialogCustomRoleController,
                   style: tt.bodyMedium,
                   decoration: InputDecoration(

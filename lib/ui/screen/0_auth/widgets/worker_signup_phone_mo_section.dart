@@ -3,12 +3,15 @@ import 'dart:async' show unawaited;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/phone_verification_models.dart';
+import 'package:w0001/domain/use_case/phone_mo_verification_use_case.dart';
 import 'package:w0001/presentation/viewmodel/phone_mo_verification_providers.dart';
 import 'package:w0001/ui/widget/round_text_field.dart';
 import 'package:w0001/util/auth_dio_user_message.dart';
+import 'package:w0001/util/phone_mo/phone_mo_sms_launcher.dart';
 import 'package:w0001/util/phone_number_format.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
@@ -20,7 +23,8 @@ class WorkerSignupPhoneMoSection extends ConsumerStatefulWidget {
     this.showHeader = true,
   });
 
-  final void Function(String? phone, String? verificationToken) onVerifiedChanged;
+  final void Function(String? phone, String? verificationToken)
+      onVerifiedChanged;
   final bool showHeader;
 
   @override
@@ -29,23 +33,51 @@ class WorkerSignupPhoneMoSection extends ConsumerStatefulWidget {
 }
 
 class _WorkerSignupPhoneMoSectionState
-    extends ConsumerState<WorkerSignupPhoneMoSection> {
+    extends ConsumerState<WorkerSignupPhoneMoSection>
+    with WidgetsBindingObserver {
   final _phoneController = TextEditingController();
   PhoneMoStartResponse? _session;
   var _starting = false;
   var _polling = false;
   var _pollGeneration = 0;
+  var _appInForeground = true;
+  var _pendingVerifiedToast = false;
   String? _verifiedPhone;
   String? _verificationToken;
 
-  bool get isVerified =>
-      _verifiedPhone != null && _verificationToken != null;
+  bool get isVerified => _verifiedPhone != null && _verificationToken != null;
+
+  PhoneMoVerificationUseCase get _useCase =>
+      ref.read(phoneMoVerificationUseCaseProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollGeneration++;
     _phoneController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    _appInForeground = resumed;
+    if (!resumed) return;
+
+    if (_pendingVerifiedToast && isVerified) {
+      _pendingVerifiedToast = false;
+      _toast('휴대폰 인증이 완료되었습니다.');
+      return;
+    }
+    if (_polling && _session != null && !isVerified) {
+      unawaited(_tryVerifyOnce());
+    }
   }
 
   void _notifyParent() {
@@ -73,9 +105,22 @@ class _WorkerSignupPhoneMoSectionState
   Future<void> _copyToClipboard(String label, String value) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label을(를) 복사했습니다.')),
-    );
+
+    final isVerificationCode = label.contains('인증코드');
+    if (isVerificationCode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '인증코드를 복사했습니다.\n문자 전송 후 "문자 보내기" 또는 "수동 전송 완료" 버튼을 눌러주세요.',
+          ),
+          duration: Duration(seconds: 5),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$label을(를) 복사했습니다.')),
+      );
+    }
   }
 
   Future<void> _startVerification() async {
@@ -96,9 +141,7 @@ class _WorkerSignupPhoneMoSectionState
     _notifyParent();
 
     try {
-      final session = await ref
-          .read(phoneMoVerificationUseCaseProvider)
-          .start(phone);
+      final session = await _useCase.start(phone);
       if (!mounted) return;
       setState(() => _session = session);
     } on DioException catch (e) {
@@ -116,14 +159,63 @@ class _WorkerSignupPhoneMoSectionState
     final session = _session;
     if (session == null || _polling) return;
 
-    final opened = await ref.read(phoneMoVerificationUseCaseProvider).openSmsComposer(
-          moNumber: session.moNumber,
-          body: session.smsBody,
-        );
-    if (!opened && mounted) {
-      _toast('문자 앱을 열 수 없습니다. 번호와 코드를 복사해 직접 보내 주세요.');
+    final result = await _useCase.composeMoSms(
+      moNumber: session.moNumber,
+      body: session.smsBody,
+    );
+    if (!mounted) return;
+
+    switch (result) {
+      case PhoneMoSmsComposeResult.sent:
+      case PhoneMoSmsComposeResult.external:
+        break;
+      case PhoneMoSmsComposeResult.cancelled:
+        _toast('문자 발송이 취소되었습니다.');
+        return;
+      case PhoneMoSmsComposeResult.unavailable:
+      case PhoneMoSmsComposeResult.failed:
+        _toast('문자 앱을 열 수 없습니다. 번호와 코드를 복사해 직접 보내 주세요.');
+        return;
     }
+
     unawaited(_poll());
+  }
+
+  void _completeVerification(String phone, String token) {
+    setState(() {
+      _verifiedPhone = phone;
+      _verificationToken = token;
+      _polling = false;
+    });
+    _notifyParent();
+    if (_appInForeground) {
+      _toast('휴대폰 인증이 완료되었습니다.');
+    } else {
+      _pendingVerifiedToast = true;
+    }
+  }
+
+  Future<void> _tryVerifyOnce() async {
+    if (_session == null || isVerified) return;
+    final gen = _pollGeneration;
+    final phone = normalizeKoreanMobilePhone(_phoneController.text);
+    try {
+      final token = await _useCase.tryVerifyOnce(phone);
+      if (!mounted || gen != _pollGeneration || token == null) return;
+      _completeVerification(phone, token);
+    } on DioException catch (e) {
+      if (!mounted || gen != _pollGeneration) return;
+      _toast(_dioMessage(e, '인증 확인에 실패했습니다.'));
+      setState(() => _polling = false);
+    } catch (e) {
+      if (!mounted || gen != _pollGeneration) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.contains('만료')) {
+        setState(() => _session = null);
+      }
+      setState(() => _polling = false);
+      _toast(msg);
+    }
   }
 
   Future<void> _poll() async {
@@ -134,19 +226,13 @@ class _WorkerSignupPhoneMoSectionState
 
     setState(() => _polling = true);
     try {
-      final token = await ref.read(phoneMoVerificationUseCaseProvider).waitUntilVerified(
-            phone,
-            timeout: Duration(seconds: timeoutSec),
-            shouldContinue: () => mounted && gen == _pollGeneration,
-          );
+      final token = await _useCase.waitUntilVerified(
+        phone,
+        timeout: Duration(seconds: timeoutSec),
+        shouldContinue: () => mounted && gen == _pollGeneration,
+      );
       if (!mounted || gen != _pollGeneration) return;
-      setState(() {
-        _verifiedPhone = phone;
-        _verificationToken = token;
-        _polling = false;
-      });
-      _notifyParent();
-      _toast('휴대폰 인증이 완료되었습니다.');
+      _completeVerification(phone, token);
     } on DioException catch (e) {
       if (!mounted || gen != _pollGeneration) return;
       _toast(_dioMessage(e, '인증 확인에 실패했습니다.'));
@@ -288,7 +374,8 @@ class _WorkerSignupPhoneMoSectionState
             ),
             child: Row(
               children: [
-                Icon(Icons.verified_rounded, color: cs.primary, size: context.rs(22)),
+                Icon(Icons.verified_rounded,
+                    color: cs.primary, size: context.rs(22)),
                 SizedBox(width: context.rsi(10)),
                 Expanded(
                   child: Text(
@@ -321,10 +408,7 @@ class _WorkerSignupPhoneMoSectionState
                   ? SizedBox(
                       width: context.rs(22),
                       height: context.rs(22),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: cs.onPrimary,
-                      ),
+                      child: const HammerLoadingIndicator(size: 22),
                     )
                   : const Text('인증코드 받기'),
             ),
@@ -335,7 +419,8 @@ class _WorkerSignupPhoneMoSectionState
               decoration: BoxDecoration(
                 color: cs.surfaceContainerLow.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(context.rs(14)),
-                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
+                border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.45)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -345,6 +430,38 @@ class _WorkerSignupPhoneMoSectionState
                         ? session.instructions
                         : '${session.moNumberDisplay} 번호로 인증코드를 문자로 보내주세요.',
                     style: tt.bodyMedium?.copyWith(height: 1.45),
+                  ),
+                  SizedBox(height: context.rsi(8)),
+                  Container(
+                    padding: EdgeInsets.all(context.rsi(10)),
+                    decoration: BoxDecoration(
+                      color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(context.rs(8)),
+                      border: Border.all(
+                        color: cs.tertiary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: context.rs(16),
+                          color: cs.tertiary,
+                        ),
+                        SizedBox(width: context.rsi(8)),
+                        Expanded(
+                          child: Text(
+                            defaultTargetPlatform == TargetPlatform.iOS
+                                ? '문자 보내기를 누르면 앱 안에서 문자를 작성합니다. 발송 후 자동으로 돌아옵니다.'
+                                : '문자 보낸 뒤 앱으로 돌아오면 인증을 바로 확인합니다.',
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   SizedBox(height: context.rsi(12)),
                   _copyChip(
@@ -371,14 +488,15 @@ class _WorkerSignupPhoneMoSectionState
                     SizedBox(height: context.rsi(8)),
                     Text(
                       '등록 번호: ${session.phoneMasked}',
-                      style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                   ],
                   SizedBox(height: context.rsi(14)),
                   FilledButton.icon(
                     onPressed: _polling ? null : _openSmsAndPoll,
                     icon: const Icon(Icons.sms_rounded),
-                    label: Text(_polling ? '인증 확인 중…' : '문자 보내기'),
+                    label: Text(_polling ? '인증 확인 중…' : '문자 보내기 (자동 확인)'),
                     style: FilledButton.styleFrom(
                       minimumSize: Size.fromHeight(context.rs(48)),
                       shape: RoundedRectangleBorder(
@@ -393,10 +511,7 @@ class _WorkerSignupPhoneMoSectionState
                         SizedBox(
                           width: context.rs(18),
                           height: context.rs(18),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: cs.primary,
-                          ),
+                          child: const HammerLoadingIndicator(size: 20),
                         ),
                         SizedBox(width: context.rsi(10)),
                         Expanded(
@@ -412,8 +527,25 @@ class _WorkerSignupPhoneMoSectionState
                     ),
                   ],
                   SizedBox(height: context.rsi(8)),
+                  if (!_polling) ...[
+                    FilledButton.icon(
+                      onPressed: _poll,
+                      icon: const Icon(Icons.check_circle_outline_rounded),
+                      label: const Text('문자 전송 완료 - 인증 확인'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: Size.fromHeight(context.rs(48)),
+                        backgroundColor: cs.secondary,
+                        foregroundColor: cs.onSecondary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(context.rs(12)),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: context.rsi(8)),
+                  ],
                   OutlinedButton(
-                    onPressed: _starting || _polling ? null : _startVerification,
+                    onPressed:
+                        _starting || _polling ? null : _startVerification,
                     child: const Text('인증코드 다시 받기'),
                   ),
                 ],

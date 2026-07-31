@@ -33,18 +33,33 @@ class TotalCostModel {
   });
 
   TotalCostModel.fromMap(Map<String, dynamic> res)
-      : pname = res['pname'],
-        pcomplete = res['pcomplete'],
-        name = res['name'],
-        date = res['date'],
-        price = res['price'],
-        id = res['id'],
-        wcomplete = res['wcomplete'],
-        wcompletedAt = res['wcompleted_at'] as String?,
-        category = res['category'] ?? '',
-        whid = res['whid'] as int?,
-        wpid = res['wpid'] as int?,
+      : pname = '${res['pname'] ?? ''}',
+        pcomplete = _asInt(res['pcomplete']) ?? 0,
+        name = '${res['name'] ?? ''}',
+        date = '${res['date'] ?? ''}',
+        price = _asInt(res['price']) ?? 0,
+        id = _asInt(res['id']) ?? 0,
+        wcomplete = _asInt(res['wcomplete']) ?? -1,
+        wcompletedAt = _optionalString(
+          res['wcompletedAt'] ?? res['wcompleted_at'],
+        ),
+        category = '${res['category'] ?? ''}',
+        whid = _asInt(res['whid']),
+        wpid = _asInt(res['wpid']),
         workrole = (res['workrole'] ?? res['wrole'] ?? '').toString();
+
+  static int? _asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim());
+    return null;
+  }
+
+  static String? _optionalString(dynamic v) {
+    if (v == null) return null;
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
+  }
 
   String get getDay => formatDateTimeToStringByDot(DateTime.parse(date));
   DateTime get getDateTime => DateTime.parse(date);

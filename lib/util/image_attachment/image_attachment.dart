@@ -2,4 +2,5 @@
 library;
 
 export 'package:w0001/util/image_attachment/image_upload_result.dart';
+export 'package:w0001/util/image_attachment/prepare_image_for_upload.dart';
 export 'package:w0001/util/image_attachment/upload_image_remote.dart';

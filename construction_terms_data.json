@@ -1,0 +1,1785 @@
+{
+  "construction_terms": [
+    {
+      "term": "가꾸목",
+      "standard": "각목",
+      "description": "사각형 단면의 목재"
+    },
+    {
+      "term": "가꾸부찌",
+      "standard": "문선(문틀)",
+      "description": "문틀이나 창틀의 테두리"
+    },
+    {
+      "term": "가나고데",
+      "standard": "쇠흙손",
+      "description": "금속으로 만든 흙손"
+    },
+    {
+      "term": "가나모노",
+      "standard": "철물(창호)",
+      "description": "창호 등에 사용되는 금속 부품"
+    },
+    {
+      "term": "가네",
+      "standard": "직각",
+      "description": "90도 각도"
+    },
+    {
+      "term": "가다",
+      "standard": "틀, girder",
+      "description": "형틀 또는 거더"
+    },
+    {
+      "term": "가다와꾸/와꾸",
+      "standard": "형틀",
+      "description": "문틀 및 액자같은 상자형 시설물 및 구조물"
+    },
+    {
+      "term": "가도",
+      "standard": "모서리",
+      "description": "각이 진 부분"
+    },
+    {
+      "term": "가랑",
+      "standard": "수도 꼭지",
+      "description": "스테인레스 스틸 수도 꼭지"
+    },
+    {
+      "term": "가리",
+      "standard": "외상거래",
+      "description": "나중에 돈을 받는 거래"
+    },
+    {
+      "term": "가리고야",
+      "standard": "가설건물",
+      "description": "임시로 지은 건물"
+    },
+    {
+      "term": "가베",
+      "standard": "벽",
+      "description": "건물의 벽체"
+    },
+    {
+      "term": "가사",
+      "standard": "두겁",
+      "description": "지붕 위에 씌우는 재료"
+    },
+    {
+      "term": "가시메",
+      "standard": "단단히 조임",
+      "description": "수도관, 가스관 등의 압력이 새지않도록 단단히 조이는 일"
+    },
+    {
+      "term": "가오다시",
+      "standard": "체면, 폼잡는 것",
+      "description": "잠깐 출석하는 것, 얼굴을 잠깐 내미는 것"
+    },
+    {
+      "term": "가이당",
+      "standard": "계단",
+      "description": "층간 이동을 위한 단"
+    },
+    {
+      "term": "가타키리",
+      "standard": "외쪽깍이, 한쪽깎이",
+      "description": "한쪽 면만 깎은 것"
+    },
+    {
+      "term": "간나",
+      "standard": "대패",
+      "description": "나무를 깎는 연장"
+    },
+    {
+      "term": "간조",
+      "standard": "셈, 품삯",
+      "description": "일한 대가로 받는 돈"
+    },
+    {
+      "term": "갑빠",
+      "standard": "비막이용 천막",
+      "description": "블루 시트, 비옷"
+    },
+    {
+      "term": "갓따",
+      "standard": "커터칼, 절단기",
+      "description": "자르는 도구"
+    },
+    {
+      "term": "갓쇼",
+      "standard": "ㅅ자보, Truss",
+      "description": "지붕 구조재"
+    },
+    {
+      "term": "게꼬미",
+      "standard": "챌판(계단)",
+      "description": "현관 바닥과 마루 사이의 수직면"
+    },
+    {
+      "term": "겐바/겜바",
+      "standard": "현장",
+      "description": "공사가 진행되는 장소"
+    },
+    {
+      "term": "겐사끼(견삭기)",
+      "standard": "래칫 렌치, 견삭기, 깔깔이",
+      "description": "볼트를 조이는 공구"
+    },
+    {
+      "term": "겐세이",
+      "standard": "견제",
+      "description": "시간을 끌면서 일을 방해하는 것"
+    },
+    {
+      "term": "겐승",
+      "standard": "원척, 현척, 실제 크기",
+      "description": "Full-Scale, 실물 크기"
+    },
+    {
+      "term": "겐칸",
+      "standard": "현관",
+      "description": "출입구"
+    },
+    {
+      "term": "고구찌",
+      "standard": "마구리, 말구",
+      "description": "나무의 단면"
+    },
+    {
+      "term": "고다다끼",
+      "standard": "잔다듬",
+      "description": "세밀하게 다듬는 작업"
+    },
+    {
+      "term": "고데무라",
+      "standard": "흙 손자국",
+      "description": "흙손으로 마감한 흔적"
+    },
+    {
+      "term": "고도리",
+      "standard": "철탑 가조립 작업자",
+      "description": "철탑 또는 전봇대 시공시 땅에서 철탑 자재를 가조립 해서 올려주는 사람"
+    },
+    {
+      "term": "고바다떼",
+      "standard": "세워쌓기(벽돌)",
+      "description": "벽돌을 세워서 쌓는 방법"
+    },
+    {
+      "term": "고바이",
+      "standard": "구배(기울임)",
+      "description": "경사, 기울기"
+    },
+    {
+      "term": "고부다시",
+      "standard": "혹두기(돌)",
+      "description": "돌 표면을 거칠게 다듬는 방법"
+    },
+    {
+      "term": "고시",
+      "standard": "격자(창)",
+      "description": "창문의 격자무늬"
+    },
+    {
+      "term": "곤조",
+      "standard": "근성(고집)",
+      "description": "끈기, 고집"
+    },
+    {
+      "term": "곤지레다",
+      "standard": "Condulet",
+      "description": "전선을 쉽게 입선하고 보호하기 위해 사용하는 배관 부속품"
+    },
+    {
+      "term": "곰방/고운반",
+      "standard": "소운반",
+      "description": "작은 규모의 운반 작업"
+    },
+    {
+      "term": "공구리",
+      "standard": "콘크리트",
+      "description": "시멘트와 골재를 섞은 건축 재료"
+    },
+    {
+      "term": "관심근로자",
+      "standard": "관심근로자",
+      "description": "현장에서 관심이 필요한 근로자"
+    },
+    {
+      "term": "구기",
+      "standard": "못",
+      "description": "물건을 고정하는 철제 핀"
+    },
+    {
+      "term": "구루마",
+      "standard": "손수레, 대차, 외발수레",
+      "description": "물건을 운반하는 수레"
+    },
+    {
+      "term": "구리스/구리이시",
+      "standard": "호박돌(잡석), 조약돌",
+      "description": "둥근 자갈"
+    },
+    {
+      "term": "구리스",
+      "standard": "그리스, 윤활유",
+      "description": "기계의 마찰을 줄이는 기름"
+    },
+    {
+      "term": "구이",
+      "standard": "말뚝",
+      "description": "땅에 박는 기둥"
+    },
+    {
+      "term": "구찌",
+      "standard": "노즐, 주입구, 연결구",
+      "description": "배관 등의 연결을 위한 개구부"
+    },
+    {
+      "term": "기고데",
+      "standard": "나무흙손",
+      "description": "나무로 만든 흙손"
+    },
+    {
+      "term": "기리",
+      "standard": "드릴, 드릴 날",
+      "description": "구멍을 뚫는 공구"
+    },
+    {
+      "term": "기리까에",
+      "standard": "바꾸기, 교체",
+      "description": "새것으로 교환하는 것"
+    },
+    {
+      "term": "기리꼬미",
+      "standard": "덤핑, 흙모래가 섞인 자갈",
+      "description": "골재와 흙이 섞인 재료"
+    },
+    {
+      "term": "기리바리",
+      "standard": "버팀대",
+      "description": "구조물을 지지하는 대"
+    },
+    {
+      "term": "기리빠시, 기리바",
+      "standard": "칩, 톱밥, 자투리, 지스러기",
+      "description": "작업 후 남은 부스러기"
+    },
+    {
+      "term": "기성",
+      "standard": "기성과금",
+      "description": "공사 완료 정도를 청구하여 받는 것"
+    },
+    {
+      "term": "기소",
+      "standard": "기초",
+      "description": "건물의 밑바탕"
+    },
+    {
+      "term": "기스",
+      "standard": "흠집, 상처",
+      "description": "손상된 부분"
+    },
+    {
+      "term": "기즈리",
+      "standard": "졸대",
+      "description": "작은 각재"
+    },
+    {
+      "term": "나가떼",
+      "standard": "벽돌의 긴쪽 면",
+      "description": "벽돌의 길이 방향 면"
+    },
+    {
+      "term": "나가리",
+      "standard": "허사, 무산, 무효",
+      "description": "일이 안 된 것"
+    },
+    {
+      "term": "나까마",
+      "standard": "중간상인, 중개상인, 딜러",
+      "description": "중간에서 거래를 중개하는 사람"
+    },
+    {
+      "term": "나까미",
+      "standard": "알맹이",
+      "description": "분전반의 속판"
+    },
+    {
+      "term": "나나메",
+      "standard": "경사",
+      "description": "비스듬한 각도"
+    },
+    {
+      "term": "나라시",
+      "standard": "고르기, 평탄화 작업",
+      "description": "평평하게 만드는 작업"
+    },
+    {
+      "term": "나리마끼",
+      "standard": "정배솔",
+      "description": "도배후 벽지를 문질러주는 솔"
+    },
+    {
+      "term": "나미",
+      "standard": "보통, 얇은 투명유리",
+      "description": "일반적인 유리"
+    },
+    {
+      "term": "낫또",
+      "standard": "너트",
+      "description": "볼트와 결합하는 암나사"
+    },
+    {
+      "term": "냉가망치",
+      "standard": "벽돌용 각망치",
+      "description": "벽돌을 자르는 망치"
+    },
+    {
+      "term": "네다",
+      "standard": "장선, 받침목",
+      "description": "마루를 받는 가로재"
+    },
+    {
+      "term": "네지",
+      "standard": "나사",
+      "description": "회전으로 조이는 고정 부품"
+    },
+    {
+      "term": "네지리",
+      "standard": "뒤틀림",
+      "description": "비틀어진 상태"
+    },
+    {
+      "term": "네코",
+      "standard": "굄재, 굄감",
+      "description": "철근과 거푸집의 간격을 유지하는 토막"
+    },
+    {
+      "term": "넨도",
+      "standard": "점토",
+      "description": "진흙"
+    },
+    {
+      "term": "노가다/노가대/도가다",
+      "standard": "토공",
+      "description": "흙을 다루는 일"
+    },
+    {
+      "term": "노기스",
+      "standard": "버니어 캘리퍼스",
+      "description": "정밀 측정 도구"
+    },
+    {
+      "term": "노끼",
+      "standard": "처마",
+      "description": "지붕이 벽 밖으로 나온 부분"
+    },
+    {
+      "term": "노리",
+      "standard": "법사면, 비탈, 경사",
+      "description": "비스듬한 면"
+    },
+    {
+      "term": "노리비끼/노로비끼",
+      "standard": "시멘트 풀칠",
+      "description": "시멘트를 얇게 바르는 것"
+    },
+    {
+      "term": "노미",
+      "standard": "끌, 정",
+      "description": "나무나 돌을 깎는 연장"
+    },
+    {
+      "term": "노바시",
+      "standard": "늘이기",
+      "description": "길게 늘리는 작업"
+    },
+    {
+      "term": "노보리",
+      "standard": "비계다리",
+      "description": "비계를 오르는 사다리"
+    },
+    {
+      "term": "누노(기소)",
+      "standard": "줄기초",
+      "description": "연속된 기초"
+    },
+    {
+      "term": "다가네(타가네)",
+      "standard": "정",
+      "description": "돌이나 콘크리트를 깨는 연장"
+    },
+    {
+      "term": "다나",
+      "standard": "선반",
+      "description": "물건을 올려놓는 판"
+    },
+    {
+      "term": "다께와리",
+      "standard": "대쪽(타일)",
+      "description": "가는 타일"
+    },
+    {
+      "term": "다데/다떼",
+      "standard": "세로",
+      "description": "수직 방향"
+    },
+    {
+      "term": "다데구",
+      "standard": "창호",
+      "description": "창문과 문"
+    },
+    {
+      "term": "다데도이",
+      "standard": "선홈통",
+      "description": "수직으로 내려가는 홈통"
+    },
+    {
+      "term": "다라이",
+      "standard": "고무대야",
+      "description": "물을 담는 그릇"
+    },
+    {
+      "term": "다루끼",
+      "standard": "서까래, 소각재",
+      "description": "지붕을 받치는 가는 목재"
+    },
+    {
+      "term": "다마이시",
+      "standard": "호박돌",
+      "description": "큰 자갈"
+    },
+    {
+      "term": "다시방",
+      "standard": "서랍",
+      "description": "차량의 대시보드"
+    },
+    {
+      "term": "다이까렝가",
+      "standard": "내화벽돌",
+      "description": "불에 강한 벽돌"
+    },
+    {
+      "term": "다이꼬바리",
+      "standard": "양면붙임",
+      "description": "양쪽에서 붙이는 것"
+    },
+    {
+      "term": "다찌아가리",
+      "standard": "입상, 치켜올림",
+      "description": "위로 올라가는 것"
+    },
+    {
+      "term": "단도리",
+      "standard": "준비, 마련, 채비",
+      "description": "일을 하기 전 준비"
+    },
+    {
+      "term": "단찌가이",
+      "standard": "이격, 단차",
+      "description": "높이 차이"
+    },
+    {
+      "term": "답빠",
+      "standard": "높이",
+      "description": "수직 길이"
+    },
+    {
+      "term": "당고",
+      "standard": "담합",
+      "description": "미리 짜고 하는 거래"
+    },
+    {
+      "term": "당까/단가/단까/담가",
+      "standard": "들것",
+      "description": "사람이 메는 운반 도구"
+    },
+    {
+      "term": "데나오시/데나우시",
+      "standard": "재손질, 재시공, 리셋",
+      "description": "다시 하는 것"
+    },
+    {
+      "term": "데네리",
+      "standard": "손비빔",
+      "description": "손으로 섞는 것"
+    },
+    {
+      "term": "데마",
+      "standard": "품",
+      "description": "최하단계 시공팀"
+    },
+    {
+      "term": "데마찌",
+      "standard": "작업대기",
+      "description": "현장 사정으로 작업이 취소되는 경우"
+    },
+    {
+      "term": "데모도/뒷모도",
+      "standard": "조력공, 조공, 잡부, 곁꾼",
+      "description": "기술자를 돕는 사람"
+    },
+    {
+      "term": "데스라",
+      "standard": "출역 일보",
+      "description": "날마다 일한 일용직 노동자들의 이름, 일급이 기록된 종이"
+    },
+    {
+      "term": "데스리",
+      "standard": "난간",
+      "description": "떨어지지 않게 설치한 손잡이"
+    },
+    {
+      "term": "데우/데후",
+      "standard": "차동 기어",
+      "description": "자동차의 구동 장치"
+    },
+    {
+      "term": "데코",
+      "standard": "지레",
+      "description": "무거운 것을 드는 도구"
+    },
+    {
+      "term": "데코보코/데꾸보꾸",
+      "standard": "요철, 울퉁불퉁",
+      "description": "비뚤어진 것"
+    },
+    {
+      "term": "덴조",
+      "standard": "천장, 반자",
+      "description": "방의 윗면"
+    },
+    {
+      "term": "뎀바",
+      "standard": "꼭대기, 윗면",
+      "description": "가장 높은 면"
+    },
+    {
+      "term": "뎃킨",
+      "standard": "철근",
+      "description": "콘크리트 보강용 철재"
+    },
+    {
+      "term": "도끼다시/도기다시",
+      "standard": "갈아내기(인조석)",
+      "description": "인조석 표면을 갈아내는 작업"
+    },
+    {
+      "term": "도도메",
+      "standard": "흙막이",
+      "description": "흙이 무너지지 않게 막는 공작물"
+    },
+    {
+      "term": "도라무",
+      "standard": "드럼",
+      "description": "원통형 용기"
+    },
+    {
+      "term": "도라꾸",
+      "standard": "트럭",
+      "description": "화물차"
+    },
+    {
+      "term": "도란스",
+      "standard": "변압기",
+      "description": "전압을 변환하는 장치"
+    },
+    {
+      "term": "도마",
+      "standard": "다짐 흙바닥",
+      "description": "다진 흙 바닥"
+    },
+    {
+      "term": "도메",
+      "standard": "맞춤",
+      "description": "나무를 연결하는 방법"
+    },
+    {
+      "term": "도비",
+      "standard": "비계공",
+      "description": "높은 곳에서 작업하는 사람"
+    },
+    {
+      "term": "도지나",
+      "standard": "주상 안전 벨트",
+      "description": "전봇대 작업용 안전벨트"
+    },
+    {
+      "term": "도탄",
+      "standard": "함석(판)",
+      "description": "얇은 철판"
+    },
+    {
+      "term": "돗바/돕빠",
+      "standard": "장옷, 덮개, 패딩",
+      "description": "위에서 덮는 것"
+    },
+    {
+      "term": "똥띠기",
+      "standard": "돈 떼어먹기",
+      "description": "인건비를 중간에서 착복하는 행위"
+    },
+    {
+      "term": "라다",
+      "standard": "사다리",
+      "description": "높은 곳에 오르는 도구"
+    },
+    {
+      "term": "라바콘",
+      "standard": "트래픽콘",
+      "description": "자동차 진입 금지용 삼각대"
+    },
+    {
+      "term": "락카펀치",
+      "standard": "녹아웃 펀치, 유압 천공기",
+      "description": "철판에 구멍을 내는 공구"
+    },
+    {
+      "term": "란마/람마",
+      "standard": "고창, 환기창",
+      "description": "위쪽의 작은 창"
+    },
+    {
+      "term": "람마",
+      "standard": "래머",
+      "description": "땅 다질때 쓰는 기계"
+    },
+    {
+      "term": "레듀샤",
+      "standard": "리듀서",
+      "description": "지름이 다른 파이프를 연결하는 부속품"
+    },
+    {
+      "term": "루베/류베",
+      "standard": "입방미터",
+      "description": "콘크리트 부피 표현 단위"
+    },
+    {
+      "term": "리데나",
+      "standard": "리테이너, 오일씰",
+      "description": "누유를 막아주는 부품"
+    },
+    {
+      "term": "리후다/니후다",
+      "standard": "밸브 리프터",
+      "description": "자동차 엔진 부품"
+    },
+    {
+      "term": "마게",
+      "standard": "올려, 올리다",
+      "description": "위로 올리는 동작"
+    },
+    {
+      "term": "마구사",
+      "standard": "인방",
+      "description": "문이나 창 위로 가로지르는 나무"
+    },
+    {
+      "term": "마도",
+      "standard": "창(窓)",
+      "description": "창문을 설치하는 곳"
+    },
+    {
+      "term": "마루보",
+      "standard": "전산볼트",
+      "description": "원형 막대기 모양의 볼트"
+    },
+    {
+      "term": "마루다/마루타",
+      "standard": "통나무",
+      "description": "껍질이 있는 나무"
+    },
+    {
+      "term": "마에가리",
+      "standard": "가불",
+      "description": "미리 받는 돈"
+    },
+    {
+      "term": "마와리부찌",
+      "standard": "반자돌림",
+      "description": "천장 둘레 마감재"
+    },
+    {
+      "term": "마지끼리",
+      "standard": "칸막이",
+      "description": "공간을 나누는 벽"
+    },
+    {
+      "term": "마찌꼬바/마찌꼬방",
+      "standard": "소규모 공장",
+      "description": "작은 공장"
+    },
+    {
+      "term": "마키선",
+      "standard": "전기 릴선",
+      "description": "감아서 보관하는 전선"
+    },
+    {
+      "term": "만땅",
+      "standard": "가득 참",
+      "description": "완전히 찬 상태"
+    },
+    {
+      "term": "매끼/맥기/멕기",
+      "standard": "도금",
+      "description": "금속 표면 처리"
+    },
+    {
+      "term": "메가네",
+      "standard": "링 스패너",
+      "description": "고리 모양의 렌치"
+    },
+    {
+      "term": "메꾸라/메꾸라시/매꾸라이/맥",
+      "standard": "막음",
+      "description": "구멍을 막는 것"
+    },
+    {
+      "term": "메모도",
+      "standard": "수평조절목",
+      "description": "바닥 기준점을 알려주는 나무"
+    },
+    {
+      "term": "메지",
+      "standard": "줄눈",
+      "description": "타일이나 벽돌 사이 틈"
+    },
+    {
+      "term": "메지보",
+      "standard": "줄눈대",
+      "description": "줄눈을 만드는 도구"
+    },
+    {
+      "term": "멘끼",
+      "standard": "면대",
+      "description": "모서리 부분 마감재"
+    },
+    {
+      "term": "멘도리",
+      "standard": "모접기",
+      "description": "모서리를 깎는 작업"
+    },
+    {
+      "term": "모도시",
+      "standard": "원래대로",
+      "description": "원 위치로 되돌리는 것"
+    },
+    {
+      "term": "모찌꼬미",
+      "standard": "지입",
+      "description": "가지고 들어옴"
+    },
+    {
+      "term": "몽키",
+      "standard": "몽키 스패너",
+      "description": "조절 가능한 렌치"
+    },
+    {
+      "term": "무라",
+      "standard": "얼룩, 울음",
+      "description": "면이 고르지 못한 것"
+    },
+    {
+      "term": "무시로",
+      "standard": "거적",
+      "description": "짚으로 엮은 깔개"
+    },
+    {
+      "term": "미다시",
+      "standard": "제물마감 정식 제치 장콘크리트마감",
+      "description": "콘크리트 마감 방법"
+    },
+    {
+      "term": "미미",
+      "standard": "엔진마운트",
+      "description": "엔진 지지대"
+    },
+    {
+      "term": "미스모리/미즈모리",
+      "standard": "물수평, 수준기",
+      "description": "수평을 맞추는 도구"
+    },
+    {
+      "term": "미쓰모리",
+      "standard": "견적",
+      "description": "공사 비용 산출"
+    },
+    {
+      "term": "미즈끼리",
+      "standard": "물끊기",
+      "description": "물이 스며들지 않게 하는 것"
+    },
+    {
+      "term": "바라시",
+      "standard": "분해작업, 해체작업",
+      "description": "구조물을 뜯어내는 것"
+    },
+    {
+      "term": "바란스",
+      "standard": "균형",
+      "description": "평형 상태"
+    },
+    {
+      "term": "바이브",
+      "standard": "바이브레이터, 진동장치",
+      "description": "콘크리트 타설시 쓰는 진동기"
+    },
+    {
+      "term": "바께쓰",
+      "standard": "버킷, 양동이, 물통",
+      "description": "물건을 담는 통"
+    },
+    {
+      "term": "반도",
+      "standard": "밴드",
+      "description": "물건을 묶는 띠"
+    },
+    {
+      "term": "반생",
+      "standard": "구운 철사",
+      "description": "열처리한 유연한 철사"
+    },
+    {
+      "term": "~방",
+      "standard": "사포의 입도",
+      "description": "사포의 거칠기 단위"
+    },
+    {
+      "term": "보로, 보루",
+      "standard": "넝마, 누더기",
+      "description": "헌 옷이나 걸레"
+    },
+    {
+      "term": "보루방",
+      "standard": "드릴링 머신",
+      "description": "구멍 뚫는 기계"
+    },
+    {
+      "term": "벤치레다/벤츄레타",
+      "standard": "환풍기",
+      "description": "공기를 순환시키는 장치"
+    },
+    {
+      "term": "~부",
+      "standard": "볼트 치수",
+      "description": "1부는 8분의 1인치"
+    },
+    {
+      "term": "부란자",
+      "standard": "인젝션 펌프",
+      "description": "디젤엔진의 연료분사펌프"
+    },
+    {
+      "term": "부록꾸, 보루꼬",
+      "standard": "블록",
+      "description": "콘크리트 벽돌"
+    },
+    {
+      "term": "부비끼",
+      "standard": "톱밥칫수 빼기",
+      "description": "제재목 치수 조정"
+    },
+    {
+      "term": "뷰다",
+      "standard": "배전기",
+      "description": "전기 분배 장치"
+    },
+    {
+      "term": "브레까/뿌레카",
+      "standard": "브레이커, 차단기",
+      "description": "콘크리트 까내는 기계 또는 전기 차단기"
+    },
+    {
+      "term": "빠가나다",
+      "standard": "나사산이 뭉개짐",
+      "description": "나사가 헛돌거나 움직이지 않는 상태"
+    },
+    {
+      "term": "빠꾸",
+      "standard": "백, 뒤로",
+      "description": "원상복구"
+    },
+    {
+      "term": "빠데",
+      "standard": "퍼티",
+      "description": "크랙 제거용 메꿈재"
+    },
+    {
+      "term": "빠레트/파렛트",
+      "standard": "파렛트",
+      "description": "상품 적재용 깔판"
+    },
+    {
+      "term": "빠루",
+      "standard": "못 빼는 연장, 장도리, 쇠지레",
+      "description": "못을 뽑는 공구"
+    },
+    {
+      "term": "빠우",
+      "standard": "버핑, 연마",
+      "description": "금속 표면 연마"
+    },
+    {
+      "term": "뺑끼",
+      "standard": "페인트",
+      "description": "도료"
+    },
+    {
+      "term": "뽕끼",
+      "standard": "분기기",
+      "description": "철도, 레일의 분기"
+    },
+    {
+      "term": "뿌리",
+      "standard": "도르래, 풀리",
+      "description": "줄을 걸어 쓰는 바퀴"
+    },
+    {
+      "term": "사게부리/사게후리",
+      "standard": "다림추",
+      "description": "수직을 잡는 도구"
+    },
+    {
+      "term": "사부로꾸",
+      "standard": "3×6 합판",
+      "description": "3피트×6피트 합판"
+    },
+    {
+      "term": "사비도메",
+      "standard": "녹막이",
+      "description": "금속에 녹이 나는 것을 방지"
+    },
+    {
+      "term": "사뽀도/삽뽀드",
+      "standard": "서포트",
+      "description": "처짐 방지 지지대"
+    },
+    {
+      "term": "사시꼬미",
+      "standard": "꽂이쇠, 콘센트",
+      "description": "전기 소켓"
+    },
+    {
+      "term": "사시낑",
+      "standard": "삽근, 삽입근",
+      "description": "접속 부분 보강 철근"
+    },
+    {
+      "term": "사이",
+      "standard": "나무 체적단위",
+      "description": "재목 부피 단위"
+    },
+    {
+      "term": "사칸",
+      "standard": "미장이, 시멘트공",
+      "description": "미장 작업자"
+    },
+    {
+      "term": "사쿠",
+      "standard": "색, 자루나 집",
+      "description": "물건을 담는 주머니"
+    },
+    {
+      "term": "산승각",
+      "standard": "세치각재",
+      "description": "10자 짜리 오비끼"
+    },
+    {
+      "term": "삼바시",
+      "standard": "수평 비계다리",
+      "description": "가로로 놓는 비계"
+    },
+    {
+      "term": "서스(SUS)",
+      "standard": "스테인리스 스틸",
+      "description": "녹슬지 않는 강철"
+    },
+    {
+      "term": "세끼이다",
+      "standard": "형틀",
+      "description": "콘크리트 틀"
+    },
+    {
+      "term": "세리",
+      "standard": "Arch",
+      "description": "아치"
+    },
+    {
+      "term": "세멘, 세면",
+      "standard": "시멘트",
+      "description": "건축 결합재"
+    },
+    {
+      "term": "세와(야꾸)",
+      "standard": "부 책임자",
+      "description": "중간 관리자"
+    },
+    {
+      "term": "(하리)소꼬",
+      "standard": "보밑판(형틀)",
+      "description": "보 아래쪽 거푸집"
+    },
+    {
+      "term": "소지",
+      "standard": "청소",
+      "description": "깨끗이 하는 것"
+    },
+    {
+      "term": "쇼꾸닝",
+      "standard": "기능공",
+      "description": "숙련된 작업자"
+    },
+    {
+      "term": "쇼미",
+      "standard": "정칫수(제재목)",
+      "description": "정확한 치수"
+    },
+    {
+      "term": "스기",
+      "standard": "삼나무",
+      "description": "침엽수"
+    },
+    {
+      "term": "스나",
+      "standard": "모래",
+      "description": "잔 골재"
+    },
+    {
+      "term": "스데(Conc.)/스테 콘쿠리",
+      "standard": "버리는 콘크리트",
+      "description": "기초 밑 콘크리트"
+    },
+    {
+      "term": "스데바",
+      "standard": "사토장, 버리는 곳",
+      "description": "폐기물 처리장"
+    },
+    {
+      "term": "스라게",
+      "standard": "내려, 내리다",
+      "description": "아래로 내리는 동작"
+    },
+    {
+      "term": "스미",
+      "standard": "먹줄",
+      "description": "기준선 표시 도구"
+    },
+    {
+      "term": "스미키리",
+      "standard": "모따기",
+      "description": "모서리 깎기"
+    },
+    {
+      "term": "스지까이",
+      "standard": "가새, Brace",
+      "description": "구조 보강재"
+    },
+    {
+      "term": "스텐/스덴/스뎅",
+      "standard": "스테인리스 스틸",
+      "description": "녹슬지 않는 강철"
+    },
+    {
+      "term": "스페샤",
+      "standard": "스페이서",
+      "description": "철근 간격 띄우기 자재"
+    },
+    {
+      "term": "스페아",
+      "standard": "스페어, 여분",
+      "description": "예비품"
+    },
+    {
+      "term": "슬라브",
+      "standard": "지붕, Slab",
+      "description": "평평한 판"
+    },
+    {
+      "term": "승고다루끼",
+      "standard": "한치반 각재",
+      "description": "1.5치 각재"
+    },
+    {
+      "term": "시끼(이)",
+      "standard": "밑홈대(문틀), 문지방",
+      "description": "문 아래 부분"
+    },
+    {
+      "term": "시노/시누",
+      "standard": "긴결 철물 갈고리",
+      "description": "철사를 조아서 묶는 도구"
+    },
+    {
+      "term": "시다(시다바리)",
+      "standard": "보조원",
+      "description": "기술자를 돕는 사람"
+    },
+    {
+      "term": "시다지",
+      "standard": "바탕, 하지",
+      "description": "표면 아래 층"
+    },
+    {
+      "term": "시따바",
+      "standard": "아랫면",
+      "description": "아래쪽 표면"
+    },
+    {
+      "term": "시로토",
+      "standard": "초보자",
+      "description": "경험이 없는 사람"
+    },
+    {
+      "term": "시루시",
+      "standard": "표시, 마킹",
+      "description": "위치 표시"
+    },
+    {
+      "term": "시마이",
+      "standard": "끝, 마무리",
+      "description": "일을 끝마침"
+    },
+    {
+      "term": "시메라",
+      "standard": "장선기, 전선바이스",
+      "description": "전선 늘어짐 조절 공구"
+    },
+    {
+      "term": "시아게",
+      "standard": "마감",
+      "description": "마지막 작업"
+    },
+    {
+      "term": "시하찌",
+      "standard": "4×8 합판",
+      "description": "4피트×8피트 합판"
+    },
+    {
+      "term": "신나",
+      "standard": "시너, 희석제",
+      "description": "도료를 묽게 하는 액체"
+    },
+    {
+      "term": "신주/신쭈",
+      "standard": "황동, 놋쇠",
+      "description": "구리와 아연의 합금"
+    },
+    {
+      "term": "싱싱",
+      "standard": "중심간(벽, 기둥), 센터",
+      "description": "중심 위치"
+    },
+    {
+      "term": "쌍발기",
+      "standard": "탑승식 휘니샤",
+      "description": "바닥미장공용 기계"
+    },
+    {
+      "term": "쓰라/스라",
+      "standard": "면, Clearance",
+      "description": "표면, 여유 공간"
+    },
+    {
+      "term": "쓰루하시",
+      "standard": "곡괭이",
+      "description": "땅 파는 도구"
+    },
+    {
+      "term": "쓰미",
+      "standard": "조적(공), 쌓기",
+      "description": "벽돌 쌓는 일"
+    },
+    {
+      "term": "쓰봉",
+      "standard": "바지, 하의",
+      "description": "아래 입는 옷"
+    },
+    {
+      "term": "아까렝가",
+      "standard": "적벽돌",
+      "description": "붉은 벽돌"
+    },
+    {
+      "term": "아나방",
+      "standard": "Punched Steel Plate",
+      "description": "구멍 뚫린 철판"
+    },
+    {
+      "term": "아다라시",
+      "standard": "신품",
+      "description": "새 제품"
+    },
+    {
+      "term": "아다리",
+      "standard": "용접 화상, 잘 맞음",
+      "description": "각막 화상 또는 부품이 잘 맞는 것"
+    },
+    {
+      "term": "아라이다시",
+      "standard": "씻어내기(인조석)",
+      "description": "인조석 마감 방법"
+    },
+    {
+      "term": "아시바",
+      "standard": "비계, 발판",
+      "description": "높은 곳 작업용 임시 구조물"
+    },
+    {
+      "term": "아미",
+      "standard": "그물",
+      "description": "망"
+    },
+    {
+      "term": "암롤 박스",
+      "standard": "arm roll box",
+      "description": "쓰레기 적재용 철제 박스"
+    },
+    {
+      "term": "앙카",
+      "standard": "앵커",
+      "description": "고정 장치"
+    },
+    {
+      "term": "야기리",
+      "standard": "크레인 양중 거푸집, 클라이밍 폼",
+      "description": "대형 거푸집"
+    },
+    {
+      "term": "야네",
+      "standard": "지붕",
+      "description": "건물 윗면"
+    },
+    {
+      "term": "야리가다",
+      "standard": "규준틀(수평규준틀)",
+      "description": "수평 기준 설정 도구"
+    },
+    {
+      "term": "야리끼리",
+      "standard": "할당제 근무",
+      "description": "할당량 완료 시 퇴근"
+    },
+    {
+      "term": "야마",
+      "standard": "톱니, 나사산",
+      "description": "쌓아놓은 것의 무너짐"
+    },
+    {
+      "term": "야마도메",
+      "standard": "흙막이",
+      "description": "흙이 무너지는 것을 막음"
+    },
+    {
+      "term": "야스리",
+      "standard": "줄",
+      "description": "표면 다듬는 공구"
+    },
+    {
+      "term": "어지기",
+      "standard": "전선 입선 구령",
+      "description": "전선 넣을 때 내는 소리"
+    },
+    {
+      "term": "엔토쓰",
+      "standard": "굴뚝",
+      "description": "연기 배출구"
+    },
+    {
+      "term": "열반",
+      "standard": "열맞춰 반듯이",
+      "description": "판넬 정렬 작업"
+    },
+    {
+      "term": "오가네",
+      "standard": "큰 직각자",
+      "description": "대형 직각 측정 도구"
+    },
+    {
+      "term": "오도리바",
+      "standard": "계단참",
+      "description": "계단 중간 평평한 곳"
+    },
+    {
+      "term": "(마루)오도시",
+      "standard": "오르내리 꽂이쇠",
+      "description": "문 고정 장치"
+    },
+    {
+      "term": "오라이",
+      "standard": "좋다(all right)",
+      "description": "확인, 괜찮다"
+    },
+    {
+      "term": "오무기어/오모기어",
+      "standard": "웜기어",
+      "description": "나사형 기어"
+    },
+    {
+      "term": "오비끼",
+      "standard": "멍에, 3인치 각재",
+      "description": "상승각"
+    },
+    {
+      "term": "오비낑",
+      "standard": "띠철근",
+      "description": "기둥 둘레 철근"
+    },
+    {
+      "term": "오사마리",
+      "standard": "마무리",
+      "description": "일을 끝냄"
+    },
+    {
+      "term": "오사이/오사에",
+      "standard": "누름(몰탈, 유리퍼티)",
+      "description": "눌러서 고정"
+    },
+    {
+      "term": "오삽",
+      "standard": "큰삽",
+      "description": "각삽"
+    },
+    {
+      "term": "오시이레",
+      "standard": "반침, 벽장",
+      "description": "침구 보관 공간"
+    },
+    {
+      "term": "오야/오야지/오야가다",
+      "standard": "책임자, 우두머리",
+      "description": "팀장"
+    },
+    {
+      "term": "오함마",
+      "standard": "큰 햄머",
+      "description": "대형 망치"
+    },
+    {
+      "term": "와꾸, 와쿠",
+      "standard": "테두리",
+      "description": "둘레, 틀"
+    },
+    {
+      "term": "와리",
+      "standard": "나누기, 비율",
+      "description": "균형적 배치"
+    },
+    {
+      "term": "왕",
+      "standard": "고리, 마감재",
+      "description": "배관이나 헤드 설치 후 틈 메우는 고리"
+    },
+    {
+      "term": "요비선",
+      "standard": "호출선",
+      "description": "전선 입선용 당김선"
+    },
+    {
+      "term": "요꼬",
+      "standard": "가로",
+      "description": "수평 방향"
+    },
+    {
+      "term": "우끼",
+      "standard": "뜨개밸브, 부레, 플로트 스위치",
+      "description": "수위 감지 장치"
+    },
+    {
+      "term": "우라",
+      "standard": "뒷편",
+      "description": "뒤쪽"
+    },
+    {
+      "term": "우라이시",
+      "standard": "뒷채움 자갈",
+      "description": "뒤쪽에 채우는 돌"
+    },
+    {
+      "term": "우마",
+      "standard": "말비계",
+      "description": "높이 조절 작업대"
+    },
+    {
+      "term": "우메모도시",
+      "standard": "되메우기",
+      "description": "파낸 흙을 다시 채움"
+    },
+    {
+      "term": "우와낑",
+      "standard": "상부근",
+      "description": "위쪽 철근"
+    },
+    {
+      "term": "우찌바나시",
+      "standard": "제물 마감",
+      "description": "콘크리트 거푸집 제거 후 표면"
+    },
+    {
+      "term": "유가, 육가",
+      "standard": "배수구 트랩",
+      "description": "냄새 차단 배수 장치"
+    },
+    {
+      "term": "우에사캡,위샤캡, 웨샤캡",
+      "standard": "엔트런스 캡, 서비스 캡",
+      "description": "전선 입구 보호 장치"
+    },
+    {
+      "term": "유도리",
+      "standard": "융통성",
+      "description": "신축성 있게 처리"
+    },
+    {
+      "term": "유까",
+      "standard": "바닥",
+      "description": "방 바닥"
+    },
+    {
+      "term": "이도",
+      "standard": "우물",
+      "description": "지하수 채취 구멍"
+    },
+    {
+      "term": "이모메지",
+      "standard": "통줄눈",
+      "description": "일자로 쌓은 줄눈"
+    },
+    {
+      "term": "이바리",
+      "standard": "거스러미",
+      "description": "주물 또는 드릴 작업 찌꺼기"
+    },
+    {
+      "term": "이타",
+      "standard": "판자",
+      "description": "얇은 나무판"
+    },
+    {
+      "term": "입빠이",
+      "standard": "가득",
+      "description": "완전히 찬 상태"
+    },
+    {
+      "term": "입뽄모노",
+      "standard": "하나로 된 물건",
+      "description": "일체형"
+    },
+    {
+      "term": "자가네",
+      "standard": "수도꼭지",
+      "description": "물 배출 장치"
+    },
+    {
+      "term": "자바라/쟈바라",
+      "standard": "주름진 물건",
+      "description": "접문, 나선, 플렉서블"
+    },
+    {
+      "term": "짬뿌",
+      "standard": "점프",
+      "description": "뛰어넘기"
+    },
+    {
+      "term": "전",
+      "standard": "센티미터",
+      "description": "길이 단위"
+    },
+    {
+      "term": "젠다이",
+      "standard": "돌출창대",
+      "description": "화장실 물건 놓는 곳"
+    },
+    {
+      "term": "조기",
+      "standard": "자, 잣대",
+      "description": "길이 측정 도구"
+    },
+    {
+      "term": "조시",
+      "standard": "상태",
+      "description": "현재 상황"
+    },
+    {
+      "term": "조시/조세",
+      "standard": "조정",
+      "description": "맞추기"
+    },
+    {
+      "term": "지리",
+      "standard": "벽쌤",
+      "description": "벽면과 돌출면의 미장면 차이"
+    },
+    {
+      "term": "찐빠/찜빠",
+      "standard": "짝짝이, 부조현상",
+      "description": "불균형 상태"
+    },
+    {
+      "term": "치구",
+      "standard": "DRF렌치",
+      "description": "절삭 가공물 고정 도구"
+    },
+    {
+      "term": "천정",
+      "standard": "천장",
+      "description": "방 윗면"
+    },
+    {
+      "term": "카본",
+      "standard": "탄소강",
+      "description": "carbon steel"
+    },
+    {
+      "term": "칼브럭/칼블럭",
+      "standard": "스크루앵커",
+      "description": "벽 고정 나사"
+    },
+    {
+      "term": "쿠사리",
+      "standard": "쇠사슬",
+      "description": "금속 체인"
+    },
+    {
+      "term": "쿠사리",
+      "standard": "구박받다",
+      "description": "심한 대우를 받음"
+    },
+    {
+      "term": "쿠사비/웨지",
+      "standard": "쐐기, Wedge",
+      "description": "틈에 박는 도구"
+    },
+    {
+      "term": "쿠세",
+      "standard": "버릇",
+      "description": "습관"
+    },
+    {
+      "term": "클립",
+      "standard": "클립",
+      "description": "비계 파이프 고정 연결구"
+    },
+    {
+      "term": "키리카에/기레까이/기레까시",
+      "standard": "바꾸기",
+      "description": "교체"
+    },
+    {
+      "term": "타이",
+      "standard": "타이, Tie",
+      "description": "거푸집 고정 금속핀"
+    },
+    {
+      "term": "타이루",
+      "standard": "타일",
+      "description": "벽 바닥 마감재"
+    },
+    {
+      "term": "타카",
+      "standard": "태커, 스테이플러",
+      "description": "고정 공구"
+    },
+    {
+      "term": "탭",
+      "standard": "탭",
+      "description": "암나사 가공 도구"
+    },
+    {
+      "term": "투바이",
+      "standard": "50×100 각재",
+      "description": "2인치×4인치 각재"
+    },
+    {
+      "term": "판넬/판네루",
+      "standard": "패널, 전시판, 배전반",
+      "description": "평평한 판"
+    },
+    {
+      "term": "펜치",
+      "standard": "절삭 플라이어",
+      "description": "자르는 공구"
+    },
+    {
+      "term": "프리치",
+      "standard": "브리지",
+      "description": "연결 장치"
+    },
+    {
+      "term": "프로파일",
+      "standard": "프로필",
+      "description": "특정 단면으로 가공된 형강"
+    },
+    {
+      "term": "피스/비스",
+      "standard": "나사못",
+      "description": "작은 나사"
+    },
+    {
+      "term": "하까",
+      "standard": "결속선, 긴결 갈고리",
+      "description": "묶는 철사"
+    },
+    {
+      "term": "하꼬",
+      "standard": "상자, 작고 열악한 것",
+      "description": "작은 공간"
+    },
+    {
+      "term": "하리",
+      "standard": "보, 대들보",
+      "description": "수평 구조재"
+    },
+    {
+      "term": "하리 가네",
+      "standard": "철사",
+      "description": "가는 철선"
+    },
+    {
+      "term": "(하리)가와",
+      "standard": "보옆판(형틀)",
+      "description": "보 측면 거푸집"
+    },
+    {
+      "term": "하바",
+      "standard": "폭, 너비",
+      "description": "가로 길이"
+    },
+    {
+      "term": "하바끼",
+      "standard": "걸레받이",
+      "description": "벽 아래 마감재"
+    },
+    {
+      "term": "하스리",
+      "standard": "쪼아내기, 정질, 까대기",
+      "description": "돌이나 콘크리트 부수기"
+    },
+    {
+      "term": "하시라",
+      "standard": "기둥",
+      "description": "수직 구조재"
+    },
+    {
+      "term": "하이바",
+      "standard": "안전모, 헬멧",
+      "description": "머리 보호구"
+    },
+    {
+      "term": "한빠/함빠",
+      "standard": "어중간한 사람",
+      "description": "기술이 없는 사람"
+    },
+    {
+      "term": "함바",
+      "standard": "현장 식당",
+      "description": "공사장 식당"
+    },
+    {
+      "term": "항공 마대",
+      "standard": "톤백, 프레콘",
+      "description": "대형 직조물 포대"
+    },
+    {
+      "term": "헤라",
+      "standard": "쇠주걱",
+      "description": "시멘트 떼거나 퍼티 바르는 도구"
+    },
+    {
+      "term": "헤베",
+      "standard": "평방미터",
+      "description": "면적 단위"
+    },
+    {
+      "term": "호네구미",
+      "standard": "뼈대",
+      "description": "골조"
+    },
+    {
+      "term": "호리가다",
+      "standard": "터파기",
+      "description": "땅 파기"
+    },
+    {
+      "term": "호로/호루",
+      "standard": "덮개, 걸레",
+      "description": "트럭 적재함 덮개"
+    },
+    {
+      "term": "홍아시바",
+      "standard": "쌍줄비계",
+      "description": "이중 비계"
+    },
+    {
+      "term": "후까시",
+      "standard": "부풀리기, 공회전",
+      "description": "찜질"
+    },
+    {
+      "term": "후꾸로바리",
+      "standard": "띄워바름(도배)",
+      "description": "도배 방법"
+    },
+    {
+      "term": "후다",
+      "standard": "뚜껑, 덮개",
+      "description": "위를 덮는 것"
+    },
+    {
+      "term": "후렌지/후렌찌",
+      "standard": "플렌지",
+      "description": "기계 결합 부품"
+    },
+    {
+      "term": "후앙",
+      "standard": "팬, 환풍기",
+      "description": "공기 순환 장치"
+    },
+    {
+      "term": "후지",
+      "standard": "돌림, 테두리",
+      "description": "가장자리"
+    },
+    {
+      "term": "후쿠",
+      "standard": "후크, 갈고리",
+      "description": "철근 결속용 공구"
+    },
+    {
+      "term": "후쿠메타",
+      "standard": "훅 온 미터, 클램프 미터",
+      "description": "전류계"
+    },
+    {
+      "term": "휘니샤",
+      "standard": "시멘트 피니셔",
+      "description": "바닥미장용 기계"
+    },
+    {
+      "term": "히꼬미",
+      "standard": "파 넣음",
+      "description": "전선 입선"
+    },
+    {
+      "term": "히비",
+      "standard": "균열",
+      "description": "금 간 것"
+    },
+    {
+      "term": "히다리탭",
+      "standard": "나사 제거 공구",
+      "description": "나사 빼는 도구"
+    },
+    {
+      "term": "히사시",
+      "standard": "캐노피, 차양",
+      "description": "햇빛 가리개"
+    }
+  ],
+  "metadata": {
+    "total_terms": 394,
+    "source": "건설 현장 용어 정리",
+    "description": "건설 현장에서 사용되는 일본어 유래 용어와 순화 표현",
+    "last_updated": "2026-07-21"
+  }
+}

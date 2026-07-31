@@ -118,7 +118,7 @@ class _AddCostDatePickerDialogState
               Padding(
                 padding: EdgeInsets.symmetric(vertical: context.rsi(10)),
                 child: Text(
-                  '현장 기간 / 작업일 선택',
+                  '현장 기간 / 업로드일 선택',
                   style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -127,7 +127,11 @@ class _AddCostDatePickerDialogState
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.circle, size: context.rsi(8), color: cs.outline),
+                    Icon(
+                      Icons.circle,
+                      size: context.rsi(8),
+                      color: PlaceWorkforceSchedule.scheduleDayDotColor,
+                    ),
                     SizedBox(width: context.rsi(5)),
                     Text(
                       '공정',
@@ -137,7 +141,11 @@ class _AddCostDatePickerDialogState
                       ),
                     ),
                     SizedBox(width: context.rsi(14)),
-                    Icon(Icons.circle, size: context.rsi(8), color: cs.tertiary),
+                    Icon(
+                      Icons.circle,
+                      size: context.rsi(8),
+                      color: PlaceWorkforceSchedule.workforceDayDotColor,
+                    ),
                     SizedBox(width: context.rsi(5)),
                     Text(
                       '인력 투입',

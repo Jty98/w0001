@@ -40,9 +40,12 @@ abstract final class ResponsiveLayout {
   /// [MediaQuery]에 적용할 앱 전역 [TextScaler].
   ///
   /// 시스템 접근성 배율은 유지하고, 기기 크기에 따라 추가로 비율을 맞춘다.
-  static TextScaler appTextScaler(MediaQueryData mq) {
+  static TextScaler appTextScaler(
+    MediaQueryData mq, {
+    double extraScale = 1.0,
+  }) {
     final platform = mq.textScaler;
-    final combined = platform.scale(1) * deviceTextScale(mq.size);
+    final combined = platform.scale(1) * deviceTextScale(mq.size) * extraScale;
     return TextScaler.linear(combined).clamp(
       minScaleFactor: kMinDeviceTextScale * 0.95,
       maxScaleFactor: kMaxCombinedTextScale,
@@ -107,8 +110,7 @@ extension ResponsiveBuildContext on BuildContext {
   bool get isCompactDevice =>
       ResponsiveLayout.isCompact(MediaQuery.sizeOf(this));
 
-  bool get isTabletDevice =>
-      ResponsiveLayout.isTablet(MediaQuery.sizeOf(this));
+  bool get isTabletDevice => ResponsiveLayout.isTablet(MediaQuery.sizeOf(this));
 
   /// 디자인 dp → 기기 비율 스케일 (간격·높이·아이콘).
   double rs(double value) => ResponsiveLayout.scale(this, value);

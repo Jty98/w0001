@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
+import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_theme_colors.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/screen/0_auth/super_admin_profile/super_admin_empty_banner.dart';
 import 'package:w0001/ui/screen/0_auth/super_admin_profile/super_admin_member_card.dart';
 import 'package:w0001/ui/screen/0_auth/super_admin_profile/profile_super_admin_members_limits.dart';
@@ -63,10 +66,7 @@ class SuperAdminQueueBlock extends StatelessWidget {
           if (showTopDivider)
             Padding(
               padding: EdgeInsets.fromLTRB(padH, 0, padH, context.rsi(8)),
-              child: Divider(
-                height: 1,
-                color: cs.outlineVariant.withValues(alpha: 0.35),
-              ),
+              child: const AppInsetDivider(),
             ),
           Padding(
             padding: EdgeInsets.fromLTRB(padH, padV, padH, 0),
@@ -75,9 +75,9 @@ class SuperAdminQueueBlock extends StatelessWidget {
                 Container(
                   width: context.rs(28),
                   height: context.rs(28),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(context.rs(8)),
+                  decoration: AppSectionCardStyles.iconBadgeDecoration(
+                    context,
+                    cs,
                   ),
                   alignment: Alignment.center,
                   child: Icon(
@@ -96,16 +96,14 @@ class SuperAdminQueueBlock extends StatelessWidget {
                     ),
                   ),
                 ),
-                Container(
+                AppInsetTile(
+                  borderRadius: BorderRadius.circular(999),
+                  backgroundColor: items.isEmpty
+                      ? cs.appMutedFill
+                      : cs.primaryContainer.withValues(alpha: 0.5),
                   padding: EdgeInsets.symmetric(
                     horizontal: context.rsi(8),
                     vertical: context.rsi(3),
-                  ),
-                  decoration: BoxDecoration(
-                    color: items.isEmpty
-                        ? cs.surfaceContainerHighest.withValues(alpha: 0.6)
-                        : cs.primaryContainer.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     '${items.length}',
@@ -150,8 +148,8 @@ class SuperAdminQueueBlock extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                           onPressed: onRetryReload,
-                          icon: Icon(Icons.refresh_rounded,
-                              size: context.rs(16)),
+                          icon:
+                              Icon(Icons.refresh_rounded, size: context.rs(16)),
                           label: const Text('다시 불러오기'),
                           style: TextButton.styleFrom(
                             visualDensity: VisualDensity.compact,

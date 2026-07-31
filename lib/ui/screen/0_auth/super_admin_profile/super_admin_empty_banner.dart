@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 class SuperAdminEmptyBanner extends StatelessWidget {
@@ -19,15 +21,10 @@ class SuperAdminEmptyBanner extends StatelessWidget {
     final vPad = context.rsi(compact ? 10 : 14);
     final iconSize = context.rs(compact ? 20 : 26);
 
-    return Container(
-      width: double.infinity,
+    return AppInsetTile(
       padding: EdgeInsets.symmetric(
         horizontal: context.rsi(12),
         vertical: vPad,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(compact ? 10 : 14),
-        color: cs.surfaceContainerLow.withValues(alpha: 0.45),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

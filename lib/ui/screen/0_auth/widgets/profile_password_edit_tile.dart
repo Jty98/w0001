@@ -6,6 +6,7 @@ import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/user_account_providers.dart';
 import 'package:w0001/util/auth_api_user_messages.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 class _PasswordChangeResult {
   const _PasswordChangeResult({
@@ -71,7 +72,7 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
+              AppTextFormField(
                 controller: _currentController,
                 obscureText: _obscureCurrent,
                 decoration: InputDecoration(
@@ -94,7 +95,7 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              TextFormField(
+              AppTextFormField(
                 controller: _newController,
                 obscureText: _obscureNew,
                 decoration: InputDecoration(
@@ -119,7 +120,7 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              TextFormField(
+              AppTextFormField(
                 controller: _confirmController,
                 obscureText: _obscureConfirm,
                 decoration: InputDecoration(

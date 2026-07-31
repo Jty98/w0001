@@ -5,7 +5,7 @@ import 'package:w0001/domain/use_case/super_admin_remote_use_case.dart';
 import 'package:w0001/presentation/viewmodel/profile_super_admin_members_state.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/worker_mgmt_view_model.dart';
-import 'package:w0001/ui/screen/0_auth/super_admin_profile/profile_super_admin_members_limits.dart';
+import 'package:w0001/presentation/viewmodel/worker_rank_wage_settings_providers.dart';
 
 /// 슈퍼관리자 프로필의 회원 목록·검색어 반영 상태. UI는 검색만 컨트롤러로 두고 나머지는 여기서 갱신.
 final profileSuperAdminMembersProvider = NotifierProvider.autoDispose<
@@ -17,11 +17,25 @@ class ProfileSuperAdminMembersNotifier
     extends Notifier<ProfileSuperAdminMembersState> {
   int _activeFetchGen = 0;
   var _scheduledBootstrap = false;
+  Future<void>? _activeLoadMoreInFlight;
 
   SuperAdminRemoteUseCase get _uc => ref.read(superAdminRemoteUseCaseProvider);
 
   List<UserRead> _noProtectedAdmins(List<UserRead> xs) =>
       xs.where((u) => !isProtectedAdminUser(u)).toList();
+
+  List<UserRead> _mergeUsersByUid(
+      List<UserRead> existing, List<UserRead> incoming) {
+    final seen = <String>{};
+    final out = <UserRead>[];
+    for (final u in existing) {
+      if (seen.add(u.uid)) out.add(u);
+    }
+    for (final u in incoming) {
+      if (seen.add(u.uid)) out.add(u);
+    }
+    return out;
+  }
 
   @override
   ProfileSuperAdminMembersState build() {
@@ -54,20 +68,25 @@ class ProfileSuperAdminMembersNotifier
       state = state.copyWith(
         busyActive: true,
         errorActive: null,
+        activeLoadingMore: false,
+        clearActiveNextCursor: true,
+        clearActiveTotalCount: true,
       );
     }
 
     try {
-      final raw = await _uc.usersSearch(
+      final page = await _uc.usersSearchPage(
         approvalStatus: 'approved',
         isActive: true,
         q: q,
       );
       if (!ref.mounted || gen != _activeFetchGen) return;
       state = state.copyWith(
-        activeMembers: _noProtectedAdmins(raw),
+        activeMembers: _noProtectedAdmins(page.items),
         appliedActiveTrim: qTrim,
-        activeVisibleCount: ProfileSuperAdminMembersLimits.activePageSize,
+        activeHasMore: page.canLoadMore,
+        activeNextCursor: page.nextCursor,
+        activeTotalCount: page.totalCount,
         busyActive: silent ? null : false,
         errorActive: null,
       );
@@ -78,6 +97,53 @@ class ProfileSuperAdminMembersNotifier
         errorActive: e,
         busyActive: silent ? null : false,
       );
+    }
+  }
+
+  Future<void> loadMoreActiveMembers() async {
+    if (!state.activeHasMore || state.activeLoadingMore || state.busyActive) {
+      return;
+    }
+    if (_activeLoadMoreInFlight != null) return _activeLoadMoreInFlight;
+
+    final cursor = state.activeNextCursor;
+    if (cursor == null || cursor.isEmpty) return;
+
+    _activeLoadMoreInFlight = _loadMoreActiveBody(cursor);
+    try {
+      await _activeLoadMoreInFlight;
+    } finally {
+      _activeLoadMoreInFlight = null;
+    }
+  }
+
+  Future<void> _loadMoreActiveBody(String cursor) async {
+    final gen = _activeFetchGen;
+    state = state.copyWith(activeLoadingMore: true, errorActive: null);
+    try {
+      final qTrim = state.appliedActiveTrim.trim();
+      final page = await _uc.usersSearchPage(
+        approvalStatus: 'approved',
+        isActive: true,
+        q: qTrim.isEmpty ? null : qTrim,
+        cursor: cursor,
+      );
+      if (!ref.mounted || gen != _activeFetchGen) return;
+      final merged = _mergeUsersByUid(
+        state.activeMembers,
+        _noProtectedAdmins(page.items),
+      );
+      state = state.copyWith(
+        activeMembers: merged,
+        activeHasMore: page.canLoadMore,
+        activeNextCursor: page.nextCursor,
+        activeTotalCount: page.totalCount ?? state.activeTotalCount,
+        activeLoadingMore: false,
+      );
+    } catch (e, st) {
+      if (!ref.mounted || gen != _activeFetchGen) return;
+      debugPrint('loadMoreActiveMembers: $e\n$st');
+      state = state.copyWith(activeLoadingMore: false, errorActive: e);
     }
   }
 
@@ -111,9 +177,9 @@ class ProfileSuperAdminMembersNotifier
 
   Future<void> _loadPending() async {
     try {
-      final raw = await _uc.usersPendingList();
+      final page = await _uc.usersPendingPage();
       if (!ref.mounted) return;
-      state = state.copyWith(pendingMembers: _noProtectedAdmins(raw));
+      state = state.copyWith(pendingMembers: _noProtectedAdmins(page.items));
     } catch (e, st) {
       debugPrint('_loadPending: $e\n$st');
       if (!ref.mounted) return;
@@ -123,12 +189,12 @@ class ProfileSuperAdminMembersNotifier
 
   Future<void> _loadSuspended() async {
     try {
-      final raw = await _uc.usersSearch(
+      final page = await _uc.usersSearchPage(
         approvalStatus: 'approved',
         isActive: false,
       );
       if (!ref.mounted) return;
-      state = state.copyWith(suspendedMembers: _noProtectedAdmins(raw));
+      state = state.copyWith(suspendedMembers: _noProtectedAdmins(page.items));
     } catch (e, st) {
       debugPrint('_loadSuspended: $e\n$st');
       if (!ref.mounted) return;
@@ -138,9 +204,9 @@ class ProfileSuperAdminMembersNotifier
 
   Future<void> _loadRejected() async {
     try {
-      final raw = await _uc.usersSearch(approvalStatus: 'rejected');
+      final page = await _uc.usersSearchPage(approvalStatus: 'rejected');
       if (!ref.mounted) return;
-      state = state.copyWith(rejectedMembers: _noProtectedAdmins(raw));
+      state = state.copyWith(rejectedMembers: _noProtectedAdmins(page.items));
     } catch (e, st) {
       debugPrint('_loadRejected: $e\n$st');
       if (!ref.mounted) return;
@@ -150,6 +216,12 @@ class ProfileSuperAdminMembersNotifier
 
   Future<void> userApprove(String uid, {String? note}) async {
     await _uc.userApprove(uid, note: note);
+    try {
+      final user = await _uc.userGet(uid);
+      await ref
+          .read(workerRankWageSettingsUseCaseProvider)
+          .applyDefaultWageForUser(user);
+    } catch (_) {}
     await reload(silent: true);
   }
 
@@ -189,21 +261,13 @@ class ProfileSuperAdminMembersNotifier
     await _uc.userDelete(uid);
     await reload(silent: true);
   }
-
-  void loadMoreActiveMembers() {
-    final total = state.activeMembers.length;
-    if (total <= state.activeVisibleCount) return;
-    final next = state.activeVisibleCount +
-        ProfileSuperAdminMembersLimits.activePageStep;
-    state = state.copyWith(
-      activeVisibleCount: next > total ? total : next,
-    );
-  }
 }
 
 Future<void> reloadProfileSuperAdminMembers(WidgetRef ref) async {
   await Future.wait<void>([
     ref.read(profileSuperAdminMembersProvider.notifier).reload(),
-    ref.read(workerMgmtHumanDirectoryProvider.notifier).reload(blocking: false),
+    ref
+        .read(workerMgmtHumanDirectoryProvider.notifier)
+        .loadAllHumans(blocking: false),
   ]);
 }

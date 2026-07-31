@@ -3,6 +3,7 @@ import 'package:w0001/domain/process_schedule/process_schedule_editor.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_palette.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 import 'process_schedule_dim.dart';
 import 'process_schedule_helpers.dart';
@@ -41,7 +42,9 @@ Widget cornerHeader(BuildContext context, ColorScheme cs) {
         child: Text(
           '구분',
           textAlign: TextAlign.center,
-          style: tt.labelMedium?.copyWith(
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: tt.labelSmall?.copyWith(
             fontWeight: FontWeight.w800,
             color: cs.onSurface,
           ),
@@ -81,22 +84,33 @@ Widget dateHeaderCell(
     ),
     child: Center(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '${day.day}',
-            style: tt.labelLarge?.copyWith(
+            scheduleDateHeaderDayLine(day),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            style: tt.labelSmall?.copyWith(
               fontWeight: FontWeight.w800,
+              fontSize: context.rsi(11),
               color: isWeekend
                   ? (day.weekday == DateTime.sunday ? cs.error : cs.primary)
                   : cs.onSurface,
+              height: 1.05,
             ),
           ),
           Text(
-            weekdayKoShort(day.weekday),
+            scheduleDateHeaderWeekdayLine(day),
+            textAlign: TextAlign.center,
+            maxLines: 1,
             style: tt.labelSmall?.copyWith(
               fontWeight: FontWeight.w700,
-              color: cs.onSurfaceVariant,
+              fontSize: context.rsi(10),
+              color: isWeekend
+                  ? (day.weekday == DateTime.sunday ? cs.error : cs.primary)
+                  : cs.onSurfaceVariant,
+              height: 1.05,
             ),
           ),
         ],
@@ -121,11 +135,25 @@ Widget dateHeaderCell(
 Widget taskLabelCell(
   BuildContext context,
   ProcessScheduleTask row, {
+  VoidCallback? onTap,
   VoidCallback? onLongPress,
 }) {
   final cs = Theme.of(context).colorScheme;
   final tt = Theme.of(context).textTheme;
   final bar = Color(ProcessSchedulePalette.argbAt(row.paletteIndex));
+  final displayName = row.name.trim().isEmpty ? '공정 이름' : row.name;
+  final nameStyle = row.name.trim().isEmpty
+      ? tt.labelSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: cs.primary.withValues(alpha: 0.85),
+          height: 1.1,
+          fontStyle: FontStyle.italic,
+        )
+      : tt.labelSmall?.copyWith(
+          fontWeight: FontWeight.w800,
+          color: cs.onSurface,
+          height: 1.1,
+        );
 
   final content = DecoratedBox(
     decoration: BoxDecoration(
@@ -158,14 +186,10 @@ Widget taskLabelCell(
               right: 6,
             ),
             child: Text(
-              row.name,
-              maxLines: 2,
+              displayName,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: tt.labelMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: cs.onSurface,
-                height: 1.15,
-              ),
+              style: nameStyle,
             ),
           ),
         ),
@@ -173,17 +197,148 @@ Widget taskLabelCell(
     ),
   );
 
-  if (onLongPress == null) {
+  if (onTap == null && onLongPress == null) {
     return content;
   }
 
   return Material(
     color: Colors.transparent,
     child: InkWell(
+      onTap: onTap,
       onLongPress: onLongPress,
       child: content,
     ),
   );
+}
+
+/// 구분 열 — 탭하면 이름을 바로 입력한다.
+class EditableTaskLabelCell extends StatefulWidget {
+  const EditableTaskLabelCell({
+    super.key,
+    required this.row,
+    required this.readOnly,
+    required this.onNameCommitted,
+  });
+
+  final ProcessScheduleTask row;
+  final bool readOnly;
+  final ValueChanged<String> onNameCommitted;
+
+  @override
+  State<EditableTaskLabelCell> createState() => _EditableTaskLabelCellState();
+}
+
+class _EditableTaskLabelCellState extends State<EditableTaskLabelCell> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  var _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.row.name);
+    _focusNode = FocusNode()..addListener(_handleFocus);
+  }
+
+  @override
+  void didUpdateWidget(EditableTaskLabelCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editing && oldWidget.row.name != widget.row.name) {
+      _controller.text = widget.row.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocus);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleFocus() {
+    if (!_focusNode.hasFocus && _editing) {
+      _commit();
+    }
+  }
+
+  void _commit() {
+    if (!mounted) return;
+    setState(() => _editing = false);
+    widget.onNameCommitted(_controller.text.trim());
+  }
+
+  void _startEdit() {
+    if (widget.readOnly) return;
+    setState(() => _editing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _focusNode.requestFocus();
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_editing) {
+      final cs = Theme.of(context).colorScheme;
+      final bar = Color(ProcessSchedulePalette.argbAt(widget.row.paletteIndex));
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHigh.withValues(alpha: 0.95),
+          border: Border(
+            right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.45)),
+            bottom:
+                BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: context.rs(5),
+              color: bar,
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.rsi(6),
+                  vertical: context.rsi(4),
+                ),
+                child: AppTextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    hintText: '공정 이름',
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                      ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _commit(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return taskLabelCell(
+      context,
+      widget.row,
+      onTap: widget.readOnly ? null : _startEdit,
+    );
+  }
 }
 
 TableCell scheduleGridCell({
@@ -228,11 +383,12 @@ TableCell scheduleGridCell({
               child: Text(
                 row.name,
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: tt.labelSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                   height: 1.05,
+                  fontSize: context.rsi(10),
                   color: labelColor,
                   shadows: [
                     Shadow(

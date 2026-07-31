@@ -52,8 +52,8 @@ class PhoneMoVerificationNotifier extends Notifier<PhoneMoVerificationState> {
         isLoading: false,
       );
 
-      // SMS 앱 열기
-      await _useCase.openSmsComposer(
+      // SMS 앱 / iOS composer 열기
+      await _useCase.composeMoSms(
         moNumber: result.moNumber,
         body: result.smsBody,
       );
@@ -87,4 +87,3 @@ class PhoneMoVerificationNotifier extends Notifier<PhoneMoVerificationState> {
     state = const PhoneMoVerificationState();
   }
 }
-

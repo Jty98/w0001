@@ -1,17 +1,18 @@
 import 'dart:math' as math;
 
-import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/domain/cost_place_picker_filter.dart';
+import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/place_model.dart';
+import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
-import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/ui/screen/2_add/material_cost_tab.dart';
 import 'package:w0001/ui/screen/2_add/work_cost_tab.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/ui/widget/place_picker/place_cost_picker_sheet.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -19,65 +20,11 @@ import 'package:w0001/util/responsive_layout.dart';
 /// 현장 선택 첫 화면: 본문 하단(하단 탭바 바로 위)에서 띄울 간격 — 논리 픽셀(dp/pt), 해상도마다 동일 비율
 const double _kPlacePickerGapAboveBottomNav = 30;
 
-/// 현장 선택 메뉴를 필드 **위쪽**으로 열기 (한손 조작 시 목록이 손가락 쪽으로)
-RelativeRect _placeMenuAbovePosition(RenderBox button, RenderBox overlay) {
-  final sz = button.size;
-  final tl = button.localToGlobal(Offset.zero, ancestor: overlay);
-  final w = overlay.size.width;
-  final h = overlay.size.height;
-  const gap = 6.0;
-  final anchorTop = tl.dy - gap;
-
-  // 위 공간만 사용해서 메뉴 높이를 계산해, 버튼 바로 위에 붙여 띄운다.
-  final maxUsableHeight = (anchorTop - 8.0).clamp(120.0, 360.0);
-  final top = (anchorTop - maxUsableHeight).clamp(8.0, h - 8.0);
-  final left = tl.dx.clamp(8.0, w - sz.width - 8.0);
-  final menuHeight = (anchorTop - top).clamp(0.0, h - top - 8.0);
-
-  return RelativeRect.fromRect(
-    Rect.fromLTWH(left, top, sz.width, menuHeight),
-    Offset.zero & Size(w, h),
-  );
-}
-
-/// 패키지 기본과 동일 — 필드 **아래**로 메뉴 펼침.
-RelativeRect _placeMenuBelowPosition(RenderBox button, RenderBox overlay) {
-  return RelativeRect.fromSize(
-    Rect.fromPoints(
-      button.localToGlobal(
-        button.size.bottomLeft(Offset.zero),
-        ancestor: overlay,
-      ),
-      button.localToGlobal(
-        button.size.bottomRight(Offset.zero),
-        ancestor: overlay,
-      ),
-    ),
-    Size(overlay.size.width, overlay.size.height),
-  );
-}
-
-bool _placeModelSame(PlaceModel a, PlaceModel b) {
-  if (a.pid != null && b.pid != null) return a.pid == b.pid;
-  return identical(a, b);
-}
-
 String _placePickerDisplayLabel(PlaceModel item, AddCostState state) {
-  if (state.costPlacePickerFilter != CostPlacePickerFilter.all) {
-    return item.pname;
-  }
-  return item.pcomplete == 1 ? '${item.pname} (완료)' : item.pname;
-}
-
-String _placePickerEmptyMessage(AddCostState state) {
-  switch (state.costPlacePickerFilter) {
-    case CostPlacePickerFilter.all:
-      return '등록된 현장이 없습니다.';
-    case CostPlacePickerFilter.inProgress:
-      return '진행중인 현장이 없습니다.';
-    case CostPlacePickerFilter.completed:
-      return '완료된 현장이 없습니다.';
-  }
+  return placeCostPickerDisplayLabel(
+    item,
+    filter: state.costPlacePickerFilter,
+  );
 }
 
 class AddScreen extends ConsumerStatefulWidget {
@@ -143,127 +90,128 @@ class _AddScreenState extends ConsumerState<AddScreen>
           vm.clearSelectedPlace();
         },
         child: PopScope(
-      canPop: !hasPlace,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        if (ref.read(addCostProvider).selectedPlace == null) return;
-        FocusScope.of(context).unfocus();
-        vm.clearSelectedPlace();
-      },
-      child: DefaultTabController(
-      length: 2,
-      initialIndex: 0,
-      child: GestureDetector(
-        behavior: HitTestBehavior.deferToChild,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Scaffold(
-          resizeToAvoidBottomInset: true,
-          body: AnimatedBuilder(
-            animation: _openController,
-            builder: (context, _) {
-              final u = Curves.easeInOutCubic
-                  .transform(_openController.value.clamp(0.0, 1.0));
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final media = MediaQuery.of(context);
-                  final w = constraints.maxWidth;
-                  // body는 보통 bounded이나, 무한/0이면 화면 기준으로 보정
-                  var h = constraints.maxHeight;
-                  if (!h.isFinite || h <= 0) {
-                    h = media.size.height -
-                        media.padding.top -
-                        media.padding.bottom;
-                  }
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            if (ref.read(addCostProvider).selectedPlace == null) return;
+            FocusScope.of(context).unfocus();
+            vm.clearSelectedPlace();
+          },
+          child: DefaultTabController(
+            length: 2,
+            initialIndex: 0,
+            child: GestureDetector(
+              behavior: HitTestBehavior.deferToChild,
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: Scaffold(
+                resizeToAvoidBottomInset: true,
+                body: AnimatedBuilder(
+                  animation: _openController,
+                  builder: (context, _) {
+                    final u = Curves.easeInOutCubic
+                        .transform(_openController.value.clamp(0.0, 1.0));
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final media = MediaQuery.of(context);
+                        final w = constraints.maxWidth;
+                        // body는 보통 bounded이나, 무한/0이면 화면 기준으로 보정
+                        var h = constraints.maxHeight;
+                        if (!h.isFinite || h <= 0) {
+                          h = media.size.height -
+                              media.padding.top -
+                              media.padding.bottom;
+                        }
 
-                  if (u >= _kOpenLayoutThreshold) {
-                    return SizedBox(
-                      height: h,
-                      width: w,
-                      child: _buildScrollMainPanel(
-                        context,
-                        ref,
-                        vm,
-                        state,
-                      ),
-                    );
-                  }
-                  if (u <= _kClosedLayoutThreshold) {
-                    return SizedBox(
-                      height: h,
-                      width: w,
-                      child: _buildPlacePickerPanel(
-                        context,
-                        ref,
-                        vm,
-                        state,
-                        w,
-                      ),
-                    );
-                  }
+                        if (u >= _kOpenLayoutThreshold) {
+                          return SizedBox(
+                            height: h,
+                            width: w,
+                            child: _buildScrollMainPanel(
+                              context,
+                              ref,
+                              vm,
+                              state,
+                            ),
+                          );
+                        }
+                        if (u <= _kClosedLayoutThreshold) {
+                          return SizedBox(
+                            height: h,
+                            width: w,
+                            child: _buildPlacePickerPanel(
+                              context,
+                              ref,
+                              vm,
+                              state,
+                              w,
+                            ),
+                          );
+                        }
 
-                  final offsetY = u * h;
-                  // ScrollView는 TabBarView+Expanded 조합에 세로 무한 제약을 줘 레이아웃이 깨짐.
-                  // OverflowBox로 2h를 그린 뒤 ClipRect+Transform으로 뷰포트만 보이게 함.
-                  // 전환 중 터치: u∈(0.08,0.35)에서 첫·둘째 IgnorePointer가 동시에 true가 되어
-                  // 화면만 보이고 전부 클릭 불가가 되던 구간을 0.5 기준으로 분리한다.
-                  return SizedBox(
-                    height: h,
-                    width: w,
-                    child: ClipRect(
-                      clipBehavior: Clip.hardEdge,
-                      child: Transform.translate(
-                        offset: Offset(0, -offsetY),
-                        child: OverflowBox(
-                          alignment: Alignment.topCenter,
-                          minWidth: w,
-                          maxWidth: w,
-                          minHeight: 2 * h,
-                          maxHeight: 2 * h,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              SizedBox(
-                                height: h,
-                                width: w,
-                                child: IgnorePointer(
-                                  ignoring: u >= 0.5,
-                                  child: _buildPlacePickerPanel(
-                                    context,
-                                    ref,
-                                    vm,
-                                    state,
-                                    w,
-                                  ),
+                        final offsetY = u * h;
+                        // ScrollView는 TabBarView+Expanded 조합에 세로 무한 제약을 줘 레이아웃이 깨짐.
+                        // OverflowBox로 2h를 그린 뒤 ClipRect+Transform으로 뷰포트만 보이게 함.
+                        // 전환 중 터치: u∈(0.08,0.35)에서 첫·둘째 IgnorePointer가 동시에 true가 되어
+                        // 화면만 보이고 전부 클릭 불가가 되던 구간을 0.5 기준으로 분리한다.
+                        return SizedBox(
+                          height: h,
+                          width: w,
+                          child: ClipRect(
+                            clipBehavior: Clip.hardEdge,
+                            child: Transform.translate(
+                              offset: Offset(0, -offsetY),
+                              child: OverflowBox(
+                                alignment: Alignment.topCenter,
+                                minWidth: w,
+                                maxWidth: w,
+                                minHeight: 2 * h,
+                                maxHeight: 2 * h,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    SizedBox(
+                                      height: h,
+                                      width: w,
+                                      child: IgnorePointer(
+                                        ignoring: u >= 0.5,
+                                        child: _buildPlacePickerPanel(
+                                          context,
+                                          ref,
+                                          vm,
+                                          state,
+                                          w,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      height: h,
+                                      width: w,
+                                      child: IgnorePointer(
+                                        ignoring: u < 0.5,
+                                        child: _buildScrollMainPanel(
+                                          context,
+                                          ref,
+                                          vm,
+                                          state,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              SizedBox(
-                                height: h,
-                                width: w,
-                                child: IgnorePointer(
-                                  ignoring: u < 0.5,
-                                  child: _buildScrollMainPanel(
-                                    context,
-                                    ref,
-                                    vm,
-                                    state,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
           ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }
@@ -288,13 +236,7 @@ class _AddScreenState extends ConsumerState<AddScreen>
           child: SizedBox(
             width: math.min(w - context.rs(48), context.rs(400)),
             child: state.selectedPlace == null
-                ? placeDropdown(
-                    ref,
-                    vm,
-                    state,
-                    context,
-                    openPopupAbove: true,
-                  )
+                ? placeDropdown(ref, vm, state, context)
                 : SizedBox(height: context.rs(54)),
           ),
         ),
@@ -333,13 +275,7 @@ class _AddScreenState extends ConsumerState<AddScreen>
                     top: 6,
                     right: 12,
                   ),
-                  child: placeDropdown(
-                    ref,
-                    vm,
-                    state,
-                    context,
-                    openPopupAbove: false,
-                  ),
+                  child: placeDropdown(ref, vm, state, context),
                 ),
               ),
               TabBar(
@@ -433,13 +369,27 @@ Widget placeDropdown(
   WidgetRef ref,
   AddCostViewModel vm,
   AddCostState state,
-  BuildContext context, {
-  bool openPopupAbove = false,
-}) {
+  BuildContext context,
+) {
   final theme = Theme.of(context);
   final cs = theme.colorScheme;
   final tt = theme.textTheme;
   final borderRadius = BorderRadius.circular(context.rsi(10));
+  final selected = state.selectedPlace;
+  final label =
+      selected != null ? _placePickerDisplayLabel(selected, state) : null;
+
+  Future<void> openPicker() async {
+    final picked = await showPlaceCostPickerSheet(
+      context: context,
+      ref: ref,
+      filter: state.costPlacePickerFilter,
+      selectedPid: selected?.pid,
+    );
+    if (picked != null && context.mounted) {
+      vm.placeChangeAction(context, picked);
+    }
+  }
 
   return Column(
     mainAxisSize: MainAxisSize.min,
@@ -481,87 +431,54 @@ Widget placeDropdown(
       const SizedBox(height: 8),
       SizedBox(
         height: 54,
-        child: DropdownSearch<PlaceModel>(
-          key: ValueKey<Object>(
-            'place_dd_${state.costPlacePickerFilter}_${state.selectedPlace?.pid}',
-          ),
-          compareFn: _placeModelSame,
-          asyncItems: (text) =>
-              ref.read(placeUseCaseProvider).getPlacesForCostPicker(
-                    filter: state.costPlacePickerFilter,
-                  ),
-          itemAsString: (item) => _placePickerDisplayLabel(item, state),
-          popupProps: PopupProps.menu(
-            menuProps: MenuProps(
-              positionCallback: openPopupAbove
-                  ? _placeMenuAbovePosition
-                  : _placeMenuBelowPosition,
-            ),
-            searchDelay: Duration.zero,
-            emptyBuilder: (popupCtx, searchEntry) => Center(
-              child: Text(_placePickerEmptyMessage(state)),
+        child: Material(
+          color: cs.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: borderRadius,
+            side: BorderSide(
+              color: cs.outlineVariant,
+              width: 1.0,
             ),
           ),
-          dropdownButtonProps: DropdownButtonProps(
-            icon: Icon(
-              openPopupAbove ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-              size: 24,
-            ),
-          ),
-          dropdownDecoratorProps: DropDownDecoratorProps(
-            textAlign: TextAlign.center,
-            baseStyle: tt.titleMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-              color: cs.onSurface,
-            ),
-            dropdownSearchDecoration: InputDecoration(
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: openPicker,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
                 horizontal: context.rsi(12),
                 vertical: context.rsi(10),
               ),
-              filled: true,
-              fillColor: cs.surfaceContainerLow,
-              prefixIcon: Icon(
-                Icons.home_work_outlined,
-                size: context.rs(20),
-                color: cs.onSurfaceVariant,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.home_work_outlined,
+                    size: context.rs(20),
+                    color: cs.onSurfaceVariant,
+                  ),
+                  SizedBox(width: context.rsi(8)),
+                  Expanded(
+                    child: Text(
+                      label ?? '현장을 선택해 주세요',
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: (label != null ? tt.titleMedium : tt.bodyMedium)
+                          ?.copyWith(
+                        fontWeight:
+                            label != null ? FontWeight.w500 : FontWeight.w500,
+                        color: label != null ? cs.onSurface : cs.outline,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.unfold_more_rounded,
+                    size: 24,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
               ),
-              hintStyle: tt.bodyMedium?.copyWith(
-                color: cs.outline,
-                fontWeight: FontWeight.w500,
-              ),
-              helperStyle: tt.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-              helperMaxLines: 1,
-              border: OutlineInputBorder(
-                borderRadius: borderRadius,
-                borderSide: BorderSide(
-                  color: cs.outlineVariant,
-                  width: 1.0,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: borderRadius,
-                borderSide: BorderSide(
-                  color: cs.outlineVariant,
-                  width: 1.0,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: borderRadius,
-                borderSide: BorderSide(
-                  color: cs.primary,
-                  width: 1.4,
-                ),
-              ),
-              hintText: '현장을 선택해 주세요',
             ),
           ),
-          onChanged: (value) => vm.placeChangeAction(context, value!),
-          selectedItem: state.selectedPlace,
         ),
       ),
     ],
@@ -592,12 +509,14 @@ Widget tempCostBuilder(
       children: [
         Text(
           '[${item.mcategory}] ',
-          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
         ),
         Expanded(
           child: Text(
             item.mname,
-            style: tt.bodyMedium,
+            style: tt.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -626,6 +545,9 @@ Widget tempCostBuilder(
     price = item.wprice;
   }
 
+  final itemIndex = costType == 'material'
+      ? state.materialCostList.length - 1 - index
+      : state.workCostList.length - 1 - index;
   return Slidable(
     closeOnScroll: true,
     endActionPane: ActionPane(
@@ -653,7 +575,23 @@ Widget tempCostBuilder(
       ],
     ),
     child: Card(
-      child: SizedBox(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(context.rs(12)),
+        onTap: () async {
+          if (costType == 'material') {
+            final item = state.materialCostList[itemIndex];
+            await _showEditPendingMaterialCostDialog(
+              context,
+              ref,
+              itemIndex,
+              item,
+            );
+            return;
+          }
+          final item = state.workCostList[itemIndex];
+          await _showQuickEditPendingWorkCostDialog(
+              context, ref, itemIndex, item);
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -678,14 +616,279 @@ Widget tempCostBuilder(
                 pname,
                 style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
               ),
-              trailing: Text(
-                getPrice(price: price),
-                style: tt.bodyMedium,
+              trailing: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: context.rs(108)),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    getPrice(price: price),
+                    style: tt.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
+    ),
+  );
+}
+
+Future<void> _showQuickEditPendingWorkCostDialog(
+  BuildContext context,
+  WidgetRef ref,
+  int originalIndex,
+  WorkCostModel item,
+) async {
+  final vm = ref.read(addCostProvider.notifier);
+  final cs = Theme.of(context).colorScheme;
+  final tt = Theme.of(context).textTheme;
+  final nameController = TextEditingController(text: item.hname ?? '');
+  final roleController = TextEditingController(text: item.wrole);
+  final priceController = TextEditingController(
+    text: item.wprice > 0
+        ? getPrice(price: item.wprice, isContainWon: false)
+        : '',
+  );
+  final pickedDay =
+      DateTime.tryParse(item.wdate) ?? ref.read(addCostProvider).selectDay;
+  final selectedDay = DateTime(pickedDay.year, pickedDay.month, pickedDay.day);
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(context.rsi(14)),
+          color: cs.surface,
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            context.rsi(16),
+            context.rsi(14),
+            context.rsi(16),
+            context.rsi(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '인건비 항목 수정',
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: context.rsi(4)),
+              Text(
+                '날짜는 연동 안정성을 위해 변경할 수 없습니다.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              SizedBox(height: context.rsi(10)),
+              _readOnlyDateCalendarBlock(context, selectedDay),
+              SizedBox(height: context.rsi(8)),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: '이름'),
+              ),
+              SizedBox(height: context.rsi(8)),
+              TextField(
+                controller: roleController,
+                decoration: const InputDecoration(labelText: '공정/역할'),
+              ),
+              SizedBox(height: context.rsi(8)),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '금액'),
+              ),
+              SizedBox(height: context.rsi(10)),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('취소'),
+                    ),
+                  ),
+                  SizedBox(width: context.rsi(8)),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () {
+                        final name = nameController.text.trim();
+                        final role = roleController.text.trim();
+                        final price = int.tryParse(
+                          priceController.text
+                              .trim()
+                              .replaceAll(RegExp(r'[,원\s]'), ''),
+                        );
+                        if (name.isEmpty || price == null || price < 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('이름/금액을 확인해 주세요.')),
+                          );
+                          return;
+                        }
+                        vm.updateWorkCostAt(
+                          originalIndex,
+                          item.copyWith(
+                            hname: name,
+                            wrole: role,
+                            wprice: price,
+                          ),
+                        );
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('수정 저장'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  nameController.dispose();
+  roleController.dispose();
+  priceController.dispose();
+}
+
+Future<void> _showEditPendingMaterialCostDialog(
+  BuildContext context,
+  WidgetRef ref,
+  int originalIndex,
+  MaterialCostModel item,
+) async {
+  final vm = ref.read(addCostProvider.notifier);
+  final cs = Theme.of(context).colorScheme;
+  final tt = Theme.of(context).textTheme;
+  final nameController = TextEditingController(text: item.mname);
+  final priceController = TextEditingController(
+    text: item.mprice > 0
+        ? getPrice(price: item.mprice, isContainWon: false)
+        : '',
+  );
+  final pickedDay =
+      DateTime.tryParse(item.mdate) ?? ref.read(addCostProvider).selectDay;
+  final selectedDay = DateTime(pickedDay.year, pickedDay.month, pickedDay.day);
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(context.rsi(14)),
+          color: cs.surface,
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            context.rsi(16),
+            context.rsi(14),
+            context.rsi(16),
+            context.rsi(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '자재비 항목 수정',
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: context.rsi(4)),
+              Text(
+                '날짜는 연동 안정성을 위해 변경할 수 없습니다.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              SizedBox(height: context.rsi(10)),
+              _readOnlyDateCalendarBlock(context, selectedDay),
+              SizedBox(height: context.rsi(8)),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: '자재 이름'),
+              ),
+              SizedBox(height: context.rsi(8)),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '금액'),
+              ),
+              SizedBox(height: context.rsi(10)),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('취소'),
+                    ),
+                  ),
+                  SizedBox(width: context.rsi(8)),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () {
+                        final name = nameController.text.trim();
+                        final price = int.tryParse(
+                          priceController.text
+                              .trim()
+                              .replaceAll(RegExp(r'[,원\s]'), ''),
+                        );
+                        if (name.isEmpty || price == null || price < 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('항목과 금액을 확인해 주세요.')),
+                          );
+                          return;
+                        }
+                        vm.updateMaterialCostAt(
+                          originalIndex,
+                          MaterialCostModel(
+                            pname: item.pname,
+                            mid: item.mid,
+                            mpid: item.mpid,
+                            mname: name,
+                            mdate: item.mdate,
+                            mcategory: item.mcategory,
+                            mprice: price,
+                          ),
+                        );
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('수정 저장'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  nameController.dispose();
+  priceController.dispose();
+}
+
+Widget _readOnlyDateCalendarBlock(BuildContext context, DateTime day) {
+  final cs = Theme.of(context).colorScheme;
+  final tt = Theme.of(context).textTheme;
+  return Container(
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(context.rsi(12)),
+      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+    ),
+    padding: EdgeInsets.all(context.rsi(8)),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          formatDateTimeWeekDayToString(day),
+          style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
     ),
   );
 }
@@ -718,8 +921,7 @@ class _AddCostPlaceDetailBackGestureState
   Widget build(BuildContext context) {
     if (!_useIosEdgeSwipe) return widget.child;
 
-    final edgeW =
-        (MediaQuery.sizeOf(context).width * 0.08).clamp(20.0, 36.0);
+    final edgeW = (MediaQuery.sizeOf(context).width * 0.08).clamp(20.0, 36.0);
 
     return Stack(
       clipBehavior: Clip.none,

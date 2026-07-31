@@ -17,6 +17,10 @@ import 'package:w0001/domain/repository/dashboard_remote_abst.dart';
 import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
+import 'package:w0001/data/model/paged_result.dart';
+import 'package:w0001/data/repository/remote_entity_lookup.dart';
+import 'package:w0001/util/concurrent_task_runner.dart';
 import 'package:w0001/util/funtions.dart' show normalizeToIsoDateString;
 import 'package:w0001/util/image_attachment/image_upload_result.dart';
 import 'package:w0001/util/image_attachment/upload_image_remote.dart';
@@ -49,13 +53,137 @@ int? _httpStatusFrom(Object e) {
   return null;
 }
 
-Future<List<PlacePhotoGroupModel>> _placePhotoGroupsFromRestFiltered({
+PlacePhotoEntry _photoEntryFromRead(PlacePhotoRead e) => PlacePhotoEntry(
+      phid: e.phid,
+      displayUrl: e.photourl,
+      originalName: e.originalname,
+      originalUrl: e.originalUrl,
+      mediaKind: e.mediakind,
+      createdByUid: e.createdByUid,
+      authorDisplayName: e.uploaderDisplayName,
+      memo: e.memo,
+    );
+
+bool _placePhotoMatchesType(PlacePhotoRead p, String photoType) {
+  final pt = p.phototype.trim();
+  if (pt.isEmpty) return true;
+  return pt == photoType;
+}
+
+Future<ImageUploadResult> _uploadOneDevicePlacePhoto({
+  required String path,
+  required int pid,
+  required int pgid,
+  required String photoType,
+  required String dateKey,
+  required int sortOrder,
+  required String memo,
+  required ImageUploadCategory uploadCategory,
+}) {
+  if (shouldUsePlacePhotoMultipartUpload(path)) {
+    return uploadLocalPlacePhotoMultipart(
+      absolutePath: path,
+      pid: pid,
+      pgid: pgid,
+      photoType: photoType,
+      photoDate: dateKey,
+      sortOrder: sortOrder,
+      memo: memo,
+    );
+  }
+  return uploadLocalImageFile(path, category: uploadCategory);
+}
+
+Future<void> _registerUploadedPlacePhoto({
+  required PlacePhotosRemoteApi api,
+  required ImageUploadResult up,
+  required String path,
+  required int pgid,
   required int pid,
   required String photoType,
+  required String dateKey,
+  required int sortOrder,
+  required int createdAtMs,
+  required String memo,
 }) async {
-  final groupsApi = PlacePhotoGroupsRemoteApi(AppHttpClient.I);
-  final apiPhotos = PlacePhotosRemoteApi(AppHttpClient.I);
-  final groupsRaw = await groupsApi.list(pid: pid);
+  if (up.skipPlacePhotoCreate) return;
+  final body = <String, dynamic>{
+    ..._placePhotoCreateBodyImage(
+      pgid: pgid,
+      sortOrder: sortOrder,
+      createdAtMs: createdAtMs,
+      displayUrl: up.displayUrl,
+      originalUrl: up.originalUrl,
+      originalname: up.originalname,
+      mediakind:
+          shouldUsePlacePhotoMultipartUpload(path) ? 'document' : 'image',
+    ),
+    'pid': pid,
+    'photodate': dateKey,
+    'phototype': photoType,
+  };
+  if (memo.isNotEmpty) body['memo'] = memo;
+  await api.create(body);
+}
+
+Future<void> _uploadDevicePlacePhotoBatch({
+  required PlacePhotosRemoteApi api,
+  required int pid,
+  required int pgid,
+  required String photoType,
+  required String dateKey,
+  required int createdAtMs,
+  required List<String> paths,
+  List<String>? memosPerFile,
+  required ImageUploadCategory uploadCategory,
+}) async {
+  if (paths.isEmpty) return;
+
+  final uploads = await runWithConcurrencyLimit<ImageUploadResult>(
+    List.generate(paths.length, (i) {
+      final path = paths[i];
+      final memo = (memosPerFile != null && i < memosPerFile.length)
+          ? memosPerFile[i].trim()
+          : '';
+      return () => _uploadOneDevicePlacePhoto(
+            path: path,
+            pid: pid,
+            pgid: pgid,
+            photoType: photoType,
+            dateKey: dateKey,
+            sortOrder: i,
+            memo: memo,
+            uploadCategory: uploadCategory,
+          );
+    }),
+    limit: 4,
+  );
+
+  for (var i = 0; i < uploads.length; i++) {
+    final memo = (memosPerFile != null && i < memosPerFile.length)
+        ? memosPerFile[i].trim()
+        : '';
+    await _registerUploadedPlacePhoto(
+      api: api,
+      up: uploads[i],
+      path: paths[i],
+      pgid: pgid,
+      pid: pid,
+      photoType: photoType,
+      dateKey: dateKey,
+      sortOrder: i,
+      createdAtMs: createdAtMs,
+      memo: memo,
+    );
+  }
+}
+
+Future<List<PlacePhotoGroupModel>> _mapPhotoGroupsFromReads({
+  required int pid,
+  required String photoType,
+  required List<PlacePhotoGroupRead> groupsRaw,
+  bool refreshPhotos = false,
+}) async {
   final groupsFiltered = groupsRaw.where((g) {
     final gType = g.phototype.trim();
     if (gType.isNotEmpty && gType != photoType) return false;
@@ -68,17 +196,22 @@ Future<List<PlacePhotoGroupModel>> _placePhotoGroupsFromRestFiltered({
     if (s != 0) return s;
     return b.pgid.compareTo(a.pgid);
   });
-  final photoLists = await Future.wait(
-    groupsFiltered
-        .where((g) => g.pgid > 0)
-        .map((g) => apiPhotos.list(pgid: g.pgid)),
+
+  final neededPgids =
+      groupsFiltered.where((g) => g.pgid > 0).map((g) => g.pgid).toSet();
+  if (neededPgids.isEmpty) return const [];
+
+  final byGid = await _placePhotosGroupedByPgid(
+    pid: pid,
+    photoType: photoType,
+    neededPgids: neededPgids,
+    refresh: refreshPhotos,
   );
-  var li = 0;
+
   final out = <PlacePhotoGroupModel>[];
   for (final g in groupsFiltered) {
     if (g.pgid <= 0) continue;
-    var rows = photoLists[li];
-    li++;
+    var rows = List<PlacePhotoRead>.from(byGid[g.pgid] ?? const []);
     rows = rows.where((p) {
       final pt = p.phototype.trim();
       if (pt.isEmpty) return true;
@@ -99,21 +232,79 @@ Future<List<PlacePhotoGroupModel>> _placePhotoGroupsFromRestFiltered({
         title: titleOut,
         sortOrder: g.sortorder,
         createdAtMs: g.createdatms,
-        photos: rows
-            .map(
-              (e) => PlacePhotoEntry(
-                phid: e.phid,
-                displayUrl: e.photourl,
-                originalName: e.originalname,
-                createdByUid: e.createdByUid,
-                authorDisplayName: e.uploaderDisplayName,
-                memo: e.memo,
-              ),
-            )
-            .toList(),
+        photos: rows.map(_photoEntryFromRead).toList(),
       ),
     );
   }
+  return out;
+}
+
+Future<List<PlacePhotoGroupModel>> _placePhotoGroupsFromRestFiltered({
+  required int pid,
+  required String photoType,
+}) async {
+  final groupsApi = PlacePhotoGroupsRemoteApi(AppHttpClient.I);
+  final groupsRaw = await groupsApi.list(pid: pid);
+  return _mapPhotoGroupsFromReads(
+    pid: pid,
+    photoType: photoType,
+    groupsRaw: groupsRaw,
+  );
+}
+
+/// 작업자 토큰은 `GET /place-photo-groups` 가 403인 경우가 많아
+/// `GET /place-photos?pid=&photo_type=` 만으로 묶음을 재구성한다.
+Future<List<PlacePhotoGroupModel>> _placePhotoGroupsFromPhotosOnly({
+  required int pid,
+  required String photoType,
+  bool refreshPhotos = false,
+}) async {
+  final rows = await _listPlacePhotosForPid(
+    pid: pid,
+    photoType: photoType,
+    refresh: refreshPhotos,
+  );
+  final byGid = <int, List<PlacePhotoRead>>{};
+  for (final p in rows) {
+    if (p.pgid <= 0) continue;
+    final pt = p.phototype.trim();
+    if (pt.isNotEmpty && pt != photoType) continue;
+    byGid.putIfAbsent(p.pgid, () => []).add(p);
+  }
+  final out = <PlacePhotoGroupModel>[];
+  for (final entry in byGid.entries) {
+    final photos = List<PlacePhotoRead>.from(entry.value)
+      ..sort((a, b) => a.sortorder.compareTo(b.sortorder));
+    if (photos.isEmpty) continue;
+    final first = photos.first;
+    final gd = first.photodate.trim();
+    final dateKey = gd.length >= 10 ? gd.substring(0, 10) : gd;
+    final tt = (first.title ?? '').trim();
+    final titleOut = tt.isNotEmpty ? first.title! : '작업 사진';
+    out.add(
+      PlacePhotoGroupModel(
+        pgid: entry.key,
+        pid: first.pid != 0 ? first.pid : pid,
+        photoDate: dateKey.isNotEmpty ? dateKey : '1970-01-01',
+        photoType: photoType,
+        title: titleOut,
+        sortOrder: photos.map((e) => e.sortorder).reduce(
+              (a, b) => a < b ? a : b,
+            ),
+        createdAtMs: photos.map((e) => e.createdatms).reduce(
+              (a, b) => a > b ? a : b,
+            ),
+        photos: photos.map(_photoEntryFromRead).toList(),
+      ),
+    );
+  }
+  out.sort((a, b) {
+    final c = b.photoDate.compareTo(a.photoDate);
+    if (c != 0) return c;
+    final s = a.sortOrder.compareTo(b.sortOrder);
+    if (s != 0) return s;
+    return b.pgid.compareTo(a.pgid);
+  });
   return out;
 }
 
@@ -126,6 +317,77 @@ Map<String, int> _materialCategorySums(Iterable<MaterialCostRead> rows) {
   return m;
 }
 
+final _placePhotosListCache = <String, List<PlacePhotoRead>>{};
+
+String _placePhotosCacheKey(int pid, String photoType) => '$pid|$photoType';
+
+void _invalidatePlacePhotosListCacheForPid(int pid) {
+  final prefix = '$pid|';
+  _placePhotosListCache.removeWhere((k, _) => k.startsWith(prefix));
+}
+
+/// 묶음별 사진 목록 — 우선 `?pid=&photo_type=` 일괄 조회, 400이면 `?pgid=` 로 폴백.
+Future<Map<int, List<PlacePhotoRead>>> _placePhotosGroupedByPgid({
+  required int pid,
+  required String photoType,
+  required Set<int> neededPgids,
+  bool refresh = false,
+}) async {
+  if (neededPgids.isEmpty) return const {};
+
+  try {
+    final allRows = await _listPlacePhotosForPid(
+      pid: pid,
+      photoType: photoType,
+      refresh: refresh,
+    );
+    final byGid = <int, List<PlacePhotoRead>>{};
+    for (final p in allRows) {
+      if (!neededPgids.contains(p.pgid)) continue;
+      byGid.putIfAbsent(p.pgid, () => []).add(p);
+    }
+    return byGid;
+  } catch (e) {
+    if (_httpStatusFrom(e) != 400) rethrow;
+    debugPrint(
+      '_placePhotosGroupedByPgid bulk list 400 — per-pgid fallback ($e)',
+    );
+  }
+
+  final api = PlacePhotosRemoteApi(AppHttpClient.I);
+  final pgids = neededPgids.toList()..sort();
+  final photoLists =
+      await Future.wait(pgids.map((pgid) => api.list(pgid: pgid)));
+  return Map.fromIterables(pgids, photoLists);
+}
+
+Future<List<PlacePhotoRead>> _listPlacePhotosForPid({
+  required int pid,
+  required String photoType,
+  bool refresh = false,
+}) async {
+  final key = _placePhotosCacheKey(pid, photoType);
+  if (!refresh) {
+    final cached = _placePhotosListCache[key];
+    if (cached != null) return cached;
+  }
+  final api = PlacePhotosRemoteApi(AppHttpClient.I);
+  try {
+    final rows = await api.list(pid: pid, photoType: photoType);
+    _placePhotosListCache[key] = rows;
+    return rows;
+  } catch (e) {
+    if (_httpStatusFrom(e) != 400) rethrow;
+    debugPrint(
+        '_listPlacePhotosForPid pid+photo_type 400 — pid-only retry ($e)');
+    final rows = await api.list(pid: pid);
+    final filtered =
+        rows.where((p) => _placePhotoMatchesType(p, photoType)).toList();
+    _placePhotosListCache[key] = filtered;
+    return filtered;
+  }
+}
+
 class PlaceRepositoryImpl implements PlaceRepository {
   PlaceRepositoryImpl(this._sa, this._dashboard);
 
@@ -136,28 +398,71 @@ class PlaceRepositoryImpl implements PlaceRepository {
   Future<List<PlaceInfoModel>> getAllPlaces({
     bool managementPlacesInfoFirst = true,
     UserRole? role,
+  }) {
+    return _fetchAllPlacesPages(
+      managementPlacesInfoFirst: managementPlacesInfoFirst,
+      role: role,
+    );
+  }
+
+  /// cursor로 현장 전 페이지 수집 (캘린더·피커 등 전체 목록 필요 시).
+  Future<List<PlaceInfoModel>> _fetchAllPlacesPages({
+    required bool managementPlacesInfoFirst,
+    UserRole? role,
+    ListQuery baseQuery = const ListQuery(),
+  }) async {
+    final all = <PlaceInfoModel>[];
+    String? cursor;
+    var guard = 0;
+    while (guard < 500) {
+      guard++;
+      final q = cursor == null
+          ? baseQuery.copyWith(clearCursor: true)
+          : baseQuery.copyWith(cursor: cursor);
+      final page = await fetchPlacesPage(
+        query: q,
+        managementPlacesInfoFirst: managementPlacesInfoFirst,
+        role: role,
+      );
+      all.addAll(page.items);
+      if (!page.canLoadMore) break;
+      cursor = page.nextCursor!.trim();
+    }
+    return sortPlacesInfoByPidDesc(all);
+  }
+
+  @override
+  Future<PagedResult<PlaceInfoModel>> fetchPlacesPage({
+    required ListQuery query,
+    bool managementPlacesInfoFirst = true,
+    UserRole? role,
   }) async {
     final scopedApi = PlacesRemoteApi(AppHttpClient.I);
-    if (managementPlacesInfoFirst && role?.canAccessDashboardPlacesInfo == true) {
+    if (managementPlacesInfoFirst &&
+        role?.canAccessDashboardPlacesInfo == true) {
       try {
-        final list = await _dashboard.placesInfo();
-        return sortPlacesInfoByPidDesc(list);
+        final page = await _dashboard.placesInfoPage(query);
+        return page.copyWith(items: sortPlacesInfoByPidDesc(page.items));
       } catch (_) {
-        // 슈퍼관리자: `/dashboard/places-info` 실패 시 전체 `GET /places`
+        // `/dashboard/places-info` 실패 시 `GET /places`
       }
-      final places = await _sa.placesList();
-      final out = places.map(placeReadToPlaceInfoSummaryZeros).toList();
-      return sortPlacesInfoByPidDesc(out);
+      final page = await scopedApi.listPage(query);
+      final out = page.items.map(placeReadToPlaceInfoSummaryZeros).toList();
+      return PagedResult(
+        items: sortPlacesInfoByPidDesc(out),
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        totalCount: page.totalCount,
+      );
     }
-    if (managementPlacesInfoFirst) {
-      // 일반 관리자 — `GET /places`는 super_admin 전용일 수 있어 스코프 목록 사용
-      final places = await scopedApi.listMine();
-      final out = places.map(placeReadToPlaceInfoSummaryZeros).toList();
-      return sortPlacesInfoByPidDesc(out);
-    }
-    final places = await scopedApi.listMine();
-    final out = places.map(placeReadToPlaceInfoSummaryZeros).toList();
-    return sortPlacesInfoByPidDesc(out);
+    final page = await scopedApi.listMinePage(query);
+    final out = page.items.map(placeReadToPlaceInfoSummaryZeros).toList();
+    return PagedResult(
+      items: sortPlacesInfoByPidDesc(out),
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+      totalCount: page.totalCount,
+    );
   }
 
   @override
@@ -229,48 +534,72 @@ class PlaceRepositoryImpl implements PlaceRepository {
   Future<List<PlaceModel>> getPlacesForCostPicker({
     required CostPlacePickerFilter filter,
   }) async {
-    final all = await _sa.placesList();
-    final rows = all
-        .where((p) {
-          if (p.pcomplete == 2) return false;
-          switch (filter) {
-            case CostPlacePickerFilter.all:
-              return p.pcomplete == 0 || p.pcomplete == 1;
-            case CostPlacePickerFilter.inProgress:
-              return p.pcomplete == 0;
-            case CostPlacePickerFilter.completed:
-              return p.pcomplete == 1;
-          }
-        })
-        .map(placeReadToModel)
-        .toList();
-    rows.sort((a, b) => a.pname.compareTo(b.pname));
-    return rows;
+    final all = <PlaceModel>[];
+    String? cursor;
+    var guard = 0;
+    while (guard < 500) {
+      guard++;
+      final q = ListQuery(
+        pcomplete: filter.pcompleteQuery,
+        limit: kListPageSize,
+        cursor: cursor,
+      );
+      final page = await fetchPlacesForCostPickerPage(
+        query: q,
+        filter: filter,
+      );
+      all.addAll(page.items);
+      if (!page.canLoadMore) break;
+      cursor = page.nextCursor!.trim();
+    }
+    return all;
   }
 
   @override
-  Future<List<TotalCostModel>> getTotalCostsForPlace(int pid) async {
-    final wcs = await _sa.workCostsList();
-    final mcs = await _sa.materialCostsList();
-    final places = await _sa.placesList();
-    final humans = await _sa.humansList();
-    final pwdList = await _sa.placeWorkDaysList();
-    final pMap = {for (final p in places) p.pid: p};
-    final hMap = {for (final h in humans) h.hid: h};
-    final p0 = pMap[pid];
-    if (p0 == null) return const [];
+  Future<PagedResult<PlaceModel>> fetchPlacesForCostPickerPage({
+    required ListQuery query,
+    required CostPlacePickerFilter filter,
+    UserRole? role,
+  }) async {
+    final scopedApi = PlacesRemoteApi(AppHttpClient.I);
+    final mergedQuery = query.copyWith(
+      pcomplete: query.pcomplete ?? filter.pcompleteQuery,
+    );
+    final page = role?.canAccessDashboardPlacesInfo == true
+        ? await scopedApi.listPage(mergedQuery)
+        : await scopedApi.listMinePage(mergedQuery);
+    final items = page.items
+        .where((p) => filter.matchesPlace(p.pcomplete))
+        .map(placeReadToModel)
+        .toList()
+      ..sort((a, b) => a.pname.compareTo(b.pname));
+    return PagedResult(
+      items: items,
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+      totalCount: page.totalCount,
+    );
+  }
 
-    final pwdByKey = <String, PlaceWorkDayRead>{};
-    for (final pwd in pwdList) {
-      if (pwd.pid != pid) continue;
-      final k =
-          '${pwd.hid}|${pwd.pid}|${normalizeToIsoDateString(pwd.workdate)}';
-      final prev = pwdByKey[k];
-      if (prev == null ||
-          (prev.workrole.trim().isEmpty && pwd.workrole.trim().isNotEmpty)) {
-        pwdByKey[k] = pwd;
-      }
+  @override
+  Future<List<TotalCostModel>> getTotalCostsForPlace(
+    int pid, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final ListQuery costQ;
+    if (from != null && to != null) {
+      costQ = listQueryForDateRange(from, to, pid: pid);
+    } else {
+      costQ = ListQuery(pid: pid);
     }
+    final wcs = await _sa.workCostsQuery(costQ);
+    final mcs = await _sa.materialCostsQuery(costQ);
+    final pwdList = await _sa.placeWorkDaysQuery(costQ);
+    final p0 = await _sa.placeGet(pid);
+    final hMap = await loadHumanMapForHids(_sa, wcs.map((w) => w.whid));
+
+    final pwdByKey = buildPlaceWorkDayByKey(pwdList);
 
     final out = <TotalCostModel>[];
     for (final w in wcs) {
@@ -278,7 +607,8 @@ class PlaceRepositoryImpl implements PlaceRepository {
       final h = hMap[w.whid];
       if (h == null || h.hdelete != 0) continue;
       final wk = w.wdate.length >= 10 ? w.wdate.substring(0, 10) : w.wdate;
-      final pwd = pwdByKey['${w.whid}|${w.wpid}|${normalizeToIsoDateString(wk)}'];
+      final pwd =
+          pwdByKey['${w.whid}|${w.wpid}|${normalizeToIsoDateString(wk)}'];
       final role = pwd != null && pwd.workrole.trim().isNotEmpty
           ? pwd.workrole.trim()
           : w.wrole.trim();
@@ -386,15 +716,28 @@ class PlaceRepositoryImpl implements PlaceRepository {
     DateTime endDate,
     int pid,
   ) async {
-    final endN = endDate.add(const Duration(days: 1));
-    final wcs = (await _sa.workCostsList()).where((w) => w.wpid == pid);
-    final mcs = (await _sa.materialCostsList()).where((m) => m.mpid == pid);
-    final humans = await _sa.humansList();
-    final hMap = {for (final h in humans) h.hid: h};
+    // CSV 추출은 목록 query/cursor 의존 대신 원본 전체를 가져온 뒤
+    // 클라이언트에서 범위를 필터링해 동일명 데이터 누락 가능성을 줄인다.
+    final rangeStart = DateTime(startDate.year, startDate.month, startDate.day);
+    final rangeEnd = DateTime(endDate.year, endDate.month, endDate.day);
+    bool inDateRange(String rawDate) {
+      final key = rawDate.length >= 10 ? rawDate.substring(0, 10) : rawDate;
+      final parsed = DateTime.tryParse(normalizeToIsoDateString(key));
+      if (parsed == null) return true;
+      final day = DateTime(parsed.year, parsed.month, parsed.day);
+      return !day.isBefore(rangeStart) && !day.isAfter(rangeEnd);
+    }
+
+    final wcs = (await _sa.workCostsList())
+        .where((w) => w.wpid == pid && inDateRange(w.wdate))
+        .toList();
+    final mcs = (await _sa.materialCostsList())
+        .where((m) => m.mpid == pid && inDateRange(m.mdate))
+        .toList();
+    final hMap = await loadHumanMapForHids(_sa, wcs.map((w) => w.whid));
 
     final rows = <Map<String, dynamic>>[];
     for (final w in wcs) {
-      if (!inDateRangeYmd(w.wdate, startDate, endN)) continue;
       final h = hMap[w.whid];
       if (h == null || h.hdelete != 0) continue;
       final dk = w.wdate.length >= 10 ? w.wdate.substring(0, 10) : w.wdate;
@@ -406,7 +749,6 @@ class PlaceRepositoryImpl implements PlaceRepository {
       });
     }
     for (final m in mcs) {
-      if (!inDateRangeYmd(m.mdate, startDate, endN)) continue;
       final dk = m.mdate.length >= 10 ? m.mdate.substring(0, 10) : m.mdate;
       rows.add(<String, dynamic>{
         '날짜': dk,
@@ -418,9 +760,60 @@ class PlaceRepositoryImpl implements PlaceRepository {
     rows.sort((a, b) {
       final c = '${a['날짜']}'.compareTo('${b['날짜']}');
       if (c != 0) return c;
-      return '${b['항목']}'.compareTo('${a['항목']}');
+      final d = '${b['항목']}'.compareTo('${a['항목']}');
+      if (d != 0) return d;
+      final e = '${a['지출내역']}'.compareTo('${b['지출내역']}');
+      if (e != 0) return e;
+      return ('${a['지출금액']}').compareTo('${b['지출금액']}');
     });
     return rows;
+  }
+
+  @override
+  Future<PagedResult<PlacePhotoGroupModel>> fetchPlacePhotoGroupsPage(
+    int pid, {
+    required String photoType,
+    required ListQuery query,
+  }) async {
+    try {
+      final groupsApi = PlacePhotoGroupsRemoteApi(AppHttpClient.I);
+      // `photo_type`은 클라이언트에서 필터 — 작업자 토큰·레거시 서버와 호환.
+      final page = await groupsApi.listPage(query.copyWith(pid: pid));
+      final refreshPhotos =
+          query.cursor == null || query.cursor!.trim().isEmpty;
+      final models = await _mapPhotoGroupsFromReads(
+        pid: pid,
+        photoType: photoType,
+        groupsRaw: page.items,
+        refreshPhotos: refreshPhotos,
+      );
+      return PagedResult(
+        items: models,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        totalCount: page.totalCount,
+      );
+    } catch (e, st) {
+      debugPrint('fetchPlacePhotoGroupsPage REST $e $st');
+      final code = _httpStatusFrom(e);
+      if (code == 401 || code == 403) {
+        try {
+          final models = await _placePhotoGroupsFromPhotosOnly(
+            pid: pid,
+            photoType: photoType,
+          );
+          return PagedResult(
+            items: models,
+            hasMore: false,
+            totalCount: models.length,
+          );
+        } catch (e2, st2) {
+          debugPrint('fetchPlacePhotoGroupsPage photos-only $e2 $st2');
+          return const PagedResult(items: [], hasMore: false);
+        }
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -436,10 +829,17 @@ class PlaceRepositoryImpl implements PlaceRepository {
     } catch (e, st) {
       debugPrint('getPlacePhotoGroups REST $e $st');
       final code = _httpStatusFrom(e);
-      // 작업자 토큰은 `/place-photos`만 허용되는 경우가 많음. 여기서 403이면
-      // 슈퍼어드민 전용 폴백을 호출하지 않아야 "접근 권한 없음" 연쇄 오류가 나지 않는다.
+      // 작업자 토큰은 `/place-photos`만 허용되는 경우가 많음.
       if (code == 401 || code == 403) {
-        return const [];
+        try {
+          return await _placePhotoGroupsFromPhotosOnly(
+            pid: pid,
+            photoType: photoType,
+          );
+        } catch (e2, st2) {
+          debugPrint('getPlacePhotoGroups photos-only $e2 $st2');
+          return const [];
+        }
       }
     }
 
@@ -464,18 +864,8 @@ class PlaceRepositoryImpl implements PlaceRepository {
       }
       return groups.map(
         (g) {
-          final rows = (byGid[g.pgid] ?? const [])
-              .map(
-                (e) => PlacePhotoEntry(
-                  phid: e.phid,
-                  displayUrl: e.photourl,
-                  originalName: e.originalname,
-                  createdByUid: e.createdByUid,
-                  authorDisplayName: e.uploaderDisplayName,
-                  memo: e.memo,
-                ),
-              )
-              .toList();
+          final rows =
+              (byGid[g.pgid] ?? const []).map(_photoEntryFromRead).toList();
           return PlacePhotoGroupModel(
             pgid: g.pgid,
             pid: g.pid,
@@ -555,6 +945,7 @@ class PlaceRepositoryImpl implements PlaceRepository {
         });
         i++;
       }
+      _invalidatePlacePhotosListCacheForPid(pid);
       if (i > 0) return;
     } catch (e, st) {
       debugPrint('insertPlacePhotoGroup REST $e $st');
@@ -599,6 +990,7 @@ class PlaceRepositoryImpl implements PlaceRepository {
       );
       i++;
     }
+    _invalidatePlacePhotosListCacheForPid(pid);
   }
 
   @override
@@ -643,47 +1035,19 @@ class PlaceRepositoryImpl implements PlaceRepository {
         'sortorder': nextGroupSort,
         'createdatms': ms,
       });
-      for (var i = 0; i < paths.length; i++) {
-        final path = paths[i];
-        final memo = (memosPerFile != null && i < memosPerFile.length)
-            ? memosPerFile[i].trim()
-            : '';
-        final ImageUploadResult up;
-        if (shouldUsePlacePhotoMultipartUpload(path)) {
-          up = await uploadLocalPlacePhotoMultipart(
-            absolutePath: path,
-            pid: pid,
-            pgid: createdGroup.pgid,
-            photoType: photoType,
-            photoDate: dateKey,
-            sortOrder: i,
-            memo: memo,
-          );
-        } else {
-          up = await uploadLocalImageFile(path, category: uploadCategory);
-        }
-        if (up.skipPlacePhotoCreate) {
-          continue;
-        }
-        final body = <String, dynamic>{
-          ..._placePhotoCreateBodyImage(
-            pgid: createdGroup.pgid,
-            sortOrder: i,
-            createdAtMs: ms,
-            displayUrl: up.displayUrl,
-            originalUrl: up.originalUrl,
-            originalname: up.originalname,
-            mediakind:
-                shouldUsePlacePhotoMultipartUpload(path) ? 'document' : 'image',
-          ),
-          'pid': pid,
-          'photodate': dateKey,
-          'phototype': photoType,
-        };
-        if (memo.isNotEmpty) body['memo'] = memo;
-        await api.create(body);
-      }
-      if (paths.isNotEmpty) return;
+      await _uploadDevicePlacePhotoBatch(
+        api: api,
+        pid: pid,
+        pgid: createdGroup.pgid,
+        photoType: photoType,
+        dateKey: dateKey,
+        createdAtMs: ms,
+        paths: paths,
+        memosPerFile: memosPerFile,
+        uploadCategory: uploadCategory,
+      );
+      _invalidatePlacePhotosListCacheForPid(pid);
+      return;
     } catch (e, st) {
       debugPrint('insertPlacePhotoGroupFromDeviceFiles REST $e $st');
     }
@@ -711,41 +1075,54 @@ class PlaceRepositoryImpl implements PlaceRepository {
         'createdatms': ms,
       },
     );
-    var i = 0;
-    for (final path in paths) {
-      final memo = (memosPerFile != null && i < memosPerFile.length)
-          ? memosPerFile[i].trim()
-          : '';
-      final ImageUploadResult up;
-      if (shouldUsePlacePhotoMultipartUpload(path)) {
-        up = await uploadLocalPlacePhotoMultipart(
-          absolutePath: path,
+    try {
+      final api = PlacePhotosRemoteApi(AppHttpClient.I);
+      await _uploadDevicePlacePhotoBatch(
+        api: api,
+        pid: pid,
+        pgid: created.pgid,
+        photoType: photoType,
+        dateKey: dateKey,
+        createdAtMs: ms,
+        paths: paths,
+        memosPerFile: memosPerFile,
+        uploadCategory: uploadCategory,
+      );
+    } catch (e, st) {
+      debugPrint('insertPlacePhotoGroupFromDeviceFiles fallback upload $e $st');
+      var i = 0;
+      for (final path in paths) {
+        final memo = (memosPerFile != null && i < memosPerFile.length)
+            ? memosPerFile[i].trim()
+            : '';
+        final up = await _uploadOneDevicePlacePhoto(
+          path: path,
           pid: pid,
           pgid: created.pgid,
           photoType: photoType,
-          photoDate: dateKey,
+          dateKey: dateKey,
           sortOrder: i,
           memo: memo,
+          uploadCategory: uploadCategory,
         );
-      } else {
-        up = await uploadLocalImageFile(path, category: uploadCategory);
+        if (!up.skipPlacePhotoCreate) {
+          final body = _placePhotoCreateBodyImage(
+            pgid: created.pgid,
+            sortOrder: i,
+            createdAtMs: ms,
+            displayUrl: up.displayUrl,
+            originalUrl: up.originalUrl,
+            originalname: up.originalname,
+            mediakind:
+                shouldUsePlacePhotoMultipartUpload(path) ? 'document' : 'image',
+          );
+          if (memo.isNotEmpty) body['memo'] = memo;
+          await _sa.placePhotoCreate(body);
+        }
+        i++;
       }
-      if (!up.skipPlacePhotoCreate) {
-        final body = _placePhotoCreateBodyImage(
-          pgid: created.pgid,
-          sortOrder: i,
-          createdAtMs: ms,
-          displayUrl: up.displayUrl,
-          originalUrl: up.originalUrl,
-          originalname: up.originalname,
-          mediakind:
-              shouldUsePlacePhotoMultipartUpload(path) ? 'document' : 'image',
-        );
-        if (memo.isNotEmpty) body['memo'] = memo;
-        await _sa.placePhotoCreate(body);
-      }
-      i++;
     }
+    _invalidatePlacePhotosListCacheForPid(pid);
   }
 
   @override
@@ -755,10 +1132,12 @@ class PlaceRepositoryImpl implements PlaceRepository {
       final groupsApi = PlacePhotoGroupsRemoteApi(AppHttpClient.I);
       if (pgid < 0) {
         await api.delete(-pgid);
+        if (pid != null) _invalidatePlacePhotosListCacheForPid(pid);
         return;
       }
       try {
         await groupsApi.delete(pgid);
+        if (pid != null) _invalidatePlacePhotosListCacheForPid(pid);
         return;
       } catch (eG, stG) {
         final c = _httpStatusFrom(eG);
@@ -778,6 +1157,7 @@ class PlaceRepositoryImpl implements PlaceRepository {
           try {
             await groupsApi.delete(pgid);
           } catch (_) {}
+          _invalidatePlacePhotosListCacheForPid(pid);
           return;
         }
       }
@@ -790,6 +1170,7 @@ class PlaceRepositoryImpl implements PlaceRepository {
       await _sa.placePhotoDelete(p.phid);
     }
     await _sa.placePhotoGroupDelete(pgid);
+    if (pid != null) _invalidatePlacePhotosListCacheForPid(pid);
   }
 
   @override
@@ -848,6 +1229,24 @@ class PlaceRepositoryImpl implements PlaceRepository {
       }
     }
     await _sa.placePhotoGroupPatch(pgid, body);
+  }
+
+  @override
+  Future<Map<String, dynamic>> bulkAssignWorkforce({
+    required int pid,
+    required Map<String, dynamic> requestBody,
+  }) async {
+    print('💾 [REPOSITORY] bulkAssignWorkforce 호출');
+    print('   - PID: $pid');
+    print('   - Request: $requestBody');
+
+    final startTime = DateTime.now();
+    final result =
+        await _sa.placeBulkAssignWorkforce(pid: pid, body: requestBody);
+    final duration = DateTime.now().difference(startTime).inMilliseconds;
+
+    print('💾 [REPOSITORY] bulkAssignWorkforce 완료: ${duration}ms');
+    return result;
   }
 }
 

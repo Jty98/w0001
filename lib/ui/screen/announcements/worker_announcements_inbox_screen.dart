@@ -1,14 +1,16 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:w0001/data/datasources/remote/http_client.dart';
-import 'package:w0001/data/datasources/remote/place/places_api.dart';
-import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
-import 'package:w0001/presentation/viewmodel/worker_announcement_providers.dart';
-import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/worker_announcement_paged_list_notifier.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_inbox_layout.dart';
+import 'package:w0001/ui/screen/announcements/worker_announcement_list_filters.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_read_widgets.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
+import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
@@ -53,126 +55,187 @@ class WorkerAnnouncementsInboxScreen extends ConsumerStatefulWidget {
 
 class _WorkerAnnouncementsInboxScreenState
     extends ConsumerState<WorkerAnnouncementsInboxScreen> {
-  Future<_InboxLoad>? _future;
-
+  late final ScrollController _scroll;
   late WorkerAnnouncementInboxSegment _segment;
+  var _placeState = PlaceState.incomplete;
+  int? _filterPlaceId;
+  String? _filterPlaceName;
+  final _placeNames = WorkerAnnouncementPlaceNameResolver();
 
   @override
   void initState() {
     super.initState();
     _segment = widget.initialSegment;
-    _reload();
+    _scroll = ScrollController()..addListener(_onScroll);
   }
 
-  void _reload() {
-    _future = _load();
+  WorkerAnnouncementPagedQuery get _pagedQuery => WorkerAnnouncementPagedQuery(
+        source: WorkerAnnouncementPagedSource.inbox,
+        placeId: _segment == WorkerAnnouncementInboxSegment.placeOnly
+            ? _filterPlaceId
+            : null,
+        scopeFilter: scopeFilterForSegment(
+          _segment,
+          source: WorkerAnnouncementPagedSource.inbox,
+          placeId: _filterPlaceId,
+        ),
+        placeComplete: placeCompleteForPagedQuery(
+          segment: _segment,
+          placeState: _placeState,
+          placeId: _filterPlaceId,
+        ),
+      );
+
+  Future<void> _syncPlaceNames(List<WorkerAnnouncementRead> items) async {
+    await _placeNames.ensureForAnnouncements(items);
+    if (mounted) setState(() {});
   }
 
-  Future<_InboxLoad> _load() async {
-    final uc = ref.read(workerAnnouncementUseCaseProvider);
-    final pair = await Future.wait([
-      uc.inbox(placeId: null),
-      PlacesRemoteApi(AppHttpClient.I).listMine().catchError(
-        (_) => const <PlaceRead>[],
-      ),
-    ]);
-    final announcements = pair[0] as List<WorkerAnnouncementRead>;
-    final places = pair[1] as List<PlaceRead>;
-    final byPid = <int, String>{
-      for (final p in places)
-        if (p.pid > 0 && p.pname.trim().isNotEmpty) p.pid: p.pname.trim(),
-    };
-    return _InboxLoad(announcements: announcements, placeNameByPid: byPid);
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
+
+  void _onScroll() {
+    onPagedScrollNearEnd(
+      _scroll,
+      onLoadMore: () => ref
+          .read(workerAnnouncementPagedListProvider(_pagedQuery).notifier)
+          .loadMore(),
+    );
+  }
+
+  Future<void> _reloadPaged() => ref
+      .read(workerAnnouncementPagedListProvider(_pagedQuery).notifier)
+      .reload(silent: false);
 
   String _emptyMessage(WorkerAnnouncementInboxSegment segment) {
-    return workerAnnouncementEmptyMessage(segment);
+    return workerAnnouncementEmptyMessage(segment, placeState: _placeState);
+  }
+
+  List<Widget> _buildSectionedList(
+    BuildContext context,
+    List<WorkerAnnouncementListSection> sections,
+  ) {
+    final children = <Widget>[];
+    for (final section in sections) {
+      if (section.headerTitle != null) {
+        children.add(
+          workerAnnouncementSectionHeader(
+            context,
+            title: section.headerTitle!,
+            itemCount: section.items.length,
+          ),
+        );
+      }
+      for (final a in section.items) {
+        final showPlaceChip = section.headerTitle == null &&
+            !a.isGlobal &&
+            a.pid != null &&
+            a.pid! > 0;
+        final placeLabel = showPlaceChip
+            ? ((a.placeName?.trim().isNotEmpty ?? false)
+                ? a.placeName!.trim()
+                : _placeNames.labelFor(a.pid!))
+            : null;
+        if (children.isNotEmpty) {
+          children.add(SizedBox(height: context.rsi(12)));
+        }
+        children.add(
+          WorkerAnnouncementReadListCard(
+            item: a,
+            onTap: () => context.push('/announcements/view', extra: a),
+            previewMaxLen: 64,
+            placeName: placeLabel,
+          ),
+        );
+      }
+    }
+    return children;
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final paged = ref.watch(workerAnnouncementPagedListProvider(_pagedQuery));
+    if (paged.items.isNotEmpty) {
+      unawaited(_syncPlaceNames(paged.items));
+    }
+    final announcements = filterAnnouncementsForPlaceTab(
+      items: paged.items,
+      segment: _segment,
+      placeState: _placeState,
+      resolver: _placeNames,
+    );
+    final effectivePlaceNames = <int, String>{..._placeNames.names};
+    for (final a in announcements) {
+      final pid = a.pid;
+      final pname = a.placeName?.trim() ?? '';
+      if (pid != null && pid > 0 && pname.isNotEmpty) {
+        effectivePlaceNames[pid] = pname;
+      }
+    }
+    final sections = buildWorkerAnnouncementListSections(
+      announcements: announcements,
+      placeNameByPid: effectivePlaceNames,
+      segment: _segment,
+      groupByPlace: _filterPlaceId == null,
+    );
+    final blocking =
+        paged.initialLoading && paged.items.isEmpty && paged.error == null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('공지사항')),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.rsi(16),
-              context.rsi(12),
-              context.rsi(16),
-              context.rsi(4),
-            ),
-            child: SegmentedButton<WorkerAnnouncementInboxSegment>(
-              showSelectedIcon: false,
-              style: AppSegmentedButton.styleFrom(
-                textStyle: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              segments: [
-                ButtonSegment(
-                  value: WorkerAnnouncementInboxSegment.globalOnly,
-                  label: AppSegmentedButton.segmentLabel('전체공지'),
-                  tooltip: '전체 공지',
-                ),
-                ButtonSegment(
-                  value: WorkerAnnouncementInboxSegment.placeOnly,
-                  label: AppSegmentedButton.segmentLabel('현장공지'),
-                  tooltip: '현장 공지',
-                ),
-              ],
-              selected: {_segment},
-              onSelectionChanged: (next) {
+          WorkerAnnouncementInboxScopeSegment(
+            value: _segment,
+            onChanged: (next) {
+              setState(() {
+                _segment = next;
+                if (_segment == WorkerAnnouncementInboxSegment.globalOnly) {
+                  _filterPlaceId = null;
+                  _filterPlaceName = null;
+                }
+              });
+            },
+          ),
+          if (_segment == WorkerAnnouncementInboxSegment.placeOnly) ...[
+            WorkerAnnouncementPlaceCompleteSegment(
+              value: _placeState,
+              onChanged: (next) {
                 setState(() {
-                  _segment = next.first;
+                  _placeState = next;
+                  _filterPlaceId = null;
+                  _filterPlaceName = null;
                 });
               },
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.rsi(16),
-              context.rsi(8),
-              context.rsi(16),
-              context.rsi(10),
+            WorkerAnnouncementPlaceSearchBar(
+              selectedPlaceId: _filterPlaceId,
+              selectedPlaceName: _filterPlaceName,
+              placeState: _placeState,
+              onChanged: (placeId, placeName, placePcomplete) {
+                setState(() {
+                  _filterPlaceId = placeId;
+                  _filterPlaceName = placeName;
+                  if (placeId != null && placeName != null) {
+                    _placeNames.remember(
+                      placeId,
+                      placeName,
+                      pcomplete: placePcomplete,
+                    );
+                  }
+                });
+              },
             ),
-            child: Material(
-              color: cs.surfaceContainerLow.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.rsi(14),
-                  vertical: context.rsi(11),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline_rounded,
-                        color: cs.primary, size: context.rs(20)),
-                    SizedBox(width: context.rsi(10)),
-                    Expanded(
-                      child: Text(
-                        workerAnnouncementSegmentHint(_segment),
-                        style: tt.bodySmall?.copyWith(
-                          height: 1.4,
-                          color: cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          ],
           Expanded(
-            child: FutureBuilder<_InboxLoad>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return Skeletonizer(
+            child: blocking
+                ? Skeletonizer(
                     enabled: true,
                     child: ListView.builder(
                       padding: EdgeInsets.fromLTRB(
@@ -194,152 +257,74 @@ class _WorkerAnnouncementsInboxScreenState
                             ],
                           ),
                           onTap: () {},
-                          showPreview: false,
+                          previewMaxLen: 64,
                         ),
                       ),
                     ),
-                  );
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(context.rsi(24)),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(snap.error.toString(),
-                              textAlign: TextAlign.center),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            onPressed: () => setState(_reload),
-                            child: const Text('다시 시도'),
+                  )
+                : paged.error != null && paged.items.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(context.rsi(24)),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                paged.error.toString(),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: () => _reloadPaged(),
+                                child: const Text('다시 시도'),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                final raw = snap.data?.announcements ?? const <WorkerAnnouncementRead>[];
-                final placeNameByPid = snap.data?.placeNameByPid ?? const <int, String>{};
-                final filtered =
-                    raw.where((a) => _segment.accepts(a)).toList(growable: false);
-                
-                final pinnedList = filtered.where((a) => a.isPinned).toList();
-                final unpinnedList = filtered.where((a) => !a.isPinned).toList();
-                final list = [...pinnedList, ...unpinnedList];
-                
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    final f = _load();
-                    setState(() => _future = f);
-                    await f;
-                  },
-                  child: list.isEmpty
-                      ? CustomScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          slivers: [
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(context.rsi(24)),
-                                  child: Text(
-                                    _emptyMessage(_segment),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyLarge
-                                        ?.copyWith(
-                                            color: cs.onSurfaceVariant),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : ListView.separated(
-                          padding:
-                              EdgeInsets.fromLTRB(
-                                context.rsi(16),
-                                context.rsi(8),
-                                context.rsi(16),
-                                context.rsi(28),
-                              ),
-                          itemCount: list.length,
-                          separatorBuilder: (_, __) =>
-                              SizedBox(height: context.rsi(12)),
-                          itemBuilder: (context, i) {
-                            final a = list[i];
-                            final pid = a.pid;
-                            final placeLabel = (!a.isGlobal &&
-                                    pid != null &&
-                                    pid > 0)
-                                ? (placeNameByPid[pid] ?? '현장 #$pid')
-                                : null;
-                            return Stack(
-                              children: [
-                                WorkerAnnouncementReadListCard(
-                                  item: a,
-                                  onTap: () => context.push(
-                                    '/announcements/view',
-                                    extra: a,
-                                  ),
-                                  showPreview: false,
-                                  placeName: placeLabel,
-                                ),
-                                if (a.isPinned)
-                                  Positioned(
-                                    right: context.rsi(12),
-                                    bottom: context.rsi(10),
-                                    child: Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: context.rsi(6),
-                                        vertical: context.rsi(2),
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: cs.primaryContainer,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.push_pin,
-                                            size: context.rs(13),
-                                            color: cs.onPrimaryContainer,
+                        ),
+                      )
+                    : AppRefreshIndicator(
+                        onRefresh: _reloadPaged,
+                        child: sections.isEmpty
+                            ? CustomScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                slivers: [
+                                  SliverFillRemaining(
+                                    hasScrollBody: false,
+                                    child: Center(
+                                      child: Padding(
+                                        padding:
+                                            EdgeInsets.all(context.rsi(24)),
+                                        child: Text(
+                                          _emptyMessage(_segment),
+                                          style: tt.bodyLarge?.copyWith(
+                                            color: cs.onSurfaceVariant,
                                           ),
-                                          SizedBox(width: context.rsi(3)),
-                                          Text(
-                                            '최상단고정',
-                                            style: tt.labelSmall?.copyWith(
-                                              color: cs.onPrimaryContainer,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                              ],
-                            );
-                          },
-                        ),
-                );
-              },
-            ),
+                                ],
+                              )
+                            : ListView(
+                                controller: _scroll,
+                                padding: EdgeInsets.fromLTRB(
+                                  context.rsi(16),
+                                  context.rsi(8),
+                                  context.rsi(16),
+                                  context.rsi(28),
+                                ),
+                                children: [
+                                  ..._buildSectionedList(context, sections),
+                                  PagedListFooter(
+                                    isLoading: paged.isLoadingMore,
+                                    hasMore: paged.hasMore,
+                                  ),
+                                ],
+                              ),
+                      ),
           ),
         ],
       ),
     );
   }
-}
-
-class _InboxLoad {
-  const _InboxLoad({
-    required this.announcements,
-    required this.placeNameByPid,
-  });
-
-  final List<WorkerAnnouncementRead> announcements;
-  final Map<int, String> placeNameByPid;
 }

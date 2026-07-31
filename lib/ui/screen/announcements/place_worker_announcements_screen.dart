@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,9 +7,12 @@ import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
+import 'package:w0001/presentation/viewmodel/worker_announcement_paged_list_notifier.dart';
 import 'package:w0001/presentation/viewmodel/worker_announcement_providers.dart';
 import 'package:w0001/ui/screen/announcements/admin_worker_announcement_edit_screen.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_read_widgets.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
+import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/navigation/place_navigation.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -27,53 +32,81 @@ class PlaceWorkerAnnouncementsScreen extends ConsumerStatefulWidget {
 
 class _PlaceWorkerAnnouncementsScreenState
     extends ConsumerState<PlaceWorkerAnnouncementsScreen> {
-  Future<List<WorkerAnnouncementRead>>? _future;
+  late final ScrollController _scroll;
 
   @override
   void initState() {
     super.initState();
-    _reload();
+    _scroll = ScrollController()..addListener(_onScroll);
   }
 
-  void _reload() {
-    final pid = widget.place.pid;
-    if (pid == null) {
-      setState(() {
-        _future = Future.value(const []);
-      });
-      return;
-    }
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
+  WorkerAnnouncementPagedQuery _pagedQuery(bool canManage, int pid) {
+    final pcomplete = widget.place.pcomplete == 1 ? 1 : 0;
+    return WorkerAnnouncementPagedQuery(
+      source: canManage
+          ? WorkerAnnouncementPagedSource.manage
+          : WorkerAnnouncementPagedSource.inbox,
+      placeId: pid,
+      scopeFilter: WorkerAnnouncementPagedScopeFilter.placeOnly,
+      placeComplete: pcomplete,
+    );
+  }
+
+  void _onScroll() {
+    final pid = widget.place.pid;
+    if (pid == null) return;
     final canManage =
         ref.read(authSessionProvider).asData?.value?.isManagementRole ?? false;
-
-    final Future<List<WorkerAnnouncementRead>> fut;
-    if (canManage) {
-      fut = ref.read(workerAnnouncementUseCaseProvider).manageList().then(
-            (list) => list
-                .where(
-                  (a) =>
-                      a.scope == WorkerAnnouncementScope.place && a.pid == pid,
-                )
-                .toList(growable: false),
-          );
-    } else {
-      fut = ref.read(workerAnnouncementUseCaseProvider).inbox(placeId: pid).then(
-            (list) => list
-                .where(
-                  (a) =>
-                      a.scope == WorkerAnnouncementScope.place && a.pid == pid,
-                )
-                .toList(growable: false),
-          );
-    }
-
-    setState(() {
-      _future = fut;
-    });
+    onPagedScrollNearEnd(
+      _scroll,
+      onLoadMore: () => ref
+          .read(
+            workerAnnouncementPagedListProvider(_pagedQuery(canManage, pid))
+                .notifier,
+          )
+          .loadMore(),
+    );
   }
 
-  Future<void> _confirmDelete(BuildContext context, WorkerAnnouncementRead a) async {
+  void _reloadPaged() {
+    final pid = widget.place.pid;
+    if (pid == null) return;
+    final canManage =
+        ref.read(authSessionProvider).asData?.value?.isManagementRole ?? false;
+    unawaited(
+      ref
+          .read(
+            workerAnnouncementPagedListProvider(_pagedQuery(canManage, pid))
+                .notifier,
+          )
+          .reload(silent: false),
+    );
+  }
+
+  List<WorkerAnnouncementRead> _sortedForDisplay(
+    List<WorkerAnnouncementRead> items,
+  ) {
+    // 전체공지 제외 — 현장공지만 표시
+    final placeOnly = items.where((a) => !a.isGlobal).toList();
+    placeOnly.sort((a, b) {
+      if (a.isPinned != b.isPinned) {
+        return a.isPinned ? -1 : 1;
+      }
+      final aTime = a.createdAt ?? DateTime(2000);
+      final bTime = b.createdAt ?? DateTime(2000);
+      return bTime.compareTo(aTime);
+    });
+    return placeOnly;
+  }
+
+  Future<void> _confirmDelete(
+      BuildContext context, WorkerAnnouncementRead a) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -99,7 +132,7 @@ class _PlaceWorkerAnnouncementsScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('삭제했습니다.')),
       );
-      _reload();
+      _reloadPaged();
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -109,7 +142,8 @@ class _PlaceWorkerAnnouncementsScreenState
     }
   }
 
-  Future<void> _togglePin(BuildContext context, WorkerAnnouncementRead a) async {
+  Future<void> _togglePin(
+      BuildContext context, WorkerAnnouncementRead a) async {
     try {
       if (a.isPinned) {
         await ref.read(workerAnnouncementUseCaseProvider).unpin(a.id);
@@ -124,7 +158,7 @@ class _PlaceWorkerAnnouncementsScreenState
           const SnackBar(content: Text('상단에 고정했습니다.')),
         );
       }
-      _reload();
+      _reloadPaged();
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -146,7 +180,7 @@ class _PlaceWorkerAnnouncementsScreenState
         ),
       ),
     );
-    if (mounted) _reload();
+    if (mounted) _reloadPaged();
   }
 
   Future<void> _openEditExisting(
@@ -165,14 +199,15 @@ class _PlaceWorkerAnnouncementsScreenState
         ),
       ),
     );
-    if (mounted) _reload();
+    if (mounted) _reloadPaged();
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final pid = widget.place.pid;
-    final canManage = ref.watch(authSessionProvider).asData?.value?.isManagementRole ?? false;
+    final canManage =
+        ref.watch(authSessionProvider).asData?.value?.isManagementRole ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -189,10 +224,18 @@ class _PlaceWorkerAnnouncementsScreenState
           : null,
       body: pid == null
           ? const Center(child: Text('현장 식별자가 없습니다.'))
-          : FutureBuilder<List<WorkerAnnouncementRead>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
+          : Builder(
+              builder: (context) {
+                final paged = ref.watch(
+                  workerAnnouncementPagedListProvider(
+                      _pagedQuery(canManage, pid)),
+                );
+                final sortedList = _sortedForDisplay(paged.items);
+                final blocking = paged.initialLoading &&
+                    paged.items.isEmpty &&
+                    paged.error == null;
+
+                if (blocking) {
                   return Skeletonizer(
                     enabled: true,
                     child: ListView.builder(
@@ -221,18 +264,21 @@ class _PlaceWorkerAnnouncementsScreenState
                     ),
                   );
                 }
-                if (snap.hasError) {
+
+                if (paged.error != null && paged.items.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: EdgeInsets.all(context.rsi(24)),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(snap.error.toString(),
-                              textAlign: TextAlign.center),
+                          Text(
+                            paged.error.toString(),
+                            textAlign: TextAlign.center,
+                          ),
                           SizedBox(height: context.rsi(16)),
                           FilledButton(
-                            onPressed: () => setState(_reload),
+                            onPressed: _reloadPaged,
                             child: const Text('다시 시도'),
                           ),
                         ],
@@ -241,63 +287,8 @@ class _PlaceWorkerAnnouncementsScreenState
                   );
                 }
 
-                final list = snap.data ?? const <WorkerAnnouncementRead>[];
-                // pinned 항목을 상단에 표시
-                final sortedList = list.toList()
-                  ..sort((a, b) {
-                    if (a.isPinned != b.isPinned) {
-                      return a.isPinned ? -1 : 1;
-                    }
-                    // 같은 pin 상태면 최신순
-                    final aTime = a.createdAt ?? DateTime(2000);
-                    final bTime = b.createdAt ?? DateTime(2000);
-                    return bTime.compareTo(aTime);
-                  });
-                
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    final p = widget.place.pid;
-                    if (p == null) return;
-
-                    final canM = ref
-                            .read(authSessionProvider)
-                            .asData
-                            ?.value
-                            ?.isManagementRole ??
-                        false;
-                    final Future<List<WorkerAnnouncementRead>> f = canM
-                        ? ref
-                            .read(workerAnnouncementUseCaseProvider)
-                            .manageList()
-                            .then(
-                              (li) => li
-                                  .where(
-                                    (a) =>
-                                        a.scope ==
-                                            WorkerAnnouncementScope.place &&
-                                        a.pid == p,
-                                  )
-                                  .toList(growable: false),
-                            )
-                        : ref
-                            .read(workerAnnouncementUseCaseProvider)
-                            .inbox(placeId: p)
-                            .then(
-                              (li) => li
-                                  .where(
-                                    (a) =>
-                                        a.scope ==
-                                            WorkerAnnouncementScope.place &&
-                                        a.pid == p,
-                                  )
-                                  .toList(growable: false),
-                            );
-
-                    setState(() {
-                      _future = f;
-                    });
-                    await f;
-                  },
+                return AppRefreshIndicator(
+                  onRefresh: () async => _reloadPaged(),
                   child: sortedList.isEmpty
                       ? CustomScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
@@ -316,16 +307,19 @@ class _PlaceWorkerAnnouncementsScreenState
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodyLarge
-                                            ?.copyWith(color: cs.onSurfaceVariant),
+                                            ?.copyWith(
+                                              color: cs.onSurfaceVariant,
+                                            ),
                                       ),
                                       if (canManage) ...[
                                         SizedBox(height: context.rsi(18)),
                                         FilledButton.icon(
-                                          onPressed: () => _openEditNew(context),
-                                          icon:
-                                              const Icon(Icons.add_circle_outline),
-                                          label:
-                                              const Text('현장 공지 작성하기'),
+                                          onPressed: () =>
+                                              _openEditNew(context),
+                                          icon: const Icon(
+                                            Icons.add_circle_outline,
+                                          ),
+                                          label: const Text('현장 공지 작성하기'),
                                         ),
                                       ],
                                     ],
@@ -336,19 +330,26 @@ class _PlaceWorkerAnnouncementsScreenState
                           ],
                         )
                       : ListView.separated(
+                          controller: _scroll,
                           padding: EdgeInsets.fromLTRB(
                             context.rsi(16),
                             context.rsi(8),
                             context.rsi(16),
                             context.rsi(canManage ? 88 : 28),
                           ),
-                          itemCount: sortedList.length,
+                          itemCount: sortedList.length + 1,
                           separatorBuilder: (_, __) =>
                               SizedBox(height: context.rsi(12)),
                           itemBuilder: (context, i) {
+                            if (i >= sortedList.length) {
+                              return PagedListFooter(
+                                isLoading: paged.isLoadingMore,
+                                hasMore: paged.hasMore,
+                              );
+                            }
                             final a = sortedList[i];
                             if (canManage) {
-                              return PlaceWorkerAnnouncementListTile(
+                              return WorkerAnnouncementReadListCard(
                                 item: a,
                                 trailing: PopupMenuButton<String>(
                                   icon: Icon(
@@ -377,7 +378,9 @@ class _PlaceWorkerAnnouncementsScreenState
                                             color: cs.onSurfaceVariant,
                                           ),
                                           const SizedBox(width: 8),
-                                          Text(a.isPinned ? '고정 해제' : '상단 고정'),
+                                          Text(
+                                            a.isPinned ? '고정 해제' : '상단 고정',
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -392,16 +395,20 @@ class _PlaceWorkerAnnouncementsScreenState
                                   ],
                                 ),
                                 onTap: () async {
-                                  await context.push<dynamic>(
-                                    '/announcements/view',
-                                    extra: a,
-                                  );
-                                  if (mounted) _reload();
+                                  if (canManage) {
+                                    await _openEditExisting(context, a);
+                                  } else {
+                                    await context.push<dynamic>(
+                                      '/announcements/view',
+                                      extra: a,
+                                    );
+                                  }
+                                  if (mounted) _reloadPaged();
                                 },
                               );
                             }
 
-                            return PlaceWorkerAnnouncementListTile(
+                            return WorkerAnnouncementReadListCard(
                               item: a,
                               onTap: () => context.push(
                                 '/announcements/view',

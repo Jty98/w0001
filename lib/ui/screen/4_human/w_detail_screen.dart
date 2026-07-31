@@ -86,7 +86,8 @@ class WorkCostDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPlaceDropdownSearch(BuildContext context, WidgetRef ref, HumanWorkDetailViewModel vm) {
+  Widget _buildPlaceDropdownSearch(
+      BuildContext context, WidgetRef ref, HumanWorkDetailViewModel vm) {
     return Padding(
       padding: EdgeInsets.all(context.rsi(8)),
       child: DropdownSearch<PlaceDropDownModel>(

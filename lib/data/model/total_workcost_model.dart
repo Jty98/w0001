@@ -14,6 +14,17 @@ class TotalWorkCostModel {
 
   /// 해당 일 작업지시·공정표 연동 공정명 (`place-work-days.workrole` 우선).
   final String workrole;
+  final int hdailyWage;
+  final String hdefaultRole;
+
+  /// 연결 워커 프로필 현장 역할 (`GET /humans/:hid` → `worker_rank`).
+  final String workerRank;
+
+  /// 대표 주특기 (`primary_specialty`).
+  final String? primarySpecialty;
+
+  /// 추가 가능 작업.
+  final List<String> specialties;
 
   TotalWorkCostModel({
     required this.hname,
@@ -29,6 +40,11 @@ class TotalWorkCostModel {
     required this.price,
     this.wcompletedAt,
     this.workrole = '',
+    this.hdailyWage = 0,
+    this.hdefaultRole = '',
+    this.workerRank = '',
+    this.primarySpecialty,
+    this.specialties = const [],
   });
 
   TotalWorkCostModel.fromMap(Map<String, dynamic> res)
@@ -44,7 +60,13 @@ class TotalWorkCostModel {
         date = res['날짜'],
         price = res['금액'],
         wcompletedAt = res['wcompleted_at'],
-        workrole = (res['workrole'] ?? res['wrole'] ?? '').toString();
+        workrole = (res['workrole'] ?? res['wrole'] ?? '').toString(),
+        hdailyWage = (res['hdailyWage'] as num?)?.toInt() ?? 0,
+        hdefaultRole = (res['hdefaultRole'] ?? '').toString(),
+        workerRank = (res['workerRank'] ?? res['worker_rank'] ?? '').toString(),
+        primarySpecialty = res['primarySpecialty'] as String? ??
+            res['primary_specialty'] as String?,
+        specialties = const [];
 
   TotalWorkCostModel copyWith({
     String? hname,
@@ -60,6 +82,11 @@ class TotalWorkCostModel {
     int? price,
     String? wcompletedAt,
     String? workrole,
+    int? hdailyWage,
+    String? hdefaultRole,
+    String? workerRank,
+    String? primarySpecialty,
+    List<String>? specialties,
   }) {
     return TotalWorkCostModel(
       hname: hname ?? this.hname,
@@ -75,6 +102,11 @@ class TotalWorkCostModel {
       price: price ?? this.price,
       wcompletedAt: wcompletedAt ?? this.wcompletedAt,
       workrole: workrole ?? this.workrole,
+      hdailyWage: hdailyWage ?? this.hdailyWage,
+      hdefaultRole: hdefaultRole ?? this.hdefaultRole,
+      workerRank: workerRank ?? this.workerRank,
+      primarySpecialty: primarySpecialty ?? this.primarySpecialty,
+      specialties: specialties ?? this.specialties,
     );
   }
 

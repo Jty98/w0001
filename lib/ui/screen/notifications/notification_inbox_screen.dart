@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/user_notification_models.dart';
 import 'package:w0001/presentation/viewmodel/user_notifications_providers.dart';
 import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/fcm/fcm_push_router.dart';
 import 'package:w0001/util/notifications/notification_time_label.dart';
@@ -16,7 +18,8 @@ class NotificationInboxScreen extends ConsumerStatefulWidget {
       _NotificationInboxScreenState();
 }
 
-class _NotificationInboxScreenState extends ConsumerState<NotificationInboxScreen> {
+class _NotificationInboxScreenState
+    extends ConsumerState<NotificationInboxScreen> {
   var _busy = false;
 
   @override
@@ -32,9 +35,7 @@ class _NotificationInboxScreenState extends ConsumerState<NotificationInboxScree
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(userNotificationInboxProvider.notifier)
-          .markRead(item);
+      await ref.read(userNotificationInboxProvider.notifier).markRead(item);
       final container = rootProviderContainer;
       if (container != null) {
         final nav = Map<String, dynamic>.from(item.payload);
@@ -73,7 +74,7 @@ class _NotificationInboxScreenState extends ConsumerState<NotificationInboxScree
   }
 
   Widget _emptyBody(BuildContext context, ColorScheme cs, TextTheme tt) {
-    return RefreshIndicator(
+    return AppRefreshIndicator(
       onRefresh: () =>
           ref.read(userNotificationInboxProvider.notifier).reload(),
       child: CustomScrollView(
@@ -132,14 +133,15 @@ class _NotificationInboxScreenState extends ConsumerState<NotificationInboxScree
       body: SafeArea(
         top: false,
         child: async.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const AppLoadingIndicator(label: '알림 불러오는 중...'),
           error: (e, _) => Center(
             child: Padding(
               padding: EdgeInsets.all(context.rsi(24)),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline, size: context.rs(48), color: cs.error),
+                  Icon(Icons.error_outline,
+                      size: context.rs(48), color: cs.error),
                   SizedBox(height: context.rsi(12)),
                   Text(
                     '알림을 불러오지 못했습니다',
@@ -168,7 +170,7 @@ class _NotificationInboxScreenState extends ConsumerState<NotificationInboxScree
               return _emptyBody(context, cs, tt);
             }
 
-            return RefreshIndicator(
+            return AppRefreshIndicator(
               onRefresh: () =>
                   ref.read(userNotificationInboxProvider.notifier).reload(),
               child: ListView.separated(

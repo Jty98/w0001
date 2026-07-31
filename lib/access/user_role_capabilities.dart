@@ -36,6 +36,9 @@ extension UserRoleCapabilities on UserRole {
   /// 작업자 공지 작성·수정 (`GET/POST/PATCH /worker-announcements`).
   bool get canManageWorkerAnnouncements => isManagementRole;
 
+  /// 부가기능 콘텐츠(오늘의 명언, 현장 지식 사전) 관리.
+  bool get canManageExtras => isManagementRole;
+
   /// 현장 문서(PDF·엑셀) 원본 보기·인쇄·표 복사 등.
   bool get canUsePlaceDocumentTools => isManagementRole;
 

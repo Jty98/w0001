@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/datasources/remote/super_admin/super_admin_api_common.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/model/paged_result.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/util/api_endpoint.dart';
 
@@ -15,11 +17,6 @@ final class UsersRemoteApi {
           ApiEndpoint.headerAdminActionToken: adminActionToken,
         },
       );
-
-  Future<List<UserRead>> list() async {
-    final r = await _http.get<dynamic>(ApiEndpoint.users);
-    return saMapList(r.data, userReadFromJson);
-  }
 
   Future<UserRead> get(String uid) async {
     final r = await _http.get<dynamic>(ApiEndpoint.usersUid(uid));
@@ -41,31 +38,39 @@ final class UsersRemoteApi {
   }
 
   /// `PUT /users/me/fcm-device` — FCM 토큰 upsert (작업자·관리자 JWT).
+  ///
+  /// 서버 계약: `fcmToken`, `platform`, `deviceId` (camelCase).
   Future<void> putMyFcmDevice({
     required String fcmToken,
     required String platform,
     String deviceId = '',
   }) async {
+    final body = <String, dynamic>{
+      'fcmToken': fcmToken,
+      'platform': platform,
+    };
+    final device = deviceId.trim();
+    if (device.isNotEmpty) {
+      body['deviceId'] = device;
+    }
     await _http.put<dynamic>(
       ApiEndpoint.usersMeFcmDevice,
-      data: <String, dynamic>{
-        'fcm_token': fcmToken,
-        'platform': platform,
-        'device_id': deviceId,
-      },
+      data: body,
     );
   }
 
-  /// `GET /users/pending` — 승인 대기 ([q] 선택: 이름 부분 검색)
-  Future<List<UserRead>> listPending({String? q}) async {
-    final qp = <String, dynamic>{};
-    final t = q?.trim();
-    if (t != null && t.isNotEmpty) qp['q'] = t;
-    final r = await _http.get<dynamic>(
-      ApiEndpoint.usersPending,
-      queryParameters: qp.isEmpty ? null : qp,
-    );
-    return saMapList(r.data, userReadFromJson);
+  /// `GET /users/me/fcm-device/status` — 등록 여부 확인.
+  Future<FcmDeviceStatusRead> getMyFcmDeviceStatus() async {
+    final r = await _http.get<dynamic>(ApiEndpoint.usersMeFcmDeviceStatus);
+    final data = r.data;
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : throw const FormatException('FCM device status 응답 형식이 올바르지 않습니다.');
+    final payload = map['data'] ?? map['result'] ?? map;
+    if (payload is! Map) {
+      throw const FormatException('FCM device status 응답 형식이 올바르지 않습니다.');
+    }
+    return FcmDeviceStatusRead.fromJson(Map<String, dynamic>.from(payload));
   }
 
   /// `GET /users/search` — role / approval_status / is_active / q 조합
@@ -75,7 +80,24 @@ final class UsersRemoteApi {
     bool? isActive,
     String? q,
   }) async {
-    final m = <String, dynamic>{};
+    final page = await searchPage(
+      role: role,
+      approvalStatus: approvalStatus,
+      isActive: isActive,
+      q: q,
+    );
+    return page.items;
+  }
+
+  Future<PagedResult<UserRead>> searchPage({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  }) async {
+    final m = <String, dynamic>{'limit': limit};
     final rs = role?.trim();
     final ap = approvalStatus?.trim();
     final qq = q?.trim();
@@ -83,11 +105,36 @@ final class UsersRemoteApi {
     if (ap != null && ap.isNotEmpty) m['approval_status'] = ap;
     if (isActive != null) m['is_active'] = isActive;
     if (qq != null && qq.isNotEmpty) m['q'] = qq;
+    final c = cursor?.trim();
+    if (c != null && c.isNotEmpty) m['cursor'] = c;
     final r = await _http.get<dynamic>(
       ApiEndpoint.usersSearch,
-      queryParameters: m.isEmpty ? null : m,
+      queryParameters: m,
     );
-    return saMapList(r.data, userReadFromJson);
+    return saParsePagedList(r.data, userReadFromJson);
+  }
+
+  /// `GET /users/pending` — 승인 대기 ([q] 선택: 이름 부분 검색)
+  Future<List<UserRead>> listPending({String? q}) async {
+    final page = await pendingPage(q: q);
+    return page.items;
+  }
+
+  Future<PagedResult<UserRead>> pendingPage({
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  }) async {
+    final qp = <String, dynamic>{'limit': limit};
+    final t = q?.trim();
+    if (t != null && t.isNotEmpty) qp['q'] = t;
+    final c = cursor?.trim();
+    if (c != null && c.isNotEmpty) qp['cursor'] = c;
+    final r = await _http.get<dynamic>(
+      ApiEndpoint.usersPending,
+      queryParameters: qp,
+    );
+    return saParsePagedList(r.data, userReadFromJson);
   }
 
   Future<void> approve(String uid, {String? note}) async {
@@ -142,6 +189,19 @@ final class UsersRemoteApi {
       return userReadFromJson(Map<String, dynamic>.from(data));
     }
     return get(uid);
+  }
+
+  /// 여러 인력을 한 번에 조회 (N+1 쿼리 방지)
+  Future<List<UserRead>> getBatch(List<int> hids) async {
+    if (hids.isEmpty) return [];
+
+    final r = await _http.post<dynamic>(
+      '${ApiEndpoint.users}/batch',
+      data: {'hids': hids},
+    );
+
+    // 서버 응답이 List<UserRead> 형태
+    return saMapList(r.data, userReadFromJson);
   }
 }
 

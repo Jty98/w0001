@@ -10,6 +10,7 @@ import 'package:w0001/domain/process_schedule/process_schedule_editor.dart';
 import 'package:w0001/access/user_role_capabilities.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
+import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_process_schedule_notifier.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_chart_views.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_dialogs.dart';
@@ -18,6 +19,7 @@ import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_dim.da
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_helpers.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_layout_segment.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_share_actions.dart';
+import 'package:w0001/domain/data_change_event.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -48,6 +50,8 @@ class _PlaceProcessScheduleScreenState
   var _exiting = false;
 
   ProcessScheduleLayout _layout = ProcessScheduleLayout.stickyHeaders;
+  ProcessScheduleScreenOrientation _orientation =
+      ProcessScheduleScreenOrientation.portrait;
 
   /// 롱프레스 후 연속 칠하기 중 스크롤과 충돌 방지.
   var _brushScrollLock = false;
@@ -67,11 +71,24 @@ class _PlaceProcessScheduleScreenState
   bool? _brushFillOn;
   (int, int)? _brushLastPair;
 
-  ProcessScheduleFamilyArg get _scheduleKey => (
-        pid: widget.placeInfo.pid ?? 0,
-        pstart: widget.placeInfo.pstart,
-        pend: widget.placeInfo.pend,
-      );
+  PlaceInfoModel _resolvedPlaceInfo() {
+    final fallback = widget.placeInfo;
+    final pid = fallback.pid;
+    if (pid == null) return fallback;
+    for (final p in ref.read(placeListProvider).placeList) {
+      if (p.pid == pid) return p;
+    }
+    return fallback;
+  }
+
+  ProcessScheduleFamilyArg get _scheduleKey {
+    final place = _resolvedPlaceInfo();
+    return (
+      pid: place.pid ?? 0,
+      pstart: place.pstart,
+      pend: place.pend,
+    );
+  }
 
   List<DateTime> _columnDates(ProcessScheduleData d) =>
       ProcessScheduleEditor.columnDates(d);
@@ -233,42 +250,44 @@ class _PlaceProcessScheduleScreenState
     _hBody.addListener(_syncHFromBody);
     _vLeft.addListener(_syncVFromLeft);
     _vBody.addListener(_syncVFromBody);
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+  Future<void> _applyScreenOrientation(
+    ProcessScheduleScreenOrientation orientation,
+  ) async {
+    if (orientation == ProcessScheduleScreenOrientation.landscape) {
       await _lockLandscape();
+    } else {
+      await _unlockPortraitOnly();
+    }
+  }
+
+  void _onOrientationChanged(ProcessScheduleScreenOrientation next) {
+    if (_orientation == next) return;
+    setState(() => _orientation = next);
+    unawaited(_applyScreenOrientation(next));
+  }
+
+  void _addEmptyProcessRow() {
+    ref
+        .read(placeProcessScheduleProvider(_scheduleKey).notifier)
+        .addEmptyProcess();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_layout == ProcessScheduleLayout.overview) {
-        _scheduleFitChartToViewport();
+      if (_vLeft.hasClients) {
+        final max = _vLeft.position.maxScrollExtent;
+        _vLeft.jumpTo(max);
+      }
+      if (_vBody.hasClients) {
+        _vBody.jumpTo(_vBody.position.maxScrollExtent);
       }
     });
   }
 
-  Future<void> _openAddProcessDialog() async {
-    final schedule = ref.read(placeProcessScheduleProvider(_scheduleKey));
-    final d = schedule.data;
-    if (!schedule.isReady || d.dayCount == 0) return;
-    final dates = _columnDates(d);
-    final dateLabels = [
-      for (var i = 0; i < dates.length; i++) scheduleDateHeaderLabel(dates[i]),
-    ];
-
-    final result = await showDialog<AddProcessDialogResult>(
-      context: context,
-      builder: (ctx) => AddProcessDialog(dateLabels: dateLabels),
-    );
-
-    if (result == null || !mounted) return;
-    final last = d.dayCount - 1;
-    final lo = result.startIdx.clamp(0, last);
-    var hi = result.endIdx.clamp(0, last);
-    if (hi < lo) hi = lo;
-
+  void _onTaskNameChanged(int taskIndex, String name) {
     ref
         .read(placeProcessScheduleProvider(_scheduleKey).notifier)
-        .addProcess(result.name, lo, hi);
-    if (_layout == ProcessScheduleLayout.overview) {
-      _scheduleFitChartToViewport();
-    }
+        .setTaskName(taskIndex, name);
   }
 
   Future<void> _openPlacePeriodEditor(BuildContext context) async {
@@ -318,7 +337,9 @@ class _PlaceProcessScheduleScreenState
             picked.end,
           );
       if (!mounted) return;
-      await FetchData.fetchAllData();
+      await FetchData.onDataChanged(
+        DataChangeEvent.processScheduleSaved.withPid(widget.placeInfo.pid!),
+      );
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(content: Text('현장 공사 기간이 저장되었습니다.')),
@@ -512,8 +533,9 @@ class _PlaceProcessScheduleScreenState
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final viewSize = MediaQuery.sizeOf(context);
+    final isLandscape = viewSize.width > viewSize.height;
     final compactAppBar =
-        viewSize.height < 720 || viewSize.shortestSide < 400;
+        isLandscape || viewSize.height < 720 || viewSize.shortestSide < 400;
     final readOnly = ref.watch(authSessionProvider).maybeWhen(
           data: (u) => u != null && !u.role.canEditProcessSchedule,
           orElse: () => false,
@@ -541,402 +563,441 @@ class _PlaceProcessScheduleScreenState
           unawaited(_exitToPortraitThenPop());
         },
         child: Padding(
-        padding: _obstructionInsets(context),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                cs.surface,
-                Color.lerp(cs.surface, cs.surfaceContainerLow, 0.35)!,
-              ],
-            ),
-          ),
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              surfaceTintColor: Colors.transparent,
-              backgroundColor: Colors.transparent,
-              toolbarHeight: compactAppBar ? 56 : kToolbarHeight,
-              titleSpacing: compactAppBar ? 10 : 16,
-              leading: IconButton(
-                icon: const Icon(Icons.close_rounded),
-                style: compactAppBar
-                    ? IconButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      )
-                    : null,
-                onPressed: () => unawaited(_exitToPortraitThenPop()),
-              ),
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.placeInfo.pname,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: (compactAppBar ? tt.titleSmall : tt.titleMedium)
-                        ?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      height: compactAppBar ? 1.15 : null,
-                    ),
-                  ),
-                  Text(
-                    schedule.isReady && d.dayCount > 0
-                        ? compactGridPeriodLine(d)
-                        : '공정표',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: (compactAppBar ? tt.labelMedium : tt.labelLarge)
-                        ?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      height: compactAppBar ? 1.1 : null,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
+          padding: _obstructionInsets(context),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  cs.surface,
+                  Color.lerp(cs.surface, cs.surfaceContainerLow, 0.35)!,
                 ],
               ),
-              actions: [
-                IconButton(
-                  tooltip: '공유',
-                  icon: const Icon(Icons.ios_share_rounded),
-                  onPressed: schedule.isReady && d.dayCount > 0
-                      ? () => unawaited(
-                            showProcessScheduleShareSheet(
-                              context: context,
-                              cs: cs,
-                              data: d,
-                              placeName: widget.placeInfo.pname,
-                            ),
-                          )
-                      : null,
-                ),
-                if (_layout == ProcessScheduleLayout.overview)
-                  IconButton(
-                    tooltip: '화면에 맞춤',
-                    icon: const Icon(Icons.fit_screen_rounded),
-                    onPressed: _scheduleFitChartToViewport,
-                  ),
-                if (!readOnly)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      right: context.rs(compactAppBar ? 6 : 10),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Material(
-                          color: cs.surfaceContainerHighest
-                              .withValues(alpha: 0.72),
-                          shape: const StadiumBorder(),
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: schedule.isReady
-                                ? () =>
-                                    unawaited(_openPlacePeriodEditor(context))
-                                : null,
-                            child: Padding(
-                              padding: ResponsiveLayout.symmetric(
-                                context,
-                                horizontal: compactAppBar ? 10 : 12,
-                                vertical: compactAppBar ? 5 : 8,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.edit_calendar_rounded,
-                                    size: context.rsi(compactAppBar ? 17 : 18),
-                                    color: schedule.isReady
-                                        ? cs.primary
-                                        : cs.onSurfaceVariant
-                                            .withValues(alpha: 0.45),
-                                  ),
-                                  rsH(context, compactAppBar ? 4 : 6),
-                                  Text(
-                                    schedule.isReady && d.dayCount > 0
-                                        ? '기간 수정'
-                                        : '공사 기간',
-                                    style: (compactAppBar
-                                            ? tt.labelMedium
-                                            : tt.labelLarge)
-                                        ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.2,
-                                      color: schedule.isReady
-                                          ? cs.onSurface
-                                          : cs.onSurfaceVariant
-                                              .withValues(alpha: 0.45),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        rsH(context, compactAppBar ? 6 : 8),
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            padding: ResponsiveLayout.symmetric(
-                              context,
-                              horizontal: compactAppBar ? 10 : 12,
-                              vertical: compactAppBar ? 5 : 8,
-                            ),
-                            visualDensity: compactAppBar
-                                ? VisualDensity.compact
-                                : VisualDensity.standard,
-                            minimumSize: compactAppBar
-                                ? Size(context.rs(40), context.rs(34))
-                                : null,
-                            tapTargetSize: compactAppBar
-                                ? MaterialTapTargetSize.shrinkWrap
-                                : null,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(context.rs(18)),
-                            ),
-                            elevation: 0,
-                          ),
-                          onPressed:
-                              schedule.isReady ? _openAddProcessDialog : null,
-                          icon: Icon(
-                            Icons.add_rounded,
-                            size: context.rsi(compactAppBar ? 18 : 19),
-                          ),
-                          label: Text(
-                            '공정 추가',
-                            style: (compactAppBar
-                                    ? tt.labelMedium
-                                    : tt.titleSmall)
-                                ?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
             ),
-            body: !schedule.isReady
-                ? Skeletonizer(
-                    enabled: true,
-                    child: Padding(
-                      padding: ResponsiveLayout.all(context, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Container(
-                            height: context.rs(46),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainerLow,
-                              borderRadius: BorderRadius.circular(context.rs(12)),
-                            ),
-                            child: Text(
-                              '보기 모드',
-                              style: tt.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                surfaceTintColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
+                toolbarHeight:
+                    isLandscape ? 40 : (compactAppBar ? 48 : kToolbarHeight),
+                titleSpacing: compactAppBar ? 8 : 16,
+                leading: IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  style: compactAppBar
+                      ? IconButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        )
+                      : null,
+                  onPressed: () => unawaited(_exitToPortraitThenPop()),
+                ),
+                title: Text(
+                  widget.placeInfo.pname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: (compactAppBar ? tt.titleSmall : tt.titleMedium)
+                      ?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: compactAppBar ? 1.15 : null,
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    tooltip: '공유',
+                    icon: Icon(
+                      Icons.ios_share_rounded,
+                      size: isLandscape ? context.rsi(20) : 24,
+                    ),
+                    visualDensity: isLandscape
+                        ? VisualDensity.compact
+                        : VisualDensity.standard,
+                    onPressed: schedule.isReady && d.dayCount > 0
+                        ? () => unawaited(
+                              showProcessScheduleShareSheet(
+                                context: context,
+                                cs: cs,
+                                data: d,
+                                placeName: widget.placeInfo.pname,
                               ),
-                            ),
-                          ),
-                          rsV(context, 12),
-                          Expanded(
-                            child: Container(
+                            )
+                        : null,
+                  ),
+                  if (_layout == ProcessScheduleLayout.overview)
+                    IconButton(
+                      tooltip: '화면에 맞춤',
+                      icon: Icon(
+                        Icons.fit_screen_rounded,
+                        size: isLandscape ? context.rsi(20) : 24,
+                      ),
+                      visualDensity: isLandscape
+                          ? VisualDensity.compact
+                          : VisualDensity.standard,
+                      onPressed: _scheduleFitChartToViewport,
+                    ),
+                ],
+              ),
+              body: !schedule.isReady
+                  ? Skeletonizer(
+                      enabled: true,
+                      child: Padding(
+                        padding: ResponsiveLayout.all(context, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              height: context.rs(46),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: cs.surfaceContainerHighest
-                                    .withValues(alpha: 0.35),
-                                borderRadius: BorderRadius.circular(context.rs(16)),
+                                color: cs.surfaceContainerLow,
+                                borderRadius:
+                                    BorderRadius.circular(context.rs(12)),
                               ),
                               child: Text(
-                                '공정표',
+                                '보기 모드',
                                 style: tt.titleSmall?.copyWith(
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (schedule.loadError != null)
-                        Padding(
-                          padding: ResponsiveLayout.only(
-                            context,
-                            left: 16,
-                            top: 4,
-                            right: 16,
-                          ),
-                          child: Material(
-                            color: cs.errorContainer,
-                            borderRadius: BorderRadius.circular(context.rs(12)),
-                            child: Padding(
-                              padding: ResponsiveLayout.symmetric(
-                                context,
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.warning_amber_rounded,
-                                    color: cs.onErrorContainer,
-                                    size: context.rsi(22),
+                            rsV(context, 12),
+                            Expanded(
+                              child: Container(
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.35),
+                                  borderRadius:
+                                      BorderRadius.circular(context.rs(16)),
+                                ),
+                                child: Text(
+                                  '공정표',
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  rsH(context, 8),
-                                  Expanded(
-                                    child: Text(
-                                      schedule.loadError!,
-                                      style: tt.bodySmall?.copyWith(
-                                        color: cs.onErrorContainer,
-                                        fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (schedule.loadError != null)
+                          Padding(
+                            padding: ResponsiveLayout.only(
+                              context,
+                              left: 16,
+                              top: 4,
+                              right: 16,
+                            ),
+                            child: Material(
+                              color: cs.errorContainer,
+                              borderRadius:
+                                  BorderRadius.circular(context.rs(12)),
+                              child: Padding(
+                                padding: ResponsiveLayout.symmetric(
+                                  context,
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: cs.onErrorContainer,
+                                      size: context.rsi(22),
+                                    ),
+                                    rsH(context, 8),
+                                    Expanded(
+                                      child: Text(
+                                        schedule.loadError!,
+                                        style: tt.bodySmall?.copyWith(
+                                          color: cs.onErrorContainer,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  IconButton(
-                                    tooltip: '닫기',
-                                    onPressed: () {
-                                      ref
-                                          .read(
-                                            placeProcessScheduleProvider(
-                                              _scheduleKey,
-                                            ).notifier,
-                                          )
-                                          .clearLoadError();
-                                    },
-                                    icon: Icon(
-                                      Icons.close_rounded,
-                                      color: cs.onErrorContainer,
+                                    IconButton(
+                                      tooltip: '닫기',
+                                      onPressed: () {
+                                        ref
+                                            .read(
+                                              placeProcessScheduleProvider(
+                                                _scheduleKey,
+                                              ).notifier,
+                                            )
+                                            .clearLoadError();
+                                      },
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        color: cs.onErrorContainer,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      Padding(
-                        padding: ResponsiveLayout.only(
-                          context,
-                          left: 16,
-                          top: 4,
-                          right: 16,
-                          bottom: 8,
-                        ),
-                        child: ProcessScheduleLayoutSegment(
-                          layout: _layout,
-                          radius: ProcessScheduleChartDim.segmentRadius(context),
-                          onChanged: (v) {
-                            setState(() => _layout = v);
-                            if (v == ProcessScheduleLayout.overview) {
-                              _scheduleFitChartToViewport();
-                            } else {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (mounted) _jumpScrollsToOrigin();
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: ResponsiveLayout.only(
-                            context,
-                            left: 12,
-                            right: 12,
-                            bottom: 12,
-                          ),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(context.rs(16)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: cs.shadow.withValues(alpha: 0.08),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 6),
+                        if (isLandscape)
+                          Padding(
+                            padding: ResponsiveLayout.only(
+                              context,
+                              left: 8,
+                              right: 6,
+                              bottom: 2,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.date_range_rounded,
+                                  size: context.rsi(14),
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                rsH(context, 4),
+                                Expanded(
+                                  child: Text(
+                                    schedule.isReady && d.dayCount > 0
+                                        ? fullGridPeriodLine(d)
+                                        : '공사 기간을 설정해 주세요',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: tt.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurfaceVariant,
+                                      height: 1.1,
+                                      fontSize: context.rsi(11),
+                                    ),
+                                  ),
+                                ),
+                                if (!readOnly && schedule.isReady)
+                                  IconButton(
+                                    tooltip: '기간 수정',
+                                    onPressed: () => unawaited(
+                                      _openPlacePeriodEditor(context),
+                                    ),
+                                    icon: Icon(
+                                      Icons.edit_calendar_outlined,
+                                      size: context.rsi(18),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: BoxConstraints(
+                                      minWidth: context.rsi(32),
+                                      minHeight: context.rsi(32),
+                                    ),
+                                  ),
+                                ProcessScheduleViewToolbar(
+                                  compact: true,
+                                  layout: _layout,
+                                  orientation: _orientation,
+                                  onLayoutChanged: (v) {
+                                    setState(() => _layout = v);
+                                    if (v == ProcessScheduleLayout.overview) {
+                                      _scheduleFitChartToViewport();
+                                    } else {
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                        if (mounted) _jumpScrollsToOrigin();
+                                      });
+                                    }
+                                  },
+                                  onOrientationChanged: _onOrientationChanged,
                                 ),
                               ],
-                              border: Border.all(
-                                color: cs.outlineVariant.withValues(alpha: 0.4),
-                              ),
-                              color: cs.surfaceContainerLowest.withValues(
-                                alpha: 0.92,
-                              ),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(context.rs(15)),
-                              child: _layout ==
-                                      ProcessScheduleLayout.stickyHeaders
-                                  ? ProcessScheduleStickyScrollChart(
-                                      cs: cs,
-                                      data: d,
-                                      dates: dates,
-                                      labelCentersByRow: labelCentersByRow,
-                                      hHeader: _hHeader,
-                                      hBody: _hBody,
-                                      vLeft: _vLeft,
-                                      vBody: _vBody,
-                                      brushScrollLock: _brushScrollLock,
-                                      readOnly: readOnly,
-                                      onStickyPointerDown: (e) =>
-                                          _onStickyChartPointerDown(e),
-                                      onStickyPointerMove: (e) =>
-                                          _onStickyChartPointerMove(e, d),
-                                      onStickyPointerUp: (e) =>
-                                          _onStickyChartPointerUp(e, d),
-                                      onStickyPointerCancel:
-                                          _onStickyChartPointerCancel,
-                                      onDateHeaderTap: canWorkforceFromHeader
-                                          ? _openWorkforceForDay
-                                          : null,
-                                    )
-                                  : LayoutBuilder(
-                                      builder: (ctx, bc) {
-                                        return InteractiveViewer(
-                                          key: _interactiveKey,
-                                          transformationController: _transform,
-                                          minScale: ProcessScheduleChartDim
-                                              .viewerMinScale,
-                                          maxScale: ProcessScheduleChartDim
-                                              .viewerMaxScale,
-                                          constrained: false,
-                                          boundaryMargin:
-                                              EdgeInsets.all(context.rs(320)),
-                                          clipBehavior: Clip.hardEdge,
-                                          child: ProcessScheduleOverviewChart(
-                                            cs: cs,
-                                            data: d,
-                                            dates: dates,
-                                            labelCentersByRow:
-                                                labelCentersByRow,
-                                            onCellTap: readOnly
-                                                ? (_, __) {}
-                                                : _toggleCell,
-                                            onDateHeaderTap:
-                                                canWorkforceFromHeader
-                                                    ? _openWorkforceForDay
-                                                    : null,
-                                          ),
-                                        );
-                                      },
+                          )
+                        else ...[
+                          Padding(
+                            padding: ResponsiveLayout.only(
+                              context,
+                              left: 16,
+                              top: 2,
+                              right: 16,
+                              bottom: 4,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.date_range_rounded,
+                                  size: context.rsi(18),
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                rsH(context, 6),
+                                Expanded(
+                                  child: Text(
+                                    schedule.isReady && d.dayCount > 0
+                                        ? fullGridPeriodLine(d)
+                                        : '공사 기간을 설정해 주세요',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: tt.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurfaceVariant,
+                                      height: 1.2,
                                     ),
+                                  ),
+                                ),
+                                if (!readOnly && schedule.isReady)
+                                  TextButton(
+                                    onPressed: () => unawaited(
+                                        _openPlacePeriodEditor(context)),
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: context.rsi(8),
+                                      ),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('기간 수정'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: ResponsiveLayout.only(
+                              context,
+                              left: 16,
+                              top: 0,
+                              right: 16,
+                              bottom: 6,
+                            ),
+                            child: ProcessScheduleViewToolbar(
+                              layout: _layout,
+                              orientation: _orientation,
+                              onLayoutChanged: (v) {
+                                setState(() => _layout = v);
+                                if (v == ProcessScheduleLayout.overview) {
+                                  _scheduleFitChartToViewport();
+                                } else {
+                                  WidgetsBinding.instance
+                                      .addPostFrameCallback((_) {
+                                    if (mounted) _jumpScrollsToOrigin();
+                                  });
+                                }
+                              },
+                              onOrientationChanged: _onOrientationChanged,
+                            ),
+                          ),
+                        ],
+                        Expanded(
+                          child: Padding(
+                            padding: ResponsiveLayout.only(
+                              context,
+                              left: isLandscape ? 6 : 12,
+                              right: isLandscape ? 6 : 12,
+                              bottom: isLandscape ? 4 : 12,
+                            ),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius:
+                                    BorderRadius.circular(context.rs(16)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: cs.shadow.withValues(alpha: 0.08),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                                border: Border.all(
+                                  color:
+                                      cs.outlineVariant.withValues(alpha: 0.4),
+                                ),
+                                color: cs.surfaceContainerLowest.withValues(
+                                  alpha: 0.92,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(context.rs(15)),
+                                child: _layout ==
+                                        ProcessScheduleLayout.stickyHeaders
+                                    ? ProcessScheduleStickyScrollChart(
+                                        cs: cs,
+                                        data: d,
+                                        dates: dates,
+                                        labelCentersByRow: labelCentersByRow,
+                                        hHeader: _hHeader,
+                                        hBody: _hBody,
+                                        vLeft: _vLeft,
+                                        vBody: _vBody,
+                                        brushScrollLock: _brushScrollLock,
+                                        readOnly: readOnly,
+                                        onStickyPointerDown: (e) =>
+                                            _onStickyChartPointerDown(e),
+                                        onStickyPointerMove: (e) =>
+                                            _onStickyChartPointerMove(e, d),
+                                        onStickyPointerUp: (e) =>
+                                            _onStickyChartPointerUp(e, d),
+                                        onStickyPointerCancel:
+                                            _onStickyChartPointerCancel,
+                                        onDateHeaderTap: canWorkforceFromHeader
+                                            ? _openWorkforceForDay
+                                            : null,
+                                        onAddProcess:
+                                            !readOnly && schedule.isReady
+                                                ? _addEmptyProcessRow
+                                                : null,
+                                        onTaskNameChanged: readOnly
+                                            ? null
+                                            : _onTaskNameChanged,
+                                      )
+                                    : LayoutBuilder(
+                                        builder: (ctx, bc) {
+                                          return InteractiveViewer(
+                                            key: _interactiveKey,
+                                            transformationController:
+                                                _transform,
+                                            minScale: ProcessScheduleChartDim
+                                                .viewerMinScale,
+                                            maxScale: ProcessScheduleChartDim
+                                                .viewerMaxScale,
+                                            constrained: false,
+                                            boundaryMargin:
+                                                EdgeInsets.all(context.rs(320)),
+                                            clipBehavior: Clip.hardEdge,
+                                            child: ProcessScheduleOverviewChart(
+                                              cs: cs,
+                                              data: d,
+                                              dates: dates,
+                                              labelCentersByRow:
+                                                  labelCentersByRow,
+                                              onCellTap: readOnly
+                                                  ? (_, __) {}
+                                                  : _toggleCell,
+                                              onDateHeaderTap:
+                                                  canWorkforceFromHeader
+                                                      ? _openWorkforceForDay
+                                                      : null,
+                                              readOnly: readOnly,
+                                              onAddProcess:
+                                                  !readOnly && schedule.isReady
+                                                      ? _addEmptyProcessRow
+                                                      : null,
+                                              onTaskNameChanged: readOnly
+                                                  ? null
+                                                  : _onTaskNameChanged,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+            ),
           ),
         ),
-      ),
       ),
     );
   }

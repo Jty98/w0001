@@ -56,16 +56,16 @@ Future<ProfileLogoutChoice?> showProfileLogoutConfirmDialog(
                   title: Text(
                     '모든 기기에서 로그아웃',
                     style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
                   ),
                   subtitle: Text(
                     '다른 기기에서 쓰던 세션도 함께 종료합니다.',
                     style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.35,
-                    ),
+                          color: cs.onSurfaceVariant,
+                          height: 1.35,
+                        ),
                   ),
                 ),
               ],

@@ -2,25 +2,57 @@ import 'package:currency_text_input_formatter/currency_text_input_formatter.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/data/model/worker_profile_model.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
-import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
+import 'package:w0001/ui/screen/0_auth/widgets/worker_skills_editor.dart';
+import 'package:w0001/ui/screen/4_human/widgets/human_editor_private_info_section.dart';
 import 'package:w0001/ui/screen/4_human/widgets/human_number_formatter.dart';
+import 'package:w0001/theme/app_input_styles.dart';
+import 'package:w0001/util/career_input.dart';
+import 'package:w0001/util/human_contact_display.dart';
+import 'package:w0001/util/phone_number_format.dart';
+import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_theme_colors.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
+import 'package:w0001/ui/widget/worker_profile/worker_career_field.dart';
 
-class HumanEditorFormFields extends ConsumerWidget {
+class HumanEditorFormFields extends ConsumerStatefulWidget {
   const HumanEditorFormFields({super.key, required this.vm});
 
   final WorkerViewModel vm;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HumanEditorFormFields> createState() =>
+      _HumanEditorFormFieldsState();
+}
+
+class _HumanEditorFormFieldsState extends ConsumerState<HumanEditorFormFields> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncSkillsEditor());
+  }
+
+  void _syncSkillsEditor() {
+    if (!mounted) return;
+    widget.vm.syncHumanSkillsEditorIfNeeded();
+    if (widget.vm.hasPendingSkillsEditorLoad) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncSkillsEditor());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final vm = widget.vm;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final formRole =
-        ref.watch(workerProvider.select((s) => s.humanFormWorkRole));
-    final r = formRole;
-    final showCustomRoleField =
-        r == '직접입력' || (r != null && !isWorkRoleInPresetList(r));
+    final siteRank =
+        ref.watch(workerProvider.select((s) => s.humanFormWorkerRank));
+    final careerYears =
+        ref.watch(workerProvider.select((s) => s.humanFormCareerYears));
+    final editHuman = vm.humanEditorSeed;
+    final isEdit = editHuman?.hid != null && editHuman!.hid! > 0;
 
     return Material(
       color: cs.surface,
@@ -53,7 +85,7 @@ class HumanEditorFormFields extends ConsumerWidget {
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: vm.refreshAction,
+                  onPressed: vm.resetHumanEditorFormInputs,
                   child: Text(
                     '입력 초기화',
                     style: tt.labelLarge?.copyWith(
@@ -72,6 +104,24 @@ class HumanEditorFormFields extends ConsumerWidget {
               TextInputType.text,
               1,
             ),
+            if (isEdit) ...[
+              SizedBox(height: context.rsi(14)),
+              HumanEditorPrivateInfoSection(
+                human: editHuman,
+                onRrnRevealed: (value) => vm.workerNumController.text = value,
+                onManualPhoneRevealed: (value) =>
+                    vm.workerPhoneController.text = value,
+              ),
+              SizedBox(height: context.rsi(14)),
+              Text(
+                '정보 수정',
+                style: tt.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              SizedBox(height: context.rsi(8)),
+            ],
             SizedBox(height: context.rsi(8)),
             _field(
               context,
@@ -95,8 +145,21 @@ class HumanEditorFormFields extends ConsumerWidget {
               useWonCommaFormat: true,
             ),
             SizedBox(height: context.rsi(14)),
+            _field(
+              context,
+              vm.workerPhoneController,
+              kHumanManualPhoneLabel,
+              TextInputType.phone,
+              1,
+              formatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+                KoreanMobilePhoneFormatter(),
+              ],
+            ),
+            SizedBox(height: context.rsi(14)),
             Text(
-              '역할 (인건비 기본값)',
+              '현장 역할',
               style: tt.labelMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: cs.onSurfaceVariant,
@@ -107,37 +170,46 @@ class HumanEditorFormFields extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  for (var i = 0; i < kWorkRolePresets.length; i++) ...[
-                    if (i > 0) SizedBox(width: context.rsi(6)),
+                  FilterChip(
+                    showCheckmark: false,
+                    padding: EdgeInsets.symmetric(horizontal: context.rsi(4)),
+                    visualDensity: VisualDensity.compact,
+                    label: Text('미선택', style: tt.labelSmall),
+                    selected: siteRank == null || siteRank.isEmpty,
+                    onSelected: (_) => vm.humanFormSelectWorkerRank(null),
+                  ),
+                  for (final rank in kWorkerRankOptions) ...[
+                    SizedBox(width: context.rsi(6)),
                     FilterChip(
                       showCheckmark: false,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: context.rsi(4),
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: context.rsi(4)),
                       visualDensity: VisualDensity.compact,
-                      label: Text(
-                        kWorkRolePresets[i],
-                        style: tt.labelSmall,
-                      ),
-                      selected: kWorkRolePresets[i] == '직접입력'
-                          ? (r == '직접입력' ||
-                              (r != null && !isWorkRoleInPresetList(r)))
-                          : formRole == kWorkRolePresets[i],
-                      onSelected: (_) =>
-                          vm.humanFormSelectWorkRole(kWorkRolePresets[i]),
+                      label: Text(rank, style: tt.labelSmall),
+                      selected: siteRank == rank,
+                      onSelected: (_) => vm.humanFormSelectWorkerRank(rank),
                     ),
                   ],
                 ],
               ),
             ),
-            if (showCustomRoleField) ...[
-              SizedBox(height: context.rsi(8)),
-              TextField(
-                controller: vm.workerRoleCustomController,
-                style: tt.bodyMedium,
-                decoration: _decoration(context, '역할 직접 입력'),
+            SizedBox(height: context.rsi(16)),
+            WorkerCareerField(
+              career: careerYears != null
+                  ? CareerInputUtils.formatYears(careerYears)
+                  : (editHuman?.career ?? ''),
+              readOnlyUntilEdit: isEdit,
+              compact: true,
+              onChanged: (value) => vm.humanFormSelectCareerYears(
+                CareerInputUtils.parseYears(value),
               ),
-            ],
+            ),
+            SizedBox(height: context.rsi(16)),
+            WorkerSkillsEditor(
+              key: vm.humanSkillsEditorKey,
+              compact: true,
+              initialHuman: vm.humanEditorSeed,
+              readOnlyUntilEdit: isEdit,
+            ),
             SizedBox(height: context.rsi(8)),
             _field(
               context,
@@ -163,11 +235,11 @@ class HumanEditorFormFields extends ConsumerWidget {
   }) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    return TextField(
+    return AppTextField(
       maxLines: maxLines,
       minLines: maxLines > 1 ? 1 : null,
       controller: controller,
-      style: tt.bodyMedium,
+      style: AppInputStyles.fieldText(context),
       decoration: _decoration(context, label).copyWith(
         suffixText: useWonCommaFormat ? '원' : null,
         suffixStyle: tt.labelLarge?.copyWith(
@@ -201,7 +273,7 @@ class HumanEditorFormFields extends ConsumerWidget {
       labelText: label,
       isDense: true,
       filled: true,
-      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+      fillColor: cs.appMutedFill,
       contentPadding: EdgeInsets.symmetric(
         horizontal: context.rsi(12),
         vertical: context.rsi(10),

@@ -23,6 +23,12 @@ class UserPrivateUseCase {
   }) =>
       _api.revealWorkerBankAccount(uid: uid, reason: reason);
 
+  Future<String> revealWorkerPhone({
+    required String uid,
+    required String reason,
+  }) =>
+      _api.revealWorkerPhone(uid: uid, reason: reason);
+
   Future<UserPrivateRead> saveMine({
     String? rrn,
     String? bankAccount,
@@ -39,6 +45,24 @@ class UserPrivateUseCase {
         bankName: bankName,
         workerTaxTermId: workerTaxTermId,
         workerTaxTermVersion: workerTaxTermVersion,
+      ),
+    );
+  }
+
+  Future<UserPrivateRead> saveWorkerPrivate({
+    required String uid,
+    String? rrn,
+    String? bankAccount,
+    String? bankOwner,
+    String? bankName,
+  }) {
+    return _api.patchWorkerPrivate(
+      uid,
+      userPrivatePatchBody(
+        rrn: rrn,
+        bankAccount: bankAccount,
+        bankOwner: bankOwner,
+        bankName: bankName,
       ),
     );
   }

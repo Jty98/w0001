@@ -1,42 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/worker_profile_model.dart';
-import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/ui/widget/keyboard_aware.dart';
-import 'package:w0001/util/worker_skills_match.dart';
+import 'package:w0001/util/worker_skills_display.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
-/// 회원가입·프로필 등 — 주특기·그 밖에 스킬 입력 폼(편집 전용).
+/// 주특기 선택 프리셋 — `직접입력`·`기타` 제외(직접 입력 필드로 대체).
+const _kPrimarySpecialtyPresets = <String>[
+  '다기능공',
+  '전기',
+  '목수',
+  '철거',
+  '설비',
+  '페인트',
+  '사인물',
+  '금속',
+  '조공',
+];
+
+/// 회원가입·프로필·인력 관리 — 주특기 입력 폼.
 class WorkerSkillsEditor extends StatefulWidget {
   const WorkerSkillsEditor({
     super.key,
     this.compact = false,
     this.onChanged,
+    this.initialHuman,
+    this.initialPrimarySpecialty,
+    this.readOnlyUntilEdit = false,
   });
 
   final bool compact;
   final VoidCallback? onChanged;
+  final HumanModel? initialHuman;
+  final String? initialPrimarySpecialty;
+  final bool readOnlyUntilEdit;
 
   @override
   WorkerSkillsEditorState createState() => WorkerSkillsEditorState();
 }
 
 class WorkerSkillsEditorState extends State<WorkerSkillsEditor> {
-  static final _fixedPresets =
-      kWorkRolePresets.where((e) => e != '직접입력').toSet();
+  static final _presetSet = _kPrimarySpecialtyPresets.toSet();
+
+  static const _presetIcons = <String, IconData>{
+    '다기능공': Icons.handyman_outlined,
+    '전기': Icons.electrical_services_outlined,
+    '목수': Icons.carpenter_outlined,
+    '철거': Icons.construction_outlined,
+    '설비': Icons.plumbing_outlined,
+    '페인트': Icons.format_paint_outlined,
+    '사인물': Icons.signpost_outlined,
+    '금속': Icons.hardware_outlined,
+    '조공': Icons.engineering_outlined,
+  };
 
   final _primary = TextEditingController();
-  final _customSkill = TextEditingController();
-  final _skills = <String>[];
-  var _directCustomMode = false;
-
-  double _g1(BuildContext c) => c.rsi(widget.compact ? 6 : 8);
-  double _g2(BuildContext c) => c.rsi(widget.compact ? 8 : 10);
-  double _g3(BuildContext c) => c.rsi(widget.compact ? 10 : 14);
-  double _gSection(BuildContext c) => c.rsi(widget.compact ? 10 : 14);
+  var _editing = false;
 
   String get primaryTrimmed => _primary.text.trim();
-
   bool get hasPrimary => primaryTrimmed.isNotEmpty;
+  bool get isEditingPrimary =>
+      !widget.readOnlyUntilEdit || _editing || !hasPrimary;
 
   void _mutate(VoidCallback fn) {
     setState(fn);
@@ -44,9 +69,46 @@ class WorkerSkillsEditorState extends State<WorkerSkillsEditor> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _editing = !widget.readOnlyUntilEdit;
+    final h = widget.initialHuman;
+    if (h != null) {
+      _applyHumanData(h);
+    } else {
+      _primary.text = widget.initialPrimarySpecialty?.trim() ?? '';
+    }
+  }
+
+  @override
+  void didUpdateWidget(WorkerSkillsEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final h = widget.initialHuman;
+    if (h != null && h.hid != oldWidget.initialHuman?.hid) {
+      _applyHumanData(h);
+      if (widget.readOnlyUntilEdit) _editing = false;
+      return;
+    }
+    if (h == null &&
+        widget.initialPrimarySpecialty != oldWidget.initialPrimarySpecialty &&
+        !isEditingPrimary) {
+      _primary.text = widget.initialPrimarySpecialty?.trim() ?? '';
+    }
+  }
+
+  void _applyHumanData(HumanModel human) {
+    final profilePrimary = human.displayPrimarySpecialty;
+    final legacyPayroll = human.hdefaultRole.trim();
+    final primary = profilePrimary ??
+        (legacyPayroll.isNotEmpty && !isWorkerSiteRank(legacyPayroll)
+            ? legacyPayroll
+            : null);
+    _primary.text = primary ?? '';
+  }
+
+  @override
   void dispose() {
     _primary.dispose();
-    _customSkill.dispose();
     super.dispose();
   }
 
@@ -57,133 +119,64 @@ class WorkerSkillsEditorState extends State<WorkerSkillsEditor> {
     final p = primaryTrimmed;
     return WorkerProfileRead(
       primarySpecialty: p.isEmpty ? null : p,
-      specialties: workerSkillsExtrasExcludingPrimary(_skills, primary: p),
       workerRank: workerRank,
       career: career,
     );
   }
 
-  void _notifyDuplicateBlocked() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('대표 주특기와 같은 작업은 추가할 수 없습니다.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  void loadFromHuman(HumanModel human) {
+    _applyHumanData(human);
+    if (widget.readOnlyUntilEdit) _editing = false;
+    if (mounted) setState(() {});
   }
 
-  bool _extraDuplicatesPrimary(String skill) {
-    final p = primaryTrimmed;
-    return p.isNotEmpty && workerSkillDuplicatesPrimary(skill, p);
+  void clearForm() {
+    _primary.clear();
+    if (widget.readOnlyUntilEdit) _editing = false;
   }
 
-  void _removeExtraMatchingPrimary() {
-    final p = primaryTrimmed;
-    if (p.isEmpty) return;
-    _skills.removeWhere((s) => workerSkillDuplicatesPrimary(s, p));
-  }
-
-  bool _primaryChipSelected(String label) {
-    final t = _primary.text.trim();
-    if (label == '직접입력') {
-      if (t.isEmpty) return true;
-      return !_fixedPresets.contains(t);
+  void cancelPrimaryEdit() {
+    final h = widget.initialHuman;
+    if (h != null) {
+      _applyHumanData(h);
+    } else {
+      _primary.text = widget.initialPrimarySpecialty?.trim() ?? '';
     }
-    return t == label;
+    setState(() => _editing = false);
+    widget.onChanged?.call();
   }
 
-  void _onPrimaryChipSelected(String label, bool selected) {
-    _mutate(() {
-      if (label == '직접입력') {
-        if (!selected) return;
-        if (_fixedPresets.contains(_primary.text.trim())) {
-          _primary.clear();
-        }
-        _removeExtraMatchingPrimary();
-        return;
-      }
-      if (selected) {
-        _primary.text = label;
-      } else if (_primary.text.trim() == label) {
-        _primary.clear();
-      }
-      _removeExtraMatchingPrimary();
-    });
-  }
+  bool _isPreset(String value) => _presetSet.contains(value);
 
-  void _togglePreset(String preset, bool selected) {
-    final p = primaryTrimmed;
-    if (selected && p.isNotEmpty && workerSkillDuplicatesPrimary(preset, p)) {
-      _notifyDuplicateBlocked();
-      return;
+  void _selectPreset(String label) => _mutate(() => _primary.text = label);
+
+  IconData _iconForPreset(String preset) =>
+      _presetIcons[preset] ?? Icons.build_outlined;
+
+  Color _borderColor(ColorScheme cs, {required bool selected}) {
+    if (selected) {
+      return cs.onSurface.withValues(alpha: 0.38);
     }
-    _mutate(() {
-      if (selected) {
-        if (!_skills.any((s) => workerSkillsTextEquals(s, preset))) {
-          _skills.add(preset);
-        }
-      } else {
-        _skills.removeWhere((s) => workerSkillsTextEquals(s, preset));
-      }
-    });
+    return cs.outlineVariant.withValues(alpha: 0.55);
   }
 
-  void _toggleDirectCustom(bool selected) {
-    _mutate(() {
-      _directCustomMode = selected;
-      if (!selected) {
-        _skills.removeWhere((s) => !_fixedPresets.contains(s));
-        _customSkill.clear();
-      }
-    });
-  }
-
-  void _addCustomSkills() {
-    final t = _customSkill.text.trim();
-    if (t.isEmpty) return;
-    if (_extraDuplicatesPrimary(t)) {
-      _notifyDuplicateBlocked();
-      _customSkill.clear();
-      return;
-    }
-    _mutate(() {
-      if (!_skills.any((s) => workerSkillsTextEquals(s, t))) {
-        _skills.add(t);
-      }
-      _customSkill.clear();
-    });
-  }
-
-  bool _directChipSelected() {
-    return _directCustomMode ||
-        _skills.any((s) => !_fixedPresets.contains(s)) ||
-        _customSkill.text.trim().isNotEmpty;
-  }
-
-  Widget _zone({
+  Widget _sectionShell({
     required BuildContext context,
-    required ColorScheme cs,
-    required IconData icon,
-    required Color accent,
-    required String title,
-    required String subtitle,
     required Widget child,
+    Widget? trailing,
   }) {
+    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final pad = context.rsi(widget.compact ? 12 : 14);
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.09),
+        color: cs.surface,
         borderRadius: BorderRadius.circular(context.rsi(16)),
-        border: Border.all(color: accent.withValues(alpha: 0.42)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          _g3(context),
-          context.rs(widget.compact ? 8 : 10),
-          _g3(context),
-          _g3(context),
-        ),
+        padding: EdgeInsets.fromLTRB(pad, pad, pad, pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -191,38 +184,40 @@ class WorkerSkillsEditorState extends State<WorkerSkillsEditor> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  icon,
-                  size: context.rs(widget.compact ? 18 : 20),
-                  color: accent,
+                  Icons.workspace_premium_outlined,
+                  size: context.rs(18),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.85),
                 ),
-                SizedBox(width: _g2(context)),
+                SizedBox(width: context.rsi(8)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
+                        '주특기',
                         style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.15,
                           color: cs.onSurface,
-                          height: 1.2,
                         ),
                       ),
-                      SizedBox(height: context.rsi(widget.compact ? 2 : 3)),
+                      SizedBox(height: context.rsi(2)),
                       Text(
-                        subtitle,
-                        style: tt.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w500,
+                        isEditingPrimary
+                            ? '분야를 선택하거나 직접 입력해 주세요.'
+                            : '현장에서 일하게될 주특기입니다.',
+                        style: tt.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant,
-                          height: 1.3,
+                          height: 1.35,
                         ),
                       ),
                     ],
                   ),
                 ),
+                if (trailing != null) trailing,
               ],
             ),
-            SizedBox(height: _g3(context)),
+            SizedBox(height: context.rsi(12)),
             child,
           ],
         ),
@@ -230,206 +225,252 @@ class WorkerSkillsEditorState extends State<WorkerSkillsEditor> {
     );
   }
 
+  Widget _readOnlyCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = primaryTrimmed;
+    final empty = value.isEmpty;
+    final icon = empty ? Icons.star_outline_rounded : _iconForPreset(value);
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.rsi(14),
+        vertical: context.rsi(widget.compact ? 12 : 14),
+      ),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(context.rsi(12)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.48)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: context.rs(widget.compact ? 36 : 40),
+            height: context.rs(widget.compact ? 36 : 40),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHigh.withValues(alpha: 0.65),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              icon,
+              size: context.rs(18),
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(width: context.rsi(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '선택된 주특기',
+                  style: tt.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: context.rsi(2)),
+                Text(
+                  empty ? '미등록' : value,
+                  style: tt.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: empty ? cs.onSurfaceVariant : cs.onSurface,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _presetGrid(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    const crossAxisCount = 3;
+    final iconSize = context.rs(widget.compact ? 20 : 22);
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        mainAxisSpacing: context.rsi(8),
+        crossAxisSpacing: context.rsi(8),
+        childAspectRatio: 1.08,
+      ),
+      itemCount: _kPrimarySpecialtyPresets.length,
+      itemBuilder: (context, index) {
+        final preset = _kPrimarySpecialtyPresets[index];
+        final selected = primaryTrimmed == preset;
+
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _selectPreset(preset),
+            borderRadius: BorderRadius.circular(context.rsi(12)),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: selected
+                    ? cs.surfaceContainerHigh.withValues(alpha: 0.75)
+                    : cs.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(context.rsi(12)),
+                border: Border.all(
+                  color: _borderColor(cs, selected: selected),
+                  width: selected ? 1.4 : 1,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _iconForPreset(preset),
+                    size: iconSize,
+                    color: selected
+                        ? cs.onSurface
+                        : cs.onSurfaceVariant.withValues(alpha: 0.9),
+                  ),
+                  SizedBox(height: context.rsi(6)),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: context.rsi(4)),
+                    child: Text(
+                      preset,
+                      style: tt.labelSmall?.copyWith(
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? cs.onSurface : cs.onSurfaceVariant,
+                        height: 1.15,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _directInputField(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final customActive = hasPrimary && !_isPreset(primaryTrimmed);
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(context.rsi(10)),
+      borderSide: BorderSide(
+        color: customActive
+            ? cs.onSurface.withValues(alpha: 0.32)
+            : cs.outlineVariant.withValues(alpha: 0.5),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: context.rsi(4)),
+        Row(
+          children: [
+            Icon(
+              Icons.edit_outlined,
+              size: context.rs(16),
+              color: cs.onSurfaceVariant,
+            ),
+            SizedBox(width: context.rsi(6)),
+            Text(
+              '직접 입력',
+              style: tt.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: context.rsi(8)),
+        AppTextField(
+          controller: _primary,
+          scrollPadding: keyboardScrollPadding(context, extra: 96),
+          style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            hintText: '목록에 없는 분야 (예: 방수, 타일)',
+            isDense: widget.compact,
+            filled: true,
+            fillColor: cs.surfaceContainerLowest,
+            border: border,
+            enabledBorder: border,
+            focusedBorder: border.copyWith(
+              borderSide: BorderSide(
+                color: cs.onSurface.withValues(alpha: 0.45),
+                width: 1.2,
+              ),
+            ),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: context.rsi(14),
+              vertical: context.rsi(widget.compact ? 11 : 12),
+            ),
+          ),
+          textInputAction: TextInputAction.done,
+          onChanged: (_) => _mutate(() {}),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final showCustomField = _directChipSelected();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _zone(
-          context: context,
-          cs: cs,
-          icon: Icons.workspace_premium_outlined,
-          accent: cs.primary,
-          title: '대표 주특기',
-          subtitle: '한 가지만 정합니다. 칩을 누르거나 직접 입력해 주세요.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < kWorkRolePresets.length; i++) ...[
-                      if (i > 0) SizedBox(width: _g1(context)),
-                      ChoiceChip(
-                        showCheckmark: false,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: context.rsi(widget.compact ? 3 : 4),
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        label: Text(
-                          kWorkRolePresets[i],
-                          style: tt.labelSmall,
-                        ),
-                        selected: _primaryChipSelected(kWorkRolePresets[i]),
-                        onSelected: (v) =>
-                            _onPrimaryChipSelected(kWorkRolePresets[i], v),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              SizedBox(height: _g2(context)),
-              TextField(
-                controller: _primary,
-                scrollPadding: keyboardScrollPadding(context, extra: 96),
-                style: tt.bodyMedium,
-                decoration: InputDecoration(
-                  labelText: '주특기 · 직접 입력',
-                  hintText: '가장 자신 있는 분야 (예: 목수)',
-                  isDense: widget.compact,
-                  border: const OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                  contentPadding: widget.compact
-                      ? EdgeInsets.symmetric(
-                          horizontal: context.rsi(12),
-                          vertical: context.rsi(10),
-                        )
-                      : null,
-                ),
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => _mutate(_removeExtraMatchingPrimary),
-              ),
-            ],
+    if (!isEditingPrimary) {
+      return _sectionShell(
+        context: context,
+        trailing: TextButton(
+          onPressed: () => setState(() => _editing = true),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.symmetric(horizontal: context.rsi(6)),
+          ),
+          child: Text(
+            '수정',
+            style: tt.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
+            ),
           ),
         ),
-        SizedBox(height: _gSection(context)),
-        _zone(
-          context: context,
-          cs: cs,
-          icon: Icons.handyman_outlined,
-          accent: cs.tertiary,
-          title: '그 밖에 할 수 있는 작업',
-          subtitle: '주특기 외에 가능한 작업을 골라 넣어 주세요. (선택)',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < kWorkRolePresets.length; i++) ...[
-                      if (i > 0) SizedBox(width: _g1(context)),
-                      Builder(
-                        builder: (context) {
-                          final preset = kWorkRolePresets[i];
-                          final isDirectInput = preset == '직접입력';
-                          final blockedByPrimary = !isDirectInput &&
-                              _extraDuplicatesPrimary(preset);
-                          return FilterChip(
-                            showCheckmark: false,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: context.rsi(widget.compact ? 3 : 4),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            label: Text(
-                              preset,
-                              style: tt.labelSmall,
-                            ),
-                            selected: isDirectInput
-                                ? _directChipSelected()
-                                : _skills.any(
-                                      (s) => workerSkillsTextEquals(s, preset),
-                                    ) &&
-                                    !blockedByPrimary,
-                            onSelected: blockedByPrimary
-                                ? null
-                                : (v) {
-                                    if (isDirectInput) {
-                                      _toggleDirectCustom(v);
-                                    } else {
-                                      _togglePreset(preset, v);
-                                    }
-                                  },
-                          );
-                        },
-                      ),
-                    ],
-                  ],
+        child: _readOnlyCard(context),
+      );
+    }
+
+    return _sectionShell(
+      context: context,
+      trailing: widget.readOnlyUntilEdit && hasPrimary
+          ? TextButton(
+              onPressed: cancelPrimaryEdit,
+              child: Text(
+                '취소',
+                style: tt.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurfaceVariant,
                 ),
               ),
-              if (showCustomField) ...[
-                SizedBox(height: _g2(context)),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _customSkill,
-                        scrollPadding: keyboardScrollPadding(context, extra: 96),
-                        style: tt.bodyMedium,
-                        decoration: InputDecoration(
-                          hintText: '한 가지 입력 후 +',
-                          isDense: widget.compact,
-                          border: const OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: context.rsi(12),
-                            vertical: context.rsi(
-                              widget.compact ? 10 : 12,
-                            ),
-                          ),
-                        ),
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _addCustomSkills(),
-                      ),
-                    ),
-                    SizedBox(width: _g2(context)),
-                    Tooltip(
-                      message: '목록에 추가',
-                      child: FilledButton.tonal(
-                        style: FilledButton.styleFrom(
-                          minimumSize: Size(
-                            context.rs(widget.compact ? 44 : 48),
-                            context.rs(widget.compact ? 44 : 48),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                        onPressed: _addCustomSkills,
-                        child: const Icon(Icons.add),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              if (_skills.isNotEmpty) ...[
-                SizedBox(height: _g2(context)),
-                Text(
-                  '선택·추가한 작업',
-                  style: tt.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.outline,
-                  ),
-                ),
-                SizedBox(height: _g1(context)),
-                Wrap(
-                  spacing: context.rsi(6),
-                  runSpacing: context.rsi(4),
-                  children: _skills
-                      .map(
-                        (s) => InputChip(
-                          label: Text(
-                            s,
-                            style: tt.labelSmall,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          deleteIconColor: cs.error,
-                          onDeleted: () => _mutate(() => _skills.remove(s)),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _presetGrid(context),
+          _directInputField(context),
+        ],
+      ),
     );
   }
 }

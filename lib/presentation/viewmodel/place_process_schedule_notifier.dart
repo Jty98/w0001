@@ -14,6 +14,7 @@ import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_palette.dart';
 import 'package:w0001/domain/repository/process_schedule_repository.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
+import 'package:w0001/domain/data_change_event.dart';
 import 'package:w0001/util/fetch_data.dart';
 
 final placeProcessScheduleApiProvider = Provider<PlaceProcessScheduleRemoteApi>(
@@ -190,6 +191,49 @@ class PlaceProcessScheduleNotifier extends Notifier<PlaceProcessScheduleState> {
     state = state.copyWith(clearLoadError: true);
   }
 
+  /// [invalidate] 없이 서버에서 다시 읽는다. 로딩 중에도 [isReady]를 유지해 화면이 멈추지 않게 한다.
+  Future<void> reloadFromServer() async {
+    final start = gridStartFromPlacePstart(arg.pstart);
+    final dc = defaultDayCountFromPlacePeriod(arg.pstart, arg.pend);
+    try {
+      final raw = await _repo.fetchForPlace(
+        placeId: arg.pid,
+        gridStartFallback: start,
+        dayCount: dc,
+      );
+      if (!ref.mounted) return;
+
+      final aligned = ProcessScheduleEditor.remapToNewGrid(raw, start, dc);
+      final painted = _withPalette(aligned);
+      state = PlaceProcessScheduleState(
+        data: painted,
+        isReady: true,
+        loadError: null,
+      );
+      _capturePersistBaseline(painted);
+    } catch (e) {
+      if (!ref.mounted) return;
+      if (state.isReady) {
+        state = state.copyWith(
+          loadError: '공정표를 불러오지 못했습니다: $e',
+        );
+        return;
+      }
+      state = PlaceProcessScheduleState(
+        data: ProcessScheduleData(
+          remoteScheduleId: null,
+          scheduleVersion: null,
+          gridStart: start,
+          dayCount: dc,
+          tasks: const [],
+        ),
+        isReady: true,
+        loadError: '공정표를 불러오지 못했습니다: $e',
+      );
+      _capturePersistBaseline(state.data);
+    }
+  }
+
   /// 범위 밖 날짜 선택 시 그리드를 넓혀 해당 일을 열 안에 넣음(저장은 호출 측에서 [persist]).
   void expandGridToIncludeDay(DateTime calendarDay) {
     if (!state.isReady) return;
@@ -231,13 +275,59 @@ class PlaceProcessScheduleNotifier extends Notifier<PlaceProcessScheduleState> {
   }
 
   void addProcess(String name, int startIdx, int endIdx) {
+    upsertProcess(name, startIdx, endIdx);
+  }
+
+  /// 같은 이름 공정이 있으면 일정만 확장 — 중복 행 생성 방지.
+  void upsertProcess(String name, int startIdx, int endIdx) {
     if (!state.isReady) return;
     final next = _withPalette(
-      ProcessScheduleEditor.addTaskRange(
+      ProcessScheduleEditor.upsertTaskRange(
         state.data,
         name,
         startIdx,
         endIdx,
+        sortRows: false,
+      ),
+    );
+    state = state.copyWith(data: next, clearLoadError: true);
+  }
+
+  /// 투입 기간이 공정표 범위를 벗어날 때 해당 공정 행의 일정 칸을 확장한다.
+  void extendTaskToCoverCalendarRange(
+    int taskIndex,
+    DateTime rangeStart,
+    DateTime rangeEndInclusive,
+  ) {
+    if (!state.isReady) return;
+    final next = _withPalette(
+      ProcessScheduleEditor.extendTaskToCoverCalendarRange(
+        state.data,
+        taskIndex,
+        rangeStart,
+        rangeEndInclusive,
+        sortRows: false,
+      ),
+    );
+    if (identical(next, state.data)) return;
+    state = state.copyWith(data: next, clearLoadError: true);
+  }
+
+  void addEmptyProcess() {
+    if (!state.isReady) return;
+    final next = _withPalette(
+      ProcessScheduleEditor.addEmptyTask(state.data),
+    );
+    state = state.copyWith(data: next, clearLoadError: true);
+  }
+
+  void setTaskName(int taskIndex, String name) {
+    if (!state.isReady) return;
+    final next = _withPalette(
+      ProcessScheduleEditor.setTaskName(
+        state.data,
+        taskIndex,
+        name,
         sortRows: false,
       ),
     );
@@ -298,6 +388,7 @@ class PlaceProcessScheduleNotifier extends Notifier<PlaceProcessScheduleState> {
       pcontractDate: '',
     );
     await ref.read(placeUseCaseProvider).updatePlace(model);
+    await ref.read(placeListProvider.notifier).persistContractDeadline(pid, e);
     applyPlaceWorkPeriod(rangeStart, rangeEndInclusive);
   }
 
@@ -319,7 +410,11 @@ class PlaceProcessScheduleNotifier extends Notifier<PlaceProcessScheduleState> {
   static bool _sameYmd(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  /// 공정표 저장 후, 그리드 시작·종료가 현장 마스터와 다르면 `pstart`/`pend`를 같은 날짜로 맞춘다.
+  /// 공정표 저장 후, 그리드가 현장 **시작일보다 앞**이면 `pstart`만 맞춘다.
+  ///
+  /// `pend`(계약 마감)는 공정표·추가 작업으로 늘리지 않는다.
+  /// 작업자 리스트·D-day가 마스터 `pend`를 쓰므로, 여기서를 그리드 종료로 덮어쓰면
+  /// 계약 마감과 추가 작업이 한 날짜로 섞인다.
   Future<void> _syncPlaceMasterDatesToGridIfNeeded(
     PlaceInfoModel place,
     ProcessScheduleData saved,
@@ -330,34 +425,37 @@ class PlaceProcessScheduleNotifier extends Notifier<PlaceProcessScheduleState> {
       saved.gridStart.month,
       saved.gridStart.day,
     );
-    final g1 = saved.dayCount < 1
-        ? g0
-        : ProcessScheduleEditor.dayAtGridIndex(saved, saved.dayCount - 1);
-    final (p0, p1) = _calendarBoundsForPlaceInfo(place);
-    if (_sameYmd(g0, p0) && _sameYmd(g1, p1)) return;
-
-    final model = PlaceModel(
-      pid: place.pid,
-      pname: place.pname,
-      pcomplete: place.pcomplete,
-      pstart: ProcessScheduleDto.formatGridDate(g0),
-      pend: ProcessScheduleDto.formatGridDate(g1),
-      paddress: place.paddress,
-      prevenue: place.pfirstrevenue,
-      pcontractTotal: place.pcontractTotal,
-      pcontractDate: '',
-    );
-    await ref.read(placeUseCaseProvider).updatePlace(model);
-    await FetchData.fetchAllData();
+    final (p0, _) = _calendarBoundsForPlaceInfo(place);
+    // 그리드가 더 이른 시작인 경우만 pstart 보정. pend는 건드리지 않음.
+    if (!_sameYmd(g0, p0) && g0.isBefore(p0)) {
+      final model = PlaceModel(
+        pid: place.pid,
+        pname: place.pname,
+        pcomplete: place.pcomplete,
+        pstart: ProcessScheduleDto.formatGridDate(g0),
+        pend: place.pend,
+        paddress: place.paddress,
+        prevenue: place.pfirstrevenue,
+        pcontractTotal: place.pcontractTotal,
+        pcontractDate: '',
+      );
+      await ref.read(placeUseCaseProvider).updatePlace(model);
+      await FetchData.onDataChanged(
+        DataChangeEvent.processScheduleSaved.withPid(place.pid!),
+      );
+    }
   }
 
   /// 화면 이탈·저장 시 — PUT + 응답 `version` 반영.
-  /// [syncPlaceMaster]: 있으면 저장된 그리드 기간이 현장 `pstart`/`pend`와 다를 때 현장도 패치한다.
+  /// [syncPlaceMaster]: 있으면 그리드 시작이 현장보다 이를 때만 `pstart`를 맞춘다.
+  /// (`pend` 계약 마감은 공정표 연장으로 바꾸지 않음)
   Future<void> persist({PlaceInfoModel? syncPlaceMaster}) async {
     if (!state.isReady) return;
     if (!isScheduleDirty) return;
     final sorted = ProcessScheduleEditor.sortByEarliestStart(state.data);
-    final painted = _withPalette(sorted);
+    final namedOnly = ProcessScheduleEditor.withoutUnnamedTasks(sorted);
+    final cleaned = ProcessScheduleEditor.withoutPlaceholderTasks(namedOnly);
+    final painted = _withPalette(cleaned);
     final saved = await _repo.saveSchedule(
       placeId: arg.pid,
       data: painted,

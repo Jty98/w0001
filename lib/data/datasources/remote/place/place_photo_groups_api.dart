@@ -1,5 +1,7 @@
 import 'package:w0001/data/datasources/remote/http_client.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/datasources/remote/super_admin/super_admin_api_common.dart';
+import 'package:w0001/data/model/paged_result.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/util/api_endpoint.dart';
 
@@ -8,15 +10,19 @@ final class PlacePhotoGroupsRemoteApi {
 
   final AppHttpClient _http;
 
-  /// [pid]가 있으면 `GET ...?pid=` — 해당 현장 묶음만. 없으면 권한 범위 내 전체.
-  Future<List<PlacePhotoGroupRead>> list({int? pid}) async {
-    final qp = <String, dynamic>{};
-    if (pid != null) qp['pid'] = pid;
+  Future<PagedResult<PlacePhotoGroupRead>> listPage(ListQuery query) async {
     final r = await _http.get<dynamic>(
       ApiEndpoint.placePhotoGroups,
-      queryParameters: qp.isEmpty ? null : qp,
+      queryParameters: query.toQueryParameters(),
     );
-    return saMapList(r.data, PlacePhotoGroupRead.fromJson);
+    return saParsePagedList(r.data, PlacePhotoGroupRead.fromJson);
+  }
+
+  /// [pid]가 있으면 `GET ...?pid=` — 해당 현장 묶음만.
+  Future<List<PlacePhotoGroupRead>> list({int? pid}) async {
+    final q = pid == null ? const ListQuery() : ListQuery(pid: pid);
+    final page = await listPage(q);
+    return page.items;
   }
 
   Future<PlacePhotoGroupRead> get(int pgid) async {

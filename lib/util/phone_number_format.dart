@@ -1,5 +1,8 @@
 import 'package:flutter/services.dart';
 
+/// 서버 마스킹(`010-****-1234`) 등 — 그대로 저장하면 안 되는 값.
+bool isMaskedPhone(String raw) => raw.contains('*');
+
 /// 휴대폰 번호에서 숫자만 추출 (`01012345678`).
 String normalizeKoreanMobilePhone(String raw) =>
     raw.replaceAll(RegExp(r'\D'), '');

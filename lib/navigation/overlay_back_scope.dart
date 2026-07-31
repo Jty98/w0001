@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/navigation/place_navigation.dart';
+import 'package:w0001/navigation/shell_back_navigation.dart';
 
 /// 대시보드 등 [parentNavigatorKey] 루트 오버레이용 [MaterialPage].
 MaterialPage<void> materialOverlayPage({
@@ -9,7 +10,7 @@ MaterialPage<void> materialOverlayPage({
 }) {
   return MaterialPage<void>(
     key: state.pageKey,
-    child: child,
+    child: OverlayRouteBackScope(child: child),
   );
 }
 

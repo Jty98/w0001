@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 import 'package:flutter/material.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
@@ -93,7 +94,8 @@ class PlaceImageAttachSheet extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final formControlHeight = context.rs(45);
     final formControlShape = AppSegmentedButton.segmentShape;
-    final actionTextStyle = tt.labelLarge?.copyWith(fontWeight: FontWeight.w700);
+    final actionTextStyle =
+        tt.labelLarge?.copyWith(fontWeight: FontWeight.w700);
 
     return Padding(
       padding: ResponsiveLayout.symmetric(context, horizontal: 4, vertical: 6),
@@ -102,7 +104,8 @@ class PlaceImageAttachSheet extends StatelessWidget {
         children: [
           Container(
             width: double.infinity,
-            padding: ResponsiveLayout.symmetric(context, horizontal: 14, vertical: 12),
+            padding: ResponsiveLayout.symmetric(context,
+                horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(context.rs(10)),
               color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
@@ -129,27 +132,36 @@ class PlaceImageAttachSheet extends StatelessWidget {
               segments: [
                 ButtonSegment<PlaceImageTabType>(
                   value: PlaceImageTabType.site,
-                  label: const Text('현장사진'),
-                  icon: Icon(Icons.home_repair_service_outlined, size: context.rsi(20)),
+                  label: AppSegmentedButton.compactSegmentLabel(
+                    context,
+                    '현장사진',
+                    baseStyle: actionTextStyle,
+                  ),
                 ),
                 ButtonSegment<PlaceImageTabType>(
                   value: PlaceImageTabType.drawing,
-                  label: const Text('도면사진'),
-                  icon: Icon(Icons.architecture_outlined, size: context.rsi(20)),
+                  label: AppSegmentedButton.compactSegmentLabel(
+                    context,
+                    '도면사진',
+                    baseStyle: actionTextStyle,
+                  ),
                 ),
                 if (showEstimateSegment)
                   ButtonSegment<PlaceImageTabType>(
                     value: PlaceImageTabType.estimate,
-                    label: const Text('견적서'),
-                    icon: Icon(Icons.request_quote_outlined, size: context.rsi(20)),
+                    label: AppSegmentedButton.compactSegmentLabel(
+                      context,
+                      '견적서',
+                      baseStyle: actionTextStyle,
+                    ),
                   ),
               ],
               selected: {selectedType},
               showSelectedIcon: false,
               style: AppSegmentedButton.styleFrom(
                 minimumSize: Size.fromHeight(formControlHeight),
-                padding: ResponsiveLayout.symmetric(context, horizontal: 10, vertical: 8),
-                textStyle: actionTextStyle,
+                padding: ResponsiveLayout.symmetric(context,
+                    horizontal: 4, vertical: 6),
               ),
               onSelectionChanged: (next) {
                 if (next.isEmpty) return;
@@ -165,7 +177,8 @@ class PlaceImageAttachSheet extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               minimumSize: Size(double.infinity, formControlHeight),
               shape: formControlShape,
-              padding: ResponsiveLayout.symmetric(context, horizontal: 12, vertical: 8),
+              padding: ResponsiveLayout.symmetric(context,
+                  horizontal: 12, vertical: 8),
               textStyle: actionTextStyle,
             ),
           ),
@@ -201,7 +214,8 @@ class PlaceImageAttachSheet extends StatelessWidget {
                     rsH(context, 8),
                     Text(
                       '파일 선택 중…',
-                      style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -266,7 +280,8 @@ class PlaceImageAttachSheet extends StatelessWidget {
               style: FilledButton.styleFrom(
                 minimumSize: Size(double.infinity, formControlHeight),
                 shape: formControlShape,
-                padding: ResponsiveLayout.symmetric(context, horizontal: 12, vertical: 8),
+                padding: ResponsiveLayout.symmetric(context,
+                    horizontal: 12, vertical: 8),
                 textStyle: actionTextStyle,
               ),
             ),
@@ -325,7 +340,7 @@ class _DraftPhotoMemoRowState extends State<_DraftPhotoMemoRow> {
         _DraftThumbCard(item: widget.item, onRemove: widget.onRemove),
         rsH(context, 10),
         Expanded(
-          child: TextField(
+          child: AppTextField(
             controller: _memo,
             onChanged: widget.onMemoChanged,
             maxLines: 3,
@@ -381,15 +396,18 @@ class _DraftThumbCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(context.rs(10)),
                 ),
                 child: item.localPath == null
-                    ? Icon(icon, color: Colors.grey.shade700, size: context.rsi(26))
+                    ? Icon(icon,
+                        color: Colors.grey.shade700, size: context.rsi(26))
                     : showRasterThumb
                         ? Image.file(
                             File(item.localPath!),
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                Icon(icon, color: Colors.grey.shade700, size: context.rsi(26)),
+                            errorBuilder: (_, __, ___) => Icon(icon,
+                                color: Colors.grey.shade700,
+                                size: context.rsi(26)),
                           )
-                        : Icon(icon, color: Colors.grey.shade700, size: context.rsi(34)),
+                        : Icon(icon,
+                            color: Colors.grey.shade700, size: context.rsi(34)),
               ),
             ),
           ),
@@ -404,7 +422,8 @@ class _DraftThumbCard extends StatelessWidget {
                 onTap: onRemove,
                 child: Padding(
                   padding: ResponsiveLayout.all(context, 4),
-                  child: Icon(Icons.close, size: context.rsi(14), color: Colors.white),
+                  child: Icon(Icons.close,
+                      size: context.rsi(14), color: Colors.white),
                 ),
               ),
             ),
@@ -441,7 +460,8 @@ class _AttachActionButton extends StatelessWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: context.rs(82)),
           child: Ink(
-            padding: ResponsiveLayout.symmetric(context, horizontal: 12, vertical: 10),
+            padding: ResponsiveLayout.symmetric(context,
+                horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(context.rs(10)),
               border: Border.all(

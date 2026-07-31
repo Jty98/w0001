@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/user_account_providers.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/account_settings_sections.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 계정 설정 화면 (admin·worker 공통).
@@ -25,7 +26,7 @@ class AccountSettingsScreen extends ConsumerWidget {
         backgroundColor: colorScheme.surface,
       ),
       body: SafeArea(
-        child: RefreshIndicator(
+        child: AppRefreshIndicator(
           onRefresh: () async {
             await Future.wait([
               ref.read(userAccountProvider.notifier).reload(),

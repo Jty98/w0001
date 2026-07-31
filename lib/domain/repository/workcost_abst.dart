@@ -1,12 +1,32 @@
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/model/place_dropdown_model.dart';
+import 'package:w0001/data/model/paged_result.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
+import 'package:w0001/data/model/work_cost_period_totals.dart';
+import 'package:w0001/data/model/work_cost_worker_summary.dart';
 import 'package:w0001/data/model/workcost_model.dart';
 
 /// 인건비(WorkCost) 도메인 저장소 추상
 abstract class WorkCostRepository {
   Future<List<TotalWorkCostModel>> getWorkCostsByDateRange(
     DateTime startDate,
-    DateTime endDate,
+    DateTime endDate, {
+    int? wcomplete,
+    int? hid,
+    int? pid,
+  });
+
+  /// 기간 집계 — footer 전용 (`GET /work-costs/totals`). 미구현 시 null.
+  Future<WorkCostPeriodTotals?> getWorkCostPeriodTotals(
+    DateTime startDate,
+    DateTime endDate, {
+    String? q,
+    int? pid,
+  });
+
+  /// 인력별 요약 1페이지 (`GET /work-costs/worker-summaries`). 미구현 시 null.
+  Future<PagedResult<WorkCostWorkerSummary>?> getWorkCostWorkerSummariesPage(
+    ListQuery query,
   );
   Future<List<WorkCost2Model>> getWorkCostsByPlaceAndDate(
     int hid,
@@ -54,6 +74,12 @@ abstract class WorkCostRepository {
     DateTime endDate,
   );
   Future<List<PlaceDropDownModel>> getPlacesForWorkCost(int hid);
+
+  /// 기간 내 인건비가 있는 현장 목록(드롭다운용).
+  Future<List<PlaceDropDownModel>> getPlacesForWorkCostInPeriod(
+    DateTime startDate,
+    DateTime endDate,
+  );
 
   Future<List<int>> getSavedWorkDayHidsForPlaceDate({
     required int pid,

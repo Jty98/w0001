@@ -1,8 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/ui/screen/0_auth/auth_dialog_chrome.dart';
 import 'package:w0001/util/auth_api_user_messages.dart';
 import 'package:w0001/util/auth_dio_user_message.dart';
+
+enum AccountRestrictionKind { rejected, suspended }
 
 TextStyle _bodyStyle(BuildContext context) {
   final cs = Theme.of(context).colorScheme;
@@ -12,6 +16,64 @@ TextStyle _bodyStyle(BuildContext context) {
     height: 1.52,
     letterSpacing: -0.06,
   );
+}
+
+String accountRestrictionMessage({
+  required AccountRestrictionKind kind,
+  String? reason,
+}) {
+  final headline = kind == AccountRestrictionKind.rejected
+      ? '가입 요청이 거절되었습니다.'
+      : '계정이 정지되었습니다.';
+  final r = reason?.trim();
+  if (r == null || r.isEmpty) return headline;
+  return '$headline\n\n사유: $r';
+}
+
+/// `/auth/me` 등에서 거절·정지 계정을 확인했을 때 로그인 화면 다이얼로그.
+Future<void> showAccountRestrictedStatusDialog(
+  BuildContext context, {
+  required AccountRestrictionKind kind,
+  String? reason,
+}) async {
+  if (!context.mounted) return;
+  final rejected = kind == AccountRestrictionKind.rejected;
+  final text = accountRestrictionMessage(kind: kind, reason: reason);
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      return AuthDialogChrome(
+        icon: rejected
+            ? Icons.cancel_outlined
+            : Icons.pause_circle_outline_rounded,
+        iconForegroundColor: rejected ? cs.error : cs.tertiary,
+        iconBackgroundColor: rejected
+            ? cs.errorContainer.withValues(alpha: 0.55)
+            : cs.tertiaryContainer.withValues(alpha: 0.52),
+        title: Text(rejected ? '가입 거절' : '계정 정지'),
+        content:
+            SingleChildScrollView(child: Text(text, style: _bodyStyle(ctx))),
+        actions: AuthDialogActionsSingle(
+          label: '확인',
+          onPressed: () => Navigator.of(ctx).pop(),
+          expandWidth: true,
+        ),
+      );
+    },
+  );
+}
+
+AccountRestrictionKind? accountRestrictionKindForUser(UserRead user) {
+  if (user.approvalStatus == UserApprovalStatus.rejected) {
+    return AccountRestrictionKind.rejected;
+  }
+  if (!user.isActive && !user.isPendingApproval) {
+    return AccountRestrictionKind.suspended;
+  }
+  return null;
 }
 
 /// [ACCOUNT_REJECTED] / [ACCOUNT_SUSPENDED] 일 때 로그인 화면 전용 다이얼로그.

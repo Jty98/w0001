@@ -1,13 +1,12 @@
 import 'dart:io';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:w0001/access/user_role_capabilities.dart';
 import 'package:w0001/data/model/place_photo_entry.dart';
-import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
-import 'package:w0001/ui/screen/5_place/widgets/place_document_opener.dart';
+import 'package:w0001/ui/widget/place_network_image.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
@@ -117,12 +116,6 @@ class _MemoImagePanelBodyState extends State<_MemoImagePanelBody> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final canEdit = widget.canEdit && widget.entry.phid > 0;
-    final me = widget.ref.watch(authSessionProvider).maybeWhen(
-          data: (u) => u,
-          orElse: () => null,
-        );
-    final docTools = me?.canViewPlacePhotoDocuments(widget.photoType) == true &&
-        widget.entry.canFetchOriginalViaApi;
 
     return Padding(
       padding: EdgeInsets.only(bottom: widget.bottomInset),
@@ -132,7 +125,8 @@ class _MemoImagePanelBodyState extends State<_MemoImagePanelBody> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: ResponsiveLayout.only(context, left: 8, top: 2, right: 4),
+              padding:
+                  ResponsiveLayout.only(context, left: 8, top: 2, right: 4),
               child: Row(
                 children: [
                   Text(
@@ -141,17 +135,6 @@ class _MemoImagePanelBodyState extends State<_MemoImagePanelBody> {
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const Spacer(),
-                  if (docTools)
-                    TextButton.icon(
-                      onPressed: _busy
-                          ? null
-                          : () => openPlacePhotoOriginalDocument(
-                                context,
-                                entry: widget.entry,
-                              ),
-                      icon: Icon(Icons.description_outlined, size: context.rsi(18)),
-                      label: const Text('PDF·엑셀'),
-                    ),
                   IconButton(
                     tooltip: '닫기',
                     onPressed: _busy ? null : () => Navigator.of(context).pop(),
@@ -178,28 +161,29 @@ class _MemoImagePanelBodyState extends State<_MemoImagePanelBody> {
                             width: double.infinity,
                           )
                         : _hasHttpImg
-                            ? Image.network(
-                                widget.entry.displayUrl,
+                            ? PlaceNetworkImage(
+                                url: widget.entry.displayUrl,
                                 fit: BoxFit.contain,
-                                alignment: Alignment.center,
-                                loadingBuilder: (c, child, prog) {
-                                  if (prog == null) return child;
-                                  return Skeletonizer(
-                                    enabled: true,
-                                    child: ColoredBox(
-                                      color: cs.surfaceContainerHighest,
-                                      child: Center(
-                                        child: Text(
-                                          '이미지',
-                                          style: theme.textTheme.bodyMedium,
-                                        ),
+                                width: double.infinity,
+                                height: double.infinity,
+                                thumbCacheLogicalWidth:
+                                    MediaQuery.sizeOf(context).width,
+                                placeholder: (c) => Skeletonizer(
+                                  enabled: true,
+                                  child: ColoredBox(
+                                    color: cs.surfaceContainerHighest,
+                                    child: Center(
+                                      child: Text(
+                                        '이미지',
+                                        style: theme.textTheme.bodyMedium,
                                       ),
                                     ),
-                                  );
-                                },
-                                errorBuilder: (_, __, ___) => Icon(
-                                    Icons.broken_image_outlined,
-                                    color: cs.outline),
+                                  ),
+                                ),
+                                errorBuilder: (_) => Icon(
+                                  Icons.broken_image_outlined,
+                                  color: cs.outline,
+                                ),
                               )
                             : Center(
                                 child: Icon(Icons.image_not_supported_outlined,
@@ -212,11 +196,12 @@ class _MemoImagePanelBodyState extends State<_MemoImagePanelBody> {
             Expanded(
               flex: 4,
               child: SingleChildScrollView(
-                padding: ResponsiveLayout.only(context, left: 16, top: 8, right: 16, bottom: 14),
+                padding: ResponsiveLayout.only(context,
+                    left: 16, top: 8, right: 16, bottom: 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextField(
+                    AppTextField(
                       controller: _memoCtrl,
                       enabled: canEdit && !_busy,
                       maxLines: 6,

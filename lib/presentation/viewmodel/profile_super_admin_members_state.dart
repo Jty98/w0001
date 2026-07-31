@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/auth_models.dart';
-import 'package:w0001/ui/screen/0_auth/super_admin_profile/profile_super_admin_members_limits.dart';
 
 /// 회원 관리에서 정지·권한 변경·삭제 대상에서 제외할 관리자 계정.
 bool isProtectedAdminUser(UserRead u) => u.role.isAdmin;
@@ -20,7 +19,10 @@ class ProfileSuperAdminMembersState {
     this.busyActive = false,
     this.busyQueue = false,
     this.appliedActiveTrim = '',
-    this.activeVisibleCount = ProfileSuperAdminMembersLimits.activePageSize,
+    this.activeHasMore = false,
+    this.activeLoadingMore = false,
+    this.activeNextCursor,
+    this.activeTotalCount,
   });
 
   final List<UserRead> activeMembers;
@@ -39,8 +41,12 @@ class ProfileSuperAdminMembersState {
   /// 마지막으로 활동 회원 조회에 성공한 검색어(trim).
   final String appliedActiveTrim;
 
-  /// 화면에 그릴 활동 회원 수 상한 ([loadMoreActiveMembers]로 증가).
-  final int activeVisibleCount;
+  final bool activeHasMore;
+  final bool activeLoadingMore;
+  final String? activeNextCursor;
+  final int? activeTotalCount;
+
+  int get activeDisplayCount => activeTotalCount ?? activeMembers.length;
 
   static const _u = Object();
 
@@ -56,7 +62,12 @@ class ProfileSuperAdminMembersState {
     bool? busyActive,
     bool? busyQueue,
     String? appliedActiveTrim,
-    int? activeVisibleCount,
+    bool? activeHasMore,
+    bool? activeLoadingMore,
+    String? activeNextCursor,
+    bool clearActiveNextCursor = false,
+    int? activeTotalCount,
+    bool clearActiveTotalCount = false,
   }) {
     return ProfileSuperAdminMembersState(
       activeMembers: activeMembers ?? this.activeMembers,
@@ -73,7 +84,14 @@ class ProfileSuperAdminMembersState {
       busyActive: busyActive ?? this.busyActive,
       busyQueue: busyQueue ?? this.busyQueue,
       appliedActiveTrim: appliedActiveTrim ?? this.appliedActiveTrim,
-      activeVisibleCount: activeVisibleCount ?? this.activeVisibleCount,
+      activeHasMore: activeHasMore ?? this.activeHasMore,
+      activeLoadingMore: activeLoadingMore ?? this.activeLoadingMore,
+      activeNextCursor: clearActiveNextCursor
+          ? null
+          : (activeNextCursor ?? this.activeNextCursor),
+      activeTotalCount: clearActiveTotalCount
+          ? null
+          : (activeTotalCount ?? this.activeTotalCount),
     );
   }
 }

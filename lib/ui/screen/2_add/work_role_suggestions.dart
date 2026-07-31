@@ -34,9 +34,6 @@ List<String> workerSkillRoleSuggestions(Iterable<HumanModel> workers) {
   for (final h in workers) {
     final p = h.displayPrimarySpecialty;
     if (p != null && seen.add(p)) out.add(p);
-    for (final e in h.displayExtraSpecialties) {
-      if (seen.add(e)) out.add(e);
-    }
     final def = h.hdefaultRole.trim();
     if (def.isNotEmpty && seen.add(def)) out.add(def);
   }
@@ -72,7 +69,8 @@ bool isKnownSelectableWorkRole(
 List<String> extraPresetRoleChips({
   required Iterable<String> alreadyShown,
 }) {
-  final seen = alreadyShown.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+  final seen =
+      alreadyShown.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
   final out = <String>[];
   for (final p in kWorkRolePresets) {
     if (p == '직접입력') continue;
@@ -82,11 +80,10 @@ List<String> extraPresetRoleChips({
   return out;
 }
 
-/// 자주 쓰는 역할 — 프리셋(중복 제외) + 맨 끝 `직접입력`.
+/// 자주 쓰는 역할 — 맨 앞 `직접입력` + 프리셋(중복 제외).
 List<String> frequentRoleChips({
   required Iterable<String> alreadyShown,
 }) {
-  final out = extraPresetRoleChips(alreadyShown: alreadyShown);
-  if (!out.contains('직접입력')) out.add('직접입력');
-  return out;
+  final presets = extraPresetRoleChips(alreadyShown: alreadyShown);
+  return ['직접입력', ...presets];
 }

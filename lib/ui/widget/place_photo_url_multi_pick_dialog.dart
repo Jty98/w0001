@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/data/model/place_photo_entry.dart';
+import 'package:w0001/ui/widget/place_network_image.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 현장 작업·도면 사진에서 여러 장 선택 후 URL 목록 반환.
@@ -53,9 +54,7 @@ Future<List<String>> showPlacePhotoUrlMultiPickDialog(
                             border: Border.all(
                               color: sel
                                   ? Theme.of(dCtx).colorScheme.primary
-                                  : Theme.of(dCtx)
-                                      .colorScheme
-                                      .outlineVariant,
+                                  : Theme.of(dCtx).colorScheme.outlineVariant,
                               width: sel ? 2.5 : 1,
                             ),
                           ),
@@ -63,7 +62,12 @@ Future<List<String>> showPlacePhotoUrlMultiPickDialog(
                             borderRadius: BorderRadius.circular(7),
                             child: u.isEmpty
                                 ? const Icon(Icons.broken_image_outlined)
-                                : Image.network(u, fit: BoxFit.cover),
+                                : PlaceNetworkImage(
+                                    url: u,
+                                    fit: BoxFit.cover,
+                                    thumbCacheLogicalWidth:
+                                        MediaQuery.sizeOf(dCtx).width / 3,
+                                  ),
                           ),
                         ),
                         if (sel)

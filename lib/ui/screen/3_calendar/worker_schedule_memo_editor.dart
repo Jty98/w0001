@@ -36,20 +36,18 @@ Future<void> openWorkerScheduleMemoEditor(
       // 작업자·일반 관리자: GET /places/me (접근 가능 현장만).
       // 슈퍼관리자: /dashboard/places-info → 실패 시 GET /places.
       places = await ref.read(placeUseCaseProvider).getAllPlaces(
-        managementPlacesInfoFirst: me.isManagementRole,
-        role: me.role,
-      );
+            managementPlacesInfoFirst: me.isManagementRole,
+            role: me.role,
+          );
     } catch (e) {
       places = const [];
       if (context.mounted) {
-        final msg = unwrapHttpClientException(e)?.message ??
-            '현장 목록을 불러오지 못했습니다.';
+        final msg =
+            unwrapHttpClientException(e)?.message ?? '현장 목록을 불러오지 못했습니다.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              msg.contains('현장')
-                  ? msg
-                  : '현장 목록을 불러오지 못했습니다. ($msg)',
+              msg.contains('현장') ? msg : '현장 목록을 불러오지 못했습니다. ($msg)',
             ),
           ),
         );

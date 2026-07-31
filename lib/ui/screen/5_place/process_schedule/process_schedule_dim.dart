@@ -5,6 +5,7 @@ import 'package:w0001/util/responsive_layout.dart';
 abstract final class ProcessScheduleChartDim {
   static const double _leftColW = 118;
   static const double _headerH = 48;
+  static const double _headerHCompact = 40;
   static const double _cellW = 52;
   static const double _cellH = 46;
   static const double _segmentRadius = 14;
@@ -14,7 +15,15 @@ abstract final class ProcessScheduleChartDim {
 
   static double leftColW(BuildContext context) => context.rs(_leftColW);
 
-  static double headerH(BuildContext context) => context.rs(_headerH);
+  static bool isLandscapeLayout(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return size.width > size.height;
+  }
+
+  static double headerH(BuildContext context) {
+    final base = isLandscapeLayout(context) ? _headerHCompact : _headerH;
+    return context.rs(base);
+  }
 
   static double cellW(BuildContext context) => context.rs(_cellW);
 

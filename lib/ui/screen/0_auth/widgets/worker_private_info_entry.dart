@@ -9,33 +9,62 @@ import 'package:w0001/util/responsive_layout.dart';
 
 /// 프로필·대시보드 — 세무·정산 정보 진입.
 class WorkerPrivateInfoEntry extends ConsumerWidget {
-  const WorkerPrivateInfoEntry({super.key, this.compact = false});
+  const WorkerPrivateInfoEntry({
+    super.key,
+    this.compact = false,
+    this.embedded = false,
+  });
 
   final bool compact;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(workerPrivateInfoProvider);
     final private = async.asData?.value;
-    
+
     // 약관 동의 이력도 확인
     final taxAgreements = ref.watch(workerTaxAgreementsProvider);
-    final hasTaxAgreement = taxAgreements.asData?.value?.isNotEmpty == true;
-    
+    final hasTaxAgreement = (taxAgreements.asData?.value ?? []).isNotEmpty;
+
     // 로딩 중인지 확인
     final isLoading = async.isLoading || taxAgreements.isLoading;
-    
+    final hasTaxAgreementHistory = hasTaxAgreement;
+
     // 주민번호, 계좌, 약관 동의가 모두 있으면 완료
-    final complete = private != null &&
-                     private.hasRrn && 
-                     private.hasBankAccount && 
-                     (private.workerTaxTermAgreed || hasTaxAgreement);
+    final complete = private?.isRegistrationComplete(
+          hasTaxAgreementHistory: hasTaxAgreementHistory,
+        ) ??
+        false;
 
     if (compact) {
-      return _dashboardBanner(context, complete: complete, isLoading: isLoading);
+      return _dashboardBanner(
+        context,
+        complete: complete,
+        isLoading: isLoading,
+        hasError: async.hasError,
+      );
     }
 
     if (isLoading) {
+      if (embedded) {
+        return ListTile(
+          dense: true,
+          leading: Icon(
+            Icons.account_balance_outlined,
+            color: Theme.of(context).colorScheme.primary,
+            size: context.rsi(22),
+          ),
+          title: Text(
+            '세무·정산 정보',
+            style: TextStyle(fontSize: context.rs(14)),
+          ),
+          subtitle: Text(
+            '등록 상태 확인 중',
+            style: TextStyle(fontSize: context.rs(12)),
+          ),
+        );
+      }
       return const ProfileSettingsListTileSkeleton(
         icon: Icons.account_balance_outlined,
         title: '세무·정산 정보',
@@ -43,25 +72,47 @@ class WorkerPrivateInfoEntry extends ConsumerWidget {
       );
     }
 
+    final cs = Theme.of(context).colorScheme;
+    final tile = ListTile(
+      dense: true,
+      leading: Icon(
+        complete
+            ? Icons.verified_user_outlined
+            : Icons.account_balance_outlined,
+        color: cs.primary,
+        size: context.rsi(22),
+      ),
+      title: Text(
+        '세무·정산 정보',
+        style: TextStyle(fontSize: context.rs(14)),
+      ),
+      subtitle: Text(
+        complete ? '등록 완료' : '입력 필요',
+        style: TextStyle(fontSize: context.rs(12)),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        size: context.rsi(20),
+      ),
+      onTap: () => context.push('/profile/private-info'),
+    );
+
+    if (embedded) return tile;
+
     return ProfileInsetPanel(
       padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
-      child: ListTile(
-        leading: Icon(
-          complete ? Icons.verified_user_outlined : Icons.account_balance_outlined,
-        ),
-        title: const Text('세무·정산 정보'),
-        subtitle: Text(
-          complete ? '등록 완료' : '입력 필요',
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => context.push('/profile/private-info'),
-      ),
+      child: tile,
     );
   }
 
-  Widget _dashboardBanner(BuildContext context, {required bool complete, required bool isLoading}) {
-    // 로딩 중이거나 완료된 경우 배너를 표시하지 않음
-    if (isLoading || complete) return const SizedBox.shrink();
+  Widget _dashboardBanner(
+    BuildContext context, {
+    required bool complete,
+    required bool isLoading,
+    required bool hasError,
+  }) {
+    // 로딩·완료·조회 실패 시 배너를 표시하지 않음 (실패를 미입력으로 오인하지 않음)
+    if (isLoading || complete || hasError) return const SizedBox.shrink();
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 

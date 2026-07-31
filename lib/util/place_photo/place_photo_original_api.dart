@@ -34,12 +34,14 @@ Future<PlacePhotoOriginalPayload> fetchPlacePhotoOriginalFile(
       throw StateError('원본 응답 바이트 형식 오류(${data.runtimeType})');
     }
     final disposition = res.headers.map['content-disposition']?.join();
+    final contentType = res.headers.map['content-type']?.join();
     final filenameHint = disposition != null
         ? filenameFromContentDisposition(disposition)
         : null;
     return PlacePhotoOriginalPayload(
       bytes: bytes,
       filenameSuggestion: filenameHint,
+      contentType: contentType,
     );
   } on DioException catch (e) {
     throw e.error ?? e;
@@ -50,12 +52,16 @@ class PlacePhotoOriginalPayload {
   PlacePhotoOriginalPayload({
     required this.bytes,
     this.filenameSuggestion,
+    this.contentType,
   });
 
   final Uint8List bytes;
 
   /// `Content-Disposition` 에서 파싱했을 때만.
   final String? filenameSuggestion;
+
+  /// `Content-Type` 헤더 (문서 종류 판별 보조).
+  final String? contentType;
 }
 
 String? filenameFromContentDisposition(String? header) {

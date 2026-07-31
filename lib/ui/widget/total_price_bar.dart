@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/data/model/calendar_day_cost_totals.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
@@ -18,6 +19,7 @@ TextStyle? _categoryAmountStyle(
   final base = compact ? tt.labelLarge : tt.titleMedium ?? tt.bodyLarge;
   return base?.copyWith(fontWeight: FontWeight.bold, color: color);
 }
+
 const placeCategory = ['인건비', '미지급', '자재비', '전체', ...categoryList];
 
 class TotalPriceBar extends StatelessWidget {
@@ -26,21 +28,31 @@ class TotalPriceBar extends StatelessWidget {
     required this.totalCostList,
     required this.categoryTapCallbacks,
     this.compact = false,
+    this.dense = false,
+    this.dayTotals,
   });
 
   final List<TotalCostModel> totalCostList;
   final Map<String, CategoryTapCallback> categoryTapCallbacks;
 
+  /// 서버 일자 집계 — 페이지네이션 시 하단 4칩 합계용.
+  final CalendarDayCostTotals? dayTotals;
+
   /// 캘린더 탭 등 — 라벨·금액·패딩을 줄인 레이아웃.
   final bool compact;
+
+  /// 캘린더 탭 — [compact]보다 더 작은 칩형 합계 바.
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final dividerH = compact ? 1.0 : 3.0;
-    final dividerT = compact ? 1.0 : 2.0;
+    final ultra = dense || compact;
+    final dividerH = dense ? 0.0 : (compact ? 1.0 : 3.0);
+    final dividerT = dense ? 0.5 : (compact ? 1.0 : 2.0);
     return Container(
-      color: cs.secondary.withValues(alpha: compact ? 0.14 : 0.18),
+      color:
+          cs.secondary.withValues(alpha: dense ? 0.1 : (compact ? 0.14 : 0.18)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -51,7 +63,7 @@ class TotalPriceBar extends StatelessWidget {
               children: _buildCategoryRows(context),
             ),
           ),
-          Divider(height: compact ? 0 : 0, thickness: dividerT),
+          Divider(height: ultra ? 0 : 0, thickness: dividerT),
         ],
       ),
     );
@@ -59,22 +71,45 @@ class TotalPriceBar extends StatelessWidget {
 
   List<Widget> _buildCategoryRows(BuildContext context) {
     final tt = Theme.of(context).textTheme;
-    final labelStyle = compact ? tt.labelMedium : tt.bodyMedium;
-    final priceStyle = (compact ? tt.labelLarge : tt.titleMedium ?? tt.bodyLarge)
-        ?.copyWith(fontWeight: FontWeight.bold);
-    final itemPadding = compact
-        ? ResponsiveLayout.symmetric(context, vertical: 5, horizontal: 8)
-        : ResponsiveLayout.symmetric(context, vertical: 10, horizontal: 10);
-    final firstPadding = compact
-        ? ResponsiveLayout.only(context, left: 14, top: 5, right: 8, bottom: 5)
-        : ResponsiveLayout.only(
-            context,
-            left: 20,
-            top: 10,
-            right: 10,
-            bottom: 10,
-          );
-    final minW = context.rs(compact ? 60 : 70);
+    final labelStyle =
+        dense ? tt.labelSmall : (compact ? tt.labelMedium : tt.bodyMedium);
+    final priceStyle = dense
+        ? tt.labelMedium
+        : (compact ? tt.labelLarge : tt.titleMedium ?? tt.bodyLarge);
+    final priceWeight = priceStyle?.copyWith(fontWeight: FontWeight.bold);
+    final itemPadding = dense
+        ? ResponsiveLayout.symmetric(context, vertical: 2, horizontal: 5)
+        : (compact
+            ? ResponsiveLayout.symmetric(context, vertical: 5, horizontal: 8)
+            : ResponsiveLayout.symmetric(context,
+                vertical: 10, horizontal: 10));
+    final firstPadding = dense
+        ? ResponsiveLayout.only(context, left: 10, top: 2, right: 5, bottom: 2)
+        : (compact
+            ? ResponsiveLayout.only(context,
+                left: 14, top: 5, right: 8, bottom: 5)
+            : ResponsiveLayout.only(
+                context,
+                left: 20,
+                top: 10,
+                right: 10,
+                bottom: 10,
+              ));
+    final minW = context.rs(dense ? 52 : (compact ? 60 : 70));
+
+    Widget amountText(String price, TextStyle? style) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(price, style: style, maxLines: 1),
+      );
+    }
+
+    Widget labelText(String label) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, style: labelStyle, maxLines: 1),
+      );
+    }
 
     // 위젯 담을 List
     List<Widget> categoryRows = [];
@@ -88,15 +123,22 @@ class TotalPriceBar extends StatelessWidget {
     int materialCost = 0;
     int notPayCost = 0;
 
-    for (var totalCost in totalCostList) {
-      if (totalCost.category == 'w') {
-        workCost += totalCost.price;
-      } else {
-        materialCost += totalCost.price;
-      }
+    final totals = dayTotals;
+    if (totals != null) {
+      workCost = totals.workAmount;
+      materialCost = totals.materialAmount;
+      notPayCost = totals.unpaidAmount;
+    } else {
+      for (var totalCost in totalCostList) {
+        if (totalCost.category == 'w') {
+          workCost += totalCost.price;
+        } else {
+          materialCost += totalCost.price;
+        }
 
-      if (totalCost.wcomplete == 0) {
-        notPayCost += totalCost.price;
+        if (totalCost.wcomplete == 0) {
+          notPayCost += totalCost.price;
+        }
       }
     }
 
@@ -109,10 +151,12 @@ class TotalPriceBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('전체', style: labelStyle),
-              Text(
-                getPrice(price: workCost + materialCost),
-                style: priceStyle,
+              labelText('전체'),
+              amountText(
+                getPrice(
+                  price: totals?.totalAmount ?? workCost + materialCost,
+                ),
+                priceWeight,
               ),
             ],
           ),
@@ -129,13 +173,13 @@ class TotalPriceBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('인건비', style: labelStyle),
-              Text(
+              labelText('인건비'),
+              amountText(
                 getPrice(price: workCost),
-                style: _categoryAmountStyle(
+                _categoryAmountStyle(
                   tt,
                   _workCostAmountColor,
-                  compact: compact,
+                  compact: compact || dense,
                 ),
               ),
             ],
@@ -154,13 +198,13 @@ class TotalPriceBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('자재비', style: labelStyle),
-              Text(
+              labelText('자재비'),
+              amountText(
                 getPrice(price: materialCost),
-                style: _categoryAmountStyle(
+                _categoryAmountStyle(
                   tt,
                   _materialCostAmountColor,
-                  compact: compact,
+                  compact: compact || dense,
                 ),
               ),
             ],
@@ -178,13 +222,13 @@ class TotalPriceBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('미지급', style: labelStyle),
-              Text(
+              labelText('미지급'),
+              amountText(
                 getPrice(price: notPayCost),
-                style: _categoryAmountStyle(
+                _categoryAmountStyle(
                   tt,
                   Theme.of(context).colorScheme.error,
-                  compact: compact,
+                  compact: compact || dense,
                 ),
               ),
             ],
@@ -194,12 +238,12 @@ class TotalPriceBar extends StatelessWidget {
     );
 
     categoryRows.add(IconButton(
-        iconSize: context.rsi(compact ? 20 : 24),
-        padding: compact ? EdgeInsets.all(context.rs(4)) : null,
-        constraints: compact
+        iconSize: context.rsi(dense ? 18 : (compact ? 20 : 24)),
+        padding: (compact || dense) ? EdgeInsets.all(context.rs(2)) : null,
+        constraints: (compact || dense)
             ? BoxConstraints(
-                minWidth: context.rs(32),
-                minHeight: context.rs(32),
+                minWidth: context.rs(dense ? 28 : 32),
+                minHeight: context.rs(dense ? 28 : 32),
               )
             : null,
         onPressed: () => showModalBottomSheet<void>(

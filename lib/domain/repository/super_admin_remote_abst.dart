@@ -1,12 +1,18 @@
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/model/human_private_models.dart';
+import 'package:w0001/data/model/paged_result.dart';
+import 'package:w0001/data/model/place_work_day_instruction_layers.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
+import 'package:w0001/data/model/work_cost_period_totals.dart';
+import 'package:w0001/data/model/work_cost_worker_summary.dart';
+import 'package:w0001/data/model/worker_announcement_models.dart';
 
 /// `super_admin` 전용 백엔드 CRUD (`require_super_admin` 가드).
 ///
 /// [worker]/[admin] 는 403. 서비스 정책 변경 시 서버와 함께 맞출 것.
 abstract class SuperAdminRemoteRepository {
   // Users
-  Future<List<UserRead>> usersList();
   Future<UserRead> userGet(String uid);
   Future<UserRead> userCreate(UserCreateBody body);
   Future<UserRead> userPatch(String uid, Map<String, dynamic> body);
@@ -14,11 +20,24 @@ abstract class SuperAdminRemoteRepository {
 
   /// 승인·활동·역할 (super_admin 전용)
   Future<List<UserRead>> usersPendingList({String? q});
+  Future<PagedResult<UserRead>> usersPendingPage({
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  });
   Future<List<UserRead>> usersSearch({
     String? role,
     String? approvalStatus,
     bool? isActive,
     String? q,
+  });
+  Future<PagedResult<UserRead>> usersSearchPage({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
   });
   Future<void> userApprove(String uid, {String? note});
   Future<void> userReject(String uid, {String? note});
@@ -43,13 +62,30 @@ abstract class SuperAdminRemoteRepository {
 
   // Humans
   Future<List<HumanRead>> humansList();
+  Future<List<HumanRead>> humansQuery(ListQuery query);
+  Future<PagedResult<HumanRead>> humansQueryPage(ListQuery query);
   Future<HumanRead> humanGet(int hid);
+  Future<List<HumanRead>> humanGetBatch(List<int> hids);
+  Future<HumanPrivateRead> humanGetPrivate(int hid);
+  Future<HumanPrivateRead> humanPatchPrivate(
+      int hid, Map<String, dynamic> body);
   Future<HumanRead> humanCreate(Map<String, dynamic> body);
   Future<HumanRead> humanPatch(int hid, Map<String, dynamic> body);
   Future<void> humanDelete(int hid);
+  Future<String> humanRevealRrn({required int hid, required String reason});
+  Future<String> humanRevealHphone({required int hid, required String reason});
+  Future<String> humanRevealLinkedPhone(
+      {required int hid, required String reason});
+  Future<String> humanRevealBankAccount(
+      {required int hid, required String reason});
+
+  /// 현장에서 최근 작업한 인원 목록 조회 (통합 API)
+  Future<List<HumanRead>> humanGetPlaceRecentWorkers(
+      {required int pid, int limit = 100, int offset = 0});
 
   // Place work days
   Future<List<PlaceWorkDayRead>> placeWorkDaysList();
+  Future<List<PlaceWorkDayRead>> placeWorkDaysQuery(ListQuery query);
   Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid);
   Future<PlaceWorkDayRead> placeWorkDayCreate(Map<String, dynamic> body);
   Future<PlaceWorkDayRead> placeWorkDayPatch(
@@ -58,15 +94,39 @@ abstract class SuperAdminRemoteRepository {
   );
   Future<void> placeWorkDayDelete(int pwdid);
 
+  /// 현장·일자 전체·공정별 작업지시 (개별은 [placeWorkDayCreate] 행에만).
+  Future<PlaceWorkDayInstructionBundle> placeWorkDayInstructionBundle({
+    required int pid,
+    required String workdate,
+  });
+  Future<void> placeWorkDaySiteInstructionUpsert({
+    required int pid,
+    required String workdate,
+    required List<WorkerAnnouncementBlock> blocks,
+  });
+  Future<void> placeWorkDayProcessInstructionUpsert({
+    required int pid,
+    required String workdate,
+    required String workrole,
+    required List<WorkerAnnouncementBlock> blocks,
+  });
+
   // Work costs
   Future<List<WorkCostRead>> workCostsList();
+  Future<List<WorkCostRead>> workCostsQuery(ListQuery query);
+  Future<WorkCostPeriodTotals?> workCostsPeriodTotals(ListQuery query);
+  Future<PagedResult<WorkCostWorkerSummary>?> workCostsWorkerSummariesPage(
+    ListQuery query,
+  );
   Future<WorkCostRead> workCostGet(int wid);
   Future<WorkCostRead> workCostCreate(Map<String, dynamic> body);
   Future<WorkCostRead> workCostPatch(int wid, Map<String, dynamic> body);
+  Future<void> workCostCompletePatch(int wid, int wcomplete);
   Future<void> workCostDelete(int wid);
 
   // Material costs
   Future<List<MaterialCostRead>> materialCostsList();
+  Future<List<MaterialCostRead>> materialCostsQuery(ListQuery query);
   Future<MaterialCostRead> materialCostGet(int mid);
   Future<MaterialCostRead> materialCostCreate(Map<String, dynamic> body);
   Future<MaterialCostRead> materialCostPatch(
@@ -75,6 +135,7 @@ abstract class SuperAdminRemoteRepository {
 
   // Place revenues
   Future<List<PlaceRevenueRead>> placeRevenuesList();
+  Future<List<PlaceRevenueRead>> placeRevenuesQuery(ListQuery query);
   Future<PlaceRevenueRead> placeRevenueGet(int rid);
   Future<PlaceRevenueRead> placeRevenueCreate(Map<String, dynamic> body);
   Future<PlaceRevenueRead> placeRevenuePatch(
@@ -82,16 +143,6 @@ abstract class SuperAdminRemoteRepository {
     Map<String, dynamic> body,
   );
   Future<void> placeRevenueDelete(int rid);
-
-  // Place collections
-  Future<List<PlaceCollectionRead>> placeCollectionsList();
-  Future<PlaceCollectionRead> placeCollectionGet(int cid);
-  Future<PlaceCollectionRead> placeCollectionCreate(Map<String, dynamic> body);
-  Future<PlaceCollectionRead> placeCollectionPatch(
-    int cid,
-    Map<String, dynamic> body,
-  );
-  Future<void> placeCollectionDelete(int cid);
 
   // Place worker recents
   Future<List<PlaceWorkerRecentRead>> placeWorkerRecentsList();
@@ -108,6 +159,8 @@ abstract class SuperAdminRemoteRepository {
 
   // Schedule memos
   Future<List<ScheduleMemoRead>> scheduleMemosList();
+  Future<List<ScheduleMemoRead>> scheduleMemosQuery(ListQuery query);
+  Future<PagedResult<ScheduleMemoRead>> scheduleMemosQueryPage(ListQuery query);
   Future<ScheduleMemoRead> scheduleMemoGet(int sid);
   Future<ScheduleMemoRead> scheduleMemoCreate(Map<String, dynamic> body);
   Future<ScheduleMemoRead> scheduleMemoPatch(
@@ -137,6 +190,11 @@ abstract class SuperAdminRemoteRepository {
 
   // Worker management (super_admin)
   Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid);
+  Future<PagedResult<WorkerMgmtNoteRead>> workerMgmtNotesPage(
+    int workerHid, {
+    int limit = kListPageSize,
+    String? cursor,
+  });
   Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
     required int workerHid,
     required String noteType,
@@ -146,6 +204,11 @@ abstract class SuperAdminRemoteRepository {
   Future<List<WorkerMgmtConflictRead>> workerMgmtConflictsList({
     bool activeOnly = true,
   });
+  Future<PagedResult<WorkerMgmtConflictRead>> workerMgmtConflictsPage({
+    bool activeOnly = true,
+    int limit = kListPageSize,
+    String? cursor,
+  });
   Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
     required int workerAHid,
     required int workerBHid,
@@ -154,4 +217,10 @@ abstract class SuperAdminRemoteRepository {
     bool active = true,
   });
   Future<void> workerMgmtConflictDelete(int pairId);
+
+  // Bulk workforce assignment
+  Future<Map<String, dynamic>> placeBulkAssignWorkforce({
+    required int pid,
+    required Map<String, dynamic> body,
+  });
 }

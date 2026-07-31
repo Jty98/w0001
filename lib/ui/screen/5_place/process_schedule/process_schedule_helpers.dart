@@ -7,13 +7,23 @@ import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
 String formatDateDotKo(DateTime d) =>
     '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 
-/// 공정표 그리드 기간 한 줄 — 현장 설정과 동일하게 맞춘 열 기준.
+/// 공정표 그리드 기간 한 줄 — `25.03.01 ~ 25.06.30 [92일]`.
 String compactGridPeriodLine(ProcessScheduleData d) {
   if (d.dayCount < 1) return '';
   final s = ProcessScheduleEditor.dayAtGridIndex(d, 0);
   final e = ProcessScheduleEditor.dayAtGridIndex(d, d.dayCount - 1);
-  return '${s.month}.${s.day} ~ ${e.month}.${e.day} [${d.dayCount}일]';
+  return '${shortDateDotYy(s)} ~ ${shortDateDotYy(e)} [${d.dayCount}일]';
 }
+
+String shortDateDotYy(DateTime d) {
+  final y = d.year % 100;
+  return '${y.toString().padLeft(2, '0')}.'
+      '${d.month.toString().padLeft(2, '0')}.'
+      '${d.day.toString().padLeft(2, '0')}';
+}
+
+/// 공정표 전체 기간 — 상단 표시용(한 줄).
+String fullGridPeriodLine(ProcessScheduleData d) => compactGridPeriodLine(d);
 
 /// 현장 마스터(`PlaceInfoModel`)에 저장된 공사 기간 — 표시용.
 (DateTime?, DateTime?) savedPlacePeriodDates(PlaceInfoModel element) {
@@ -72,6 +82,11 @@ String weekdayKoShort(int weekday) {
   return w[weekday - 1];
 }
 
-String scheduleDateHeaderLabel(DateTime d) {
-  return '${d.month}/${d.day}(${weekdayKoShort(d.weekday)})';
-}
+String scheduleDateHeaderDayLine(DateTime d) => '${d.month}.${d.day}';
+
+String scheduleDateHeaderWeekdayLine(DateTime d) =>
+    '(${weekdayKoShort(d.weekday)})';
+
+/// 날짜 헤더 한 줄 표기(레거시·시맨틱).
+String scheduleDateHeaderLabel(DateTime d) =>
+    '${scheduleDateHeaderDayLine(d)}${scheduleDateHeaderWeekdayLine(d)}';

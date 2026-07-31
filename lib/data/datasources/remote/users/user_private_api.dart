@@ -9,20 +9,12 @@ final class UserPrivateRemoteApi {
 
   Future<UserPrivateRead> getWorkerPrivate(String uid) async {
     final res = await _http.get<dynamic>(ApiEndpoint.workersUidPrivate(uid));
-    final data = res.data;
-    if (data is! Map) {
-      throw const FormatException('작업자 세무정보 응답 형식이 올바르지 않습니다.');
-    }
-    return UserPrivateRead.fromJson(Map<String, dynamic>.from(data));
+    return UserPrivateRead.fromJson(_unwrapPrivatePayload(res.data));
   }
 
   Future<UserPrivateRead> getMine() async {
     final res = await _http.get<dynamic>(ApiEndpoint.usersMePrivate);
-    final data = res.data;
-    if (data is! Map) {
-      throw const FormatException('고위험 정보 응답 형식이 올바르지 않습니다.');
-    }
-    return UserPrivateRead.fromJson(Map<String, dynamic>.from(data));
+    return UserPrivateRead.fromJson(_unwrapPrivatePayload(res.data));
   }
 
   /// 관리자 — 작업자 주민번호 전체 조회 (`POST /workers/{uid}/private/rrn/reveal`).
@@ -52,17 +44,55 @@ final class UserPrivateRemoteApi {
     );
   }
 
+  /// 관리자 — 작업자 인증 연락처 전체 조회.
+  Future<String> revealWorkerPhone({
+    required String uid,
+    required String reason,
+  }) async {
+    final res = await _http.post<dynamic>(
+      ApiEndpoint.workersUidPrivatePhoneReveal(uid),
+      data: <String, dynamic>{'reason': reason.trim()},
+    );
+    return _extractRevealedValue(
+      res.data,
+      ['phone', 'linked_phone', 'linkedPhone', 'value', 'revealed_value'],
+    );
+  }
+
   Future<UserPrivateRead> patchMine(Map<String, dynamic> body) async {
     final res = await _http.patch<dynamic>(
       ApiEndpoint.usersMePrivate,
       data: body,
     );
-    final data = res.data;
-    if (data is! Map) {
-      throw const FormatException('고위험 정보 저장 응답 형식이 올바르지 않습니다.');
-    }
-    return UserPrivateRead.fromJson(Map<String, dynamic>.from(data));
+    return UserPrivateRead.fromJson(_unwrapPrivatePayload(res.data));
   }
+
+  /// 관리자 — 작업자 세무·정산 정보 수정 (`PATCH /workers/{uid}/private`).
+  Future<UserPrivateRead> patchWorkerPrivate(
+    String uid,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await _http.patch<dynamic>(
+      ApiEndpoint.workersUidPrivate(uid),
+      data: body,
+    );
+    return UserPrivateRead.fromJson(_unwrapPrivatePayload(res.data));
+  }
+}
+
+Map<String, dynamic> _unwrapPrivatePayload(Object? data) {
+  if (data is! Map) {
+    throw const FormatException('고위험 정보 응답 형식이 올바르지 않습니다.');
+  }
+  var m = Map<String, dynamic>.from(data);
+  for (final key in ['data', 'user', 'private', 'result']) {
+    final inner = m[key];
+    if (inner is Map) {
+      m = Map<String, dynamic>.from(inner);
+      break;
+    }
+  }
+  return m;
 }
 
 String _extractRevealedValue(Object? data, List<String> keys) {

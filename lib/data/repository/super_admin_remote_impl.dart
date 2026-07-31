@@ -1,6 +1,13 @@
+import 'package:w0001/data/model/human_private_models.dart';
+import 'package:w0001/data/model/paged_result.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/datasources/remote/super_admin/super_admin_remote_api.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/model/place_work_day_instruction_layers.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
+import 'package:w0001/data/model/work_cost_period_totals.dart';
+import 'package:w0001/data/model/work_cost_worker_summary.dart';
+import 'package:w0001/data/model/worker_announcement_models.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
 
 class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
@@ -8,8 +15,6 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
 
   final SuperAdminRemoteApi _api;
 
-  @override
-  Future<List<UserRead>> usersList() => _api.usersList();
   @override
   Future<UserRead> userGet(String uid) => _api.userGet(uid);
   @override
@@ -25,6 +30,14 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
       _api.usersPendingList(q: q);
 
   @override
+  Future<PagedResult<UserRead>> usersPendingPage({
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _api.usersPendingPage(q: q, limit: limit, cursor: cursor);
+
+  @override
   Future<List<UserRead>> usersSearch({
     String? role,
     String? approvalStatus,
@@ -36,6 +49,24 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
         approvalStatus: approvalStatus,
         isActive: isActive,
         q: q,
+      );
+
+  @override
+  Future<PagedResult<UserRead>> usersSearchPage({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _api.usersSearchPage(
+        role: role,
+        approvalStatus: approvalStatus,
+        isActive: isActive,
+        q: q,
+        limit: limit,
+        cursor: cursor,
       );
   @override
   Future<void> userApprove(String uid, {String? note}) =>
@@ -76,7 +107,23 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   @override
   Future<List<HumanRead>> humansList() => _api.humansList();
   @override
+  Future<List<HumanRead>> humansQuery(ListQuery query) =>
+      _api.humansQuery(query);
+  @override
+  Future<PagedResult<HumanRead>> humansQueryPage(ListQuery query) =>
+      _api.humansQueryPage(query);
+  @override
   Future<HumanRead> humanGet(int hid) => _api.humanGet(hid);
+  @override
+  Future<List<HumanRead>> humanGetBatch(List<int> hids) =>
+      _api.humans.getBatch(hids);
+  @override
+  Future<HumanPrivateRead> humanGetPrivate(int hid) =>
+      _api.humanGetPrivate(hid);
+  @override
+  Future<HumanPrivateRead> humanPatchPrivate(
+          int hid, Map<String, dynamic> body) =>
+      _api.humanPatchPrivate(hid, body);
   @override
   Future<HumanRead> humanCreate(Map<String, dynamic> body) =>
       _api.humanCreate(body);
@@ -85,10 +132,36 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
       _api.humanPatch(hid, body);
   @override
   Future<void> humanDelete(int hid) => _api.humanDelete(hid);
+  @override
+  Future<String> humanRevealRrn({required int hid, required String reason}) =>
+      _api.humanRevealRrn(hid: hid, reason: reason);
+  @override
+  Future<String> humanRevealHphone(
+          {required int hid, required String reason}) =>
+      _api.humanRevealHphone(hid: hid, reason: reason);
+  @override
+  Future<String> humanRevealLinkedPhone(
+          {required int hid, required String reason}) =>
+      _api.humanRevealLinkedPhone(hid: hid, reason: reason);
+  @override
+  Future<String> humanRevealBankAccount(
+          {required int hid, required String reason}) =>
+      _api.humanRevealBankAccount(hid: hid, reason: reason);
+
+  @override
+  Future<List<HumanRead>> humanGetPlaceRecentWorkers({
+    required int pid,
+    int limit = 100,
+    int offset = 0,
+  }) =>
+      _api.humanGetPlaceRecentWorkers(pid: pid, limit: limit, offset: offset);
 
   @override
   Future<List<PlaceWorkDayRead>> placeWorkDaysList() =>
       _api.placeWorkDaysList();
+  @override
+  Future<List<PlaceWorkDayRead>> placeWorkDaysQuery(ListQuery query) =>
+      _api.placeWorkDaysQuery(query);
   @override
   Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid) =>
       _api.placeWorkDayGet(pwdid);
@@ -105,7 +178,51 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<void> placeWorkDayDelete(int pwdid) => _api.placeWorkDayDelete(pwdid);
 
   @override
+  Future<PlaceWorkDayInstructionBundle> placeWorkDayInstructionBundle({
+    required int pid,
+    required String workdate,
+  }) =>
+      _api.placeWorkDayInstructionBundle(pid: pid, workdate: workdate);
+
+  @override
+  Future<void> placeWorkDaySiteInstructionUpsert({
+    required int pid,
+    required String workdate,
+    required List<WorkerAnnouncementBlock> blocks,
+  }) =>
+      _api.placeWorkDaySiteInstructionUpsert(
+        pid: pid,
+        workdate: workdate,
+        blocks: blocks,
+      );
+
+  @override
+  Future<void> placeWorkDayProcessInstructionUpsert({
+    required int pid,
+    required String workdate,
+    required String workrole,
+    required List<WorkerAnnouncementBlock> blocks,
+  }) =>
+      _api.placeWorkDayProcessInstructionUpsert(
+        pid: pid,
+        workdate: workdate,
+        workrole: workrole,
+        blocks: blocks,
+      );
+
+  @override
   Future<List<WorkCostRead>> workCostsList() => _api.workCostsList();
+  @override
+  Future<List<WorkCostRead>> workCostsQuery(ListQuery query) =>
+      _api.workCostsQuery(query);
+  @override
+  Future<WorkCostPeriodTotals?> workCostsPeriodTotals(ListQuery query) =>
+      _api.workCostsPeriodTotals(query);
+  @override
+  Future<PagedResult<WorkCostWorkerSummary>?> workCostsWorkerSummariesPage(
+    ListQuery query,
+  ) =>
+      _api.workCostsWorkerSummariesPage(query);
   @override
   Future<WorkCostRead> workCostGet(int wid) => _api.workCostGet(wid);
   @override
@@ -115,11 +232,17 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<WorkCostRead> workCostPatch(int wid, Map<String, dynamic> body) =>
       _api.workCostPatch(wid, body);
   @override
+  Future<void> workCostCompletePatch(int wid, int wcomplete) =>
+      _api.workCostCompletePatch(wid, wcomplete);
+  @override
   Future<void> workCostDelete(int wid) => _api.workCostDelete(wid);
 
   @override
   Future<List<MaterialCostRead>> materialCostsList() =>
       _api.materialCostsList();
+  @override
+  Future<List<MaterialCostRead>> materialCostsQuery(ListQuery query) =>
+      _api.materialCostsQuery(query);
   @override
   Future<MaterialCostRead> materialCostGet(int mid) =>
       _api.materialCostGet(mid);
@@ -139,6 +262,9 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<List<PlaceRevenueRead>> placeRevenuesList() =>
       _api.placeRevenuesList();
   @override
+  Future<List<PlaceRevenueRead>> placeRevenuesQuery(ListQuery query) =>
+      _api.placeRevenuesQuery(query);
+  @override
   Future<PlaceRevenueRead> placeRevenueGet(int rid) =>
       _api.placeRevenueGet(rid);
   @override
@@ -152,27 +278,6 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
       _api.placeRevenuePatch(rid, body);
   @override
   Future<void> placeRevenueDelete(int rid) => _api.placeRevenueDelete(rid);
-
-  @override
-  Future<List<PlaceCollectionRead>> placeCollectionsList() =>
-      _api.placeCollectionsList();
-  @override
-  Future<PlaceCollectionRead> placeCollectionGet(int cid) =>
-      _api.placeCollectionGet(cid);
-  @override
-  Future<PlaceCollectionRead> placeCollectionCreate(
-    Map<String, dynamic> body,
-  ) =>
-      _api.placeCollectionCreate(body);
-  @override
-  Future<PlaceCollectionRead> placeCollectionPatch(
-    int cid,
-    Map<String, dynamic> body,
-  ) =>
-      _api.placeCollectionPatch(cid, body);
-  @override
-  Future<void> placeCollectionDelete(int cid) =>
-      _api.placeCollectionDelete(cid);
 
   @override
   Future<List<PlaceWorkerRecentRead>> placeWorkerRecentsList() =>
@@ -199,6 +304,15 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   @override
   Future<List<ScheduleMemoRead>> scheduleMemosList() =>
       _api.scheduleMemosList();
+  @override
+  Future<List<ScheduleMemoRead>> scheduleMemosQuery(ListQuery query) =>
+      _api.scheduleMemosQuery(query);
+
+  @override
+  Future<PagedResult<ScheduleMemoRead>> scheduleMemosQueryPage(
+    ListQuery query,
+  ) =>
+      _api.scheduleMemosQueryPage(query);
   @override
   Future<ScheduleMemoRead> scheduleMemoGet(int sid) =>
       _api.scheduleMemoGet(sid);
@@ -251,6 +365,14 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   @override
   Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid) =>
       _api.workerMgmtNotesList(workerHid);
+
+  @override
+  Future<PagedResult<WorkerMgmtNoteRead>> workerMgmtNotesPage(
+    int workerHid, {
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _api.workerMgmtNotesPage(workerHid, limit: limit, cursor: cursor);
   @override
   Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
     required int workerHid,
@@ -269,6 +391,18 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
     bool activeOnly = true,
   }) =>
       _api.workerMgmtConflictsList(activeOnly: activeOnly);
+
+  @override
+  Future<PagedResult<WorkerMgmtConflictRead>> workerMgmtConflictsPage({
+    bool activeOnly = true,
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _api.workerMgmtConflictsPage(
+        activeOnly: activeOnly,
+        limit: limit,
+        cursor: cursor,
+      );
   @override
   Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
     required int workerAHid,
@@ -287,4 +421,11 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   @override
   Future<void> workerMgmtConflictDelete(int pairId) =>
       _api.workerMgmtConflictDelete(pairId);
+
+  @override
+  Future<Map<String, dynamic>> placeBulkAssignWorkforce({
+    required int pid,
+    required Map<String, dynamic> body,
+  }) =>
+      _api.placesBulkAssignWorkforce(pid: pid, body: body);
 }

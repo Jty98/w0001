@@ -17,6 +17,13 @@ struct ScheduleItem: Codable {
     var done: Bool
     /// 구버전 JSON 호환 — 없으면 nil
     let memo: String?
+    /// `manual` | `assignment` — 없거나 빈 값은 일정 메모
+    let sourceType: String?
+    let workrole: String?
+
+    var isAssignment: Bool {
+        (sourceType ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "assignment"
+    }
 }
 
 struct WeeklyScheduleEntry: TimelineEntry {
@@ -156,6 +163,8 @@ struct ToggleScheduleDoneIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
+        // 현장투입(음수 sid)은 일정 memo 완료 API 대상이 아님
+        guard sid > 0 else { return .result() }
         guard let defaults = UserDefaults(suiteName: appGroupId) else {
             return .result()
         }
@@ -225,7 +234,7 @@ struct ScheduleWidgetEntryView : View {
             if remainingCount > 0 {
                 Text("+\(remainingCount)개 일정 더 있음")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(widgetSubtleColor)
+                    .foregroundColor(widgetSecondaryColor)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .padding(.trailing, 2)
             }
@@ -238,7 +247,7 @@ struct ScheduleWidgetEntryView : View {
         switch family {
         case .accessoryInline:
             HStack(spacing: 4) {
-                Image(systemName: "checklist")
+                Image(systemName: "calendar")
                 Text("미완 \(pendingCount) / 총 \(entry.schedules.count)")
             }
             .font(.system(size: 12, weight: .semibold))
@@ -280,7 +289,7 @@ struct ScheduleWidgetEntryView : View {
                 }
 
                 if let next = nextScheduleForAccessory {
-                    Text("\(toShortDate(next.taskDate)) \(formattedTime(next.taskTime)) \(schedulePrimaryLine(next))")
+                    Text(accessoryScheduleSummary(next))
                         .font(.system(size: 10, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -407,7 +416,11 @@ struct ScheduleWidgetEntryView : View {
     @ViewBuilder
     private func scheduleRow(_ item: ScheduleItem) -> some View {
         HStack(alignment: .center, spacing: 6) {
-            if #available(iOS 17.0, *), let sid = item.sid {
+            // 현장투입(음수 sid / assignment)은 위젯에서 완료 토글하지 않음
+            if #available(iOS 17.0, *),
+               let sid = item.sid,
+               sid > 0,
+               !item.isAssignment {
                 Button(
                     intent: ToggleScheduleDoneIntent(
                         sid: sid,
@@ -422,6 +435,10 @@ struct ScheduleWidgetEntryView : View {
                         .foregroundColor(item.done ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
+            } else if item.isAssignment {
+                Image(systemName: "building.2")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(widgetPrimaryColor)
             } else {
                 Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 13, weight: .semibold))
@@ -429,21 +446,23 @@ struct ScheduleWidgetEntryView : View {
             }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(formattedTime(item.taskTime))
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(widgetSubtleColor)
+                if !item.isAssignment {
+                    Text(formattedTime(item.taskTime))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(widgetSecondaryColor)
+                }
                 Text(schedulePrimaryLine(item))
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
-                    .strikethrough(item.done, color: .secondary)
+                    .strikethrough(item.done && !item.isAssignment, color: .secondary)
                     .foregroundColor(widgetSubtleColor)
-                if let memoLine = scheduleMemoLine(item) {
+                if !item.isAssignment, let memoLine = scheduleMemoLine(item) {
                     Text(memoLine)
                         .font(.system(size: 9, weight: .medium))
                         .lineLimit(2)
                         .minimumScaleFactor(0.85)
-                        .foregroundColor(widgetSubtleColor.opacity(0.92))
+                        .foregroundColor(widgetSecondaryColor)
                 }
             }
             Spacer(minLength: 0)
@@ -452,7 +471,7 @@ struct ScheduleWidgetEntryView : View {
         .padding(.vertical, 2)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.5))
+                .fill(Color.white.opacity(0.85))
         )
     }
 
@@ -500,12 +519,33 @@ struct ScheduleWidget: Widget {
     }
 }
 
+private func assignmentDisplayLine(placeName: String, workrole: String?) -> String {
+    let place = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let role = (workrole ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if !role.isEmpty {
+        let name = place.isEmpty ? "현장" : place
+        return "\(name)[\(role)]"
+    }
+    if !place.isEmpty { return place }
+    return "현장"
+}
+
 private func schedulePrimaryLine(_ item: ScheduleItem) -> String {
+    if item.isAssignment {
+        return assignmentDisplayLine(placeName: item.title, workrole: item.workrole)
+    }
     let t = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
     if !t.isEmpty { return t }
     let m = (item.memo ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     if m.isEmpty { return "제목 없음" }
     return String(m.prefix(120))
+}
+
+private func accessoryScheduleSummary(_ item: ScheduleItem) -> String {
+    if item.isAssignment {
+        return "\(toShortDate(item.taskDate)) \(assignmentDisplayLine(placeName: item.title, workrole: item.workrole))"
+    }
+    return "\(toShortDate(item.taskDate)) \(formattedTime(item.taskTime)) \(schedulePrimaryLine(item))"
 }
 
 private func scheduleMemoLine(_ item: ScheduleItem) -> String? {
@@ -681,6 +721,8 @@ private func limitedGroupedSchedules(
     return out
 }
 
-private let widgetPrimaryColor = Color(red: 0.95, green: 0.55, blue: 0.22) // #F28C38
-private let widgetSubtleColor = Color(red: 0.35, green: 0.23, blue: 0.14) // #5A3A24
-private let widgetSurfaceColor = Color(red: 0.98, green: 0.96, blue: 0.94) // #FAF5F0
+// AppColors (navy theme) — primary #2C5487, text #1A1A1A, surface #F7F8FA
+private let widgetPrimaryColor = Color(red: 0.173, green: 0.329, blue: 0.529) // #2C5487
+private let widgetSubtleColor = Color(red: 0.102, green: 0.102, blue: 0.102) // #1A1A1A
+private let widgetSecondaryColor = Color(red: 0.420, green: 0.447, blue: 0.502) // #6B7280
+private let widgetSurfaceColor = Color(red: 0.969, green: 0.973, blue: 0.980) // #F7F8FA

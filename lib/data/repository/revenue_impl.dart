@@ -1,3 +1,4 @@
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/mappers/remote_mappers.dart';
 import 'package:w0001/data/model/revenue_model.dart';
 import 'package:w0001/domain/repository/revenue_abst.dart';
@@ -10,8 +11,7 @@ class RevenueRepositoryImpl implements RevenueRepository {
 
   @override
   Future<List<RevenueModel>> getAllRevenues(int placeId) async {
-    final all = await _remote.placeRevenuesList();
-    final mine = all.where((e) => e.rpid == placeId).toList();
+    final mine = await _remote.placeRevenuesQuery(ListQuery(pid: placeId));
     mine.sort((a, b) {
       final c = a.rdate.compareTo(b.rdate);
       if (c != 0) return c;

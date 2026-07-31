@@ -58,9 +58,7 @@ class DashboardPlaceTable extends StatelessWidget {
               DataCell(Text(getPrice(price: p.collected))),
               DataCell(Text(getPrice(price: p.profitOnContract))),
               DataCell(Text(
-                p.contractTotal > 0
-                    ? '${margin.toStringAsFixed(1)}%'
-                    : '—',
+                p.contractTotal > 0 ? '${margin.toStringAsFixed(1)}%' : '—',
               )),
               DataCell(Text(getPrice(price: p.outstanding))),
             ],

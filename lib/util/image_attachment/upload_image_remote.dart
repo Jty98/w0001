@@ -5,6 +5,8 @@ import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/util/api_endpoint.dart';
 import 'package:w0001/util/image_attachment/image_upload_result.dart';
 
+import 'package:w0001/util/image_attachment/prepare_image_for_upload.dart';
+
 /// 기기 로컬 이미지를 [`POST /uploads/image`](`multipart/form-data`,
 /// 필드 `file` + 선택 `category`)로 올리고 메타를 돌려준다.
 ///
@@ -20,11 +22,12 @@ Future<ImageUploadResult> uploadLocalImageFile(
   if (!await file.exists()) {
     throw ArgumentError.value(absolutePath, 'absolutePath', '파일이 없습니다.');
   }
+  final uploadPath = await prepareImageFileForUpload(absolutePath);
   final dio = AppHttpClient.I.raw;
   // [MultipartFile.fromFile] 은 Future — await 하지 않으면 FormData 가 이를 파일이 아니라
   // 문자열 필드(Instance of 'Future<MultipartFile>' …) 로 보내 서버는 str 로 받게 된다.
   final multipart = await MultipartFile.fromFile(
-    absolutePath,
+    uploadPath,
     filename: ImageUploadResult.guessOriginalnameFallback(absolutePath),
   );
   final form = FormData.fromMap(<String, dynamic>{

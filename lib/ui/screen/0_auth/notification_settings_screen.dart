@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/notification_settings_model.dart';
 import 'package:w0001/presentation/viewmodel/notification_settings_providers.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/ui/widget/responsive_page_shell.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
@@ -23,7 +25,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
       body: ResponsivePageShell(
         child: settingsAsync.when(
           data: (settings) => _buildContent(context, ref, settings),
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const AppLoadingIndicator(label: '알림 설정 불러오는 중...'),
           error: (error, _) => Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -58,12 +60,10 @@ class NotificationSettingsScreen extends ConsumerWidget {
     NotificationSettings settings,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    
-    return RefreshIndicator(
+
+    return AppRefreshIndicator(
       onRefresh: () async {
-        await ref
-            .read(notificationSettingsNotifierProvider.notifier)
-            .sync();
+        await ref.read(notificationSettingsNotifierProvider.notifier).sync();
       },
       child: ListView(
         padding: EdgeInsets.symmetric(
@@ -79,7 +79,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
             ),
           ),
           SizedBox(height: context.rsi(20)),
-          
+
           // 알림 카테고리 섹션
           _buildSection(
             context,
@@ -92,9 +92,9 @@ class NotificationSettingsScreen extends ConsumerWidget {
             settings: settings,
             ref: ref,
           ),
-          
+
           SizedBox(height: context.rsi(24)),
-          
+
           _buildSection(
             context,
             title: '공지사항',
@@ -105,21 +105,11 @@ class NotificationSettingsScreen extends ConsumerWidget {
             settings: settings,
             ref: ref,
           ),
-          
+
           SizedBox(height: context.rsi(24)),
-          
-          _buildSection(
-            context,
-            title: '계정',
-            items: [
-              NotificationType.accountUpdate,
-            ],
-            settings: settings,
-            ref: ref,
-          ),
-          
+
           SizedBox(height: context.rsi(32)),
-          
+
           // 안내 문구
           Container(
             padding: EdgeInsets.all(context.rsi(16)),
@@ -150,7 +140,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
                 ),
                 SizedBox(height: context.rsi(12)),
                 Text(
-                  '• 알림을 끄더라도 중요한 계정 관련 알림은 수신될 수 있습니다.\n'
+                  '• 계정 관련 알림(승인, 정지 등)은 항상 수신됩니다.\n'
                   '• 기기 설정에서 알림을 끈 경우 여기서 켜도 알림이 오지 않습니다.\n'
                   '• 설정은 즉시 적용되며 서버에 자동 저장됩니다.',
                   style: TextStyle(
@@ -175,7 +165,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
     required WidgetRef ref,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -203,7 +193,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
               final index = entry.key;
               final type = entry.value;
               final isLast = index == items.length - 1;
-              
+
               return _buildSettingItem(
                 context,
                 ref: ref,
@@ -226,7 +216,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
     required bool isLast,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Column(
       children: [
         Material(

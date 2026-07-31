@@ -33,7 +33,7 @@ class AuthUseCase {
   Future<PhoneMoVerifyResponse> verifyPhone({required String phone}) =>
       _repository.verifyPhone(phone: phone);
 
-  Future<void> signup({
+  Future<SignupResponse> signup({
     required String uid,
     required String upw,
     required String uname,

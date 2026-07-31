@@ -29,7 +29,7 @@
             android:id="@+id/widget_item_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#7A5230"
+            android:textColor="#6B7280"
             android:textSize="9sp"
             android:textStyle="bold" />
 
@@ -39,7 +39,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="#5A3A24"
+            android:textColor="#1A1A1A"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -50,7 +50,7 @@
             android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:maxLines="3"
-            android:textColor="#7A5230"
+            android:textColor="#6B7280"
             android:textSize="10sp"
             android:visibility="gone" />
     </LinearLayout>

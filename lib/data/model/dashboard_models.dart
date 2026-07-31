@@ -111,6 +111,9 @@ class DashboardPlaceRow {
   final int advanceCollected;
   final String balanceBreakdown;
 
+  /// `0` 진행중 · `1` 완료. bundle에 없으면 `-1`(미확인).
+  final int pcomplete;
+
   const DashboardPlaceRow({
     required this.pid,
     required this.pname,
@@ -120,7 +123,11 @@ class DashboardPlaceRow {
     required this.outstanding,
     this.advanceCollected = 0,
     this.balanceBreakdown = '',
+    this.pcomplete = -1,
   });
+
+  bool get isInProgress => pcomplete == 0;
+  bool get isCompleted => pcomplete == 1;
 
   int get profitOnContract => contractTotal - outstanding - costTotal;
   int get profitOnCash => collected - costTotal;
@@ -138,6 +145,11 @@ class DashboardPlaceRow {
       outstanding: dashReadInt(j, 'outstanding'),
       advanceCollected: dashReadInt(j, 'advanceCollected'),
       balanceBreakdown: dashReadString(j, 'balanceBreakdown'),
+      pcomplete: j.containsKey('pcomplete') ||
+              j.containsKey('p_complete') ||
+              j.containsKey('pComplete')
+          ? dashReadInt(j, 'pcomplete')
+          : -1,
     );
   }
 }

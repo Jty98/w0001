@@ -4,6 +4,7 @@ import 'package:w0001/data/mappers/remote_mappers.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
+import 'package:w0001/data/model/worker_profile_model.dart';
 import 'package:w0001/util/worker_skills_match.dart';
 
 extension HumanWorkerSkillsDisplay on HumanModel {
@@ -12,12 +13,7 @@ extension HumanWorkerSkillsDisplay on HumanModel {
     return p.isNotEmpty ? p : null;
   }
 
-  List<String> get displayExtraSpecialties {
-    return workerSkillsExtrasExcludingPrimary(
-      specialties,
-      primary: displayPrimarySpecialty,
-    );
-  }
+  List<String> get displayExtraSpecialties => const [];
 
   String get effectiveDefaultWorkRole {
     final p = displayPrimarySpecialty;
@@ -25,13 +21,122 @@ extension HumanWorkerSkillsDisplay on HumanModel {
     return hdefaultRole.trim();
   }
 
-  bool get hasWorkerProfileSkills =>
-      displayPrimarySpecialty != null || displayExtraSpecialties.isNotEmpty;
+  bool get hasWorkerProfileSkills => displayPrimarySpecialty != null;
 }
 
 /// 인력·목록 UI 공통 라벨 (앱 등록 / 워커 자가 입력 동일 표기).
 const String kHumanSkillLabelPrimary = '대표 작업';
 const String kHumanSkillLabelExtra = '추가 작업';
+
+/// 현장 역할(`worker_rank`) 여부.
+bool isWorkerSiteRank(String? value) {
+  final t = value?.trim() ?? '';
+  return t.isNotEmpty && kWorkerRankOptions.contains(t);
+}
+
+/// 인건비 목록 이름 옆 — 현장 역할·주특기 배지 데이터.
+class HumanWorkCostBadgeData {
+  const HumanWorkCostBadgeData({this.siteRank, this.primarySpecialty});
+
+  final String? siteRank;
+  final String? primarySpecialty;
+
+  bool get isEmpty =>
+      (siteRank == null || siteRank!.isEmpty) &&
+      (primarySpecialty == null || primarySpecialty!.isEmpty);
+}
+
+/// 현장 역할(`worker_rank`) — 주특기와 별개 필드.
+String? resolveHumanSiteRank(HumanModel human) {
+  final profileRank = human.workerRank.trim();
+  if (profileRank.isNotEmpty) return profileRank;
+  final legacy = human.hdefaultRole.trim();
+  if (isWorkerSiteRank(legacy)) return legacy;
+  return null;
+}
+
+/// 인력 목록 카드 — 주특기 라벨 (프로필 우선, 없으면 인건비 기본 작업).
+String? humanListPrimarySpecialtyLabel(HumanModel human) {
+  final profile = human.displayPrimarySpecialty;
+  if (profile != null) return profile;
+  final payroll = human.hdefaultRole.trim();
+  if (payroll.isNotEmpty && !isWorkerSiteRank(payroll)) return payroll;
+  return null;
+}
+
+HumanWorkCostBadgeData resolveHumanWorkCostBadges(HumanModel human) {
+  return HumanWorkCostBadgeData(
+    siteRank: resolveHumanSiteRank(human),
+    primarySpecialty: human.displayPrimarySpecialty,
+  );
+}
+
+/// 인건비 행·인력 목록·캐시를 합쳐 배지용 [HumanModel]을 만든다.
+HumanModel mergeHumanForWorkCostDisplay({
+  required int hid,
+  required String hname,
+  required String hnumber,
+  required int hstar,
+  int hdailyWage = 0,
+  String hdefaultRole = '',
+  String workerRank = '',
+  String? primarySpecialty,
+  List<String> specialties = const [],
+  HumanModel? fromList,
+  HumanModel? cached,
+}) {
+  String pickStr(String row, String? a, String? b) {
+    if (row.trim().isNotEmpty) return row.trim();
+    if (a != null && a.trim().isNotEmpty) return a.trim();
+    if (b != null && b.trim().isNotEmpty) return b.trim();
+    return '';
+  }
+
+  String? pickOpt(String? row, String? a, String? b) {
+    if (row != null && row.trim().isNotEmpty) return row.trim();
+    if (a != null && a.trim().isNotEmpty) return a.trim();
+    if (b != null && b.trim().isNotEmpty) return b.trim();
+    return null;
+  }
+
+  List<String> pickSpecs(List<String> row, List<String>? a, List<String>? b) {
+    if (row.isNotEmpty) return row;
+    if (a != null && a.isNotEmpty) return a;
+    if (b != null && b.isNotEmpty) return b;
+    return const [];
+  }
+
+  return HumanModel(
+    hid: hid > 0 ? hid : null,
+    hname: hname,
+    hnumber: hnumber,
+    hdailyWage: hdailyWage != 0
+        ? hdailyWage
+        : (fromList?.hdailyWage ?? cached?.hdailyWage ?? 0),
+    hdefaultRole: pickStr(
+      hdefaultRole,
+      fromList?.hdefaultRole,
+      cached?.hdefaultRole,
+    ),
+    workerRank: pickStr(
+      workerRank,
+      fromList?.workerRank,
+      cached?.workerRank,
+    ),
+    primarySpecialty: pickOpt(
+      primarySpecialty,
+      fromList?.primarySpecialty,
+      cached?.primarySpecialty,
+    ),
+    specialties: pickSpecs(
+      specialties,
+      fromList?.specialties,
+      cached?.specialties,
+    ),
+    hstar: hstar,
+    hdelete: 0,
+  );
+}
 
 /// 화면 표시용 대표·추가 작업 (폼에서 고른 역할 미리보기 반영).
 class HumanSkillsDisplayData {
@@ -133,7 +238,7 @@ HumanModel humanModelForMemberSkills(
   if (linkedHuman != null) {
     final m = humanReadToModel(linkedHuman);
     if (m.hasWorkerProfileSkills) return m;
-    if (u.primarySpecialty != null || u.specialties.isNotEmpty) {
+    if (u.primarySpecialty != null) {
       return HumanModel(
         hid: m.hid,
         hname: m.hname,
@@ -142,7 +247,9 @@ HumanModel humanModelForMemberSkills(
         hdailyWage: m.hdailyWage,
         hdefaultRole: m.hdefaultRole,
         primarySpecialty: u.primarySpecialty ?? m.primarySpecialty,
-        specialties: u.specialties.isNotEmpty ? u.specialties : m.specialties,
+        specialties: const [],
+        workerRank:
+            m.workerRank.trim().isNotEmpty ? m.workerRank : u.workerRank,
         hstar: m.hstar,
         hdelete: m.hdelete,
       );
@@ -154,7 +261,8 @@ HumanModel humanModelForMemberSkills(
     hname: u.uname,
     hnumber: '',
     primarySpecialty: u.primarySpecialty,
-    specialties: u.specialties,
+    specialties: const [],
+    workerRank: u.workerRank,
     hdefaultRole: '',
     hstar: 0,
     hdelete: 0,
@@ -162,9 +270,7 @@ HumanModel humanModelForMemberSkills(
 }
 
 bool memberShouldShowWorkerSkills(UserRead u) =>
-    u.role == UserRole.worker ||
-    u.primarySpecialty != null ||
-    u.specialties.isNotEmpty;
+    u.role == UserRole.worker || u.primarySpecialty != null;
 
 /// 회원관리 목록 — 대표 주특기 한 줄 (없으면 [emptyLabel]).
 String memberListPrimarySpecialty(
@@ -350,14 +456,13 @@ class HumanSkillsChipRow extends StatelessWidget {
         if (showSectionLabels &&
             (extras.isNotEmpty ||
                 (d.payrollRole != null && d.payrollRole!.isNotEmpty))) ...[
-          SizedBox(height: primary != null && primary.isNotEmpty ? _chipGap + 4 : 0),
+          SizedBox(
+              height: primary != null && primary.isNotEmpty ? _chipGap + 4 : 0),
           _sectionLabel(context, kHumanSkillLabelExtra),
           const SizedBox(height: 4),
         ],
         if (extras.isNotEmpty) ...[
-          if (!showSectionLabels &&
-              primary != null &&
-              primary.isNotEmpty)
+          if (!showSectionLabels && primary != null && primary.isNotEmpty)
             const SizedBox(height: _chipGap),
           _HumanSkillsExtraScrollRow(
             labels: extras,
@@ -365,7 +470,8 @@ class HumanSkillsChipRow extends StatelessWidget {
           ),
         ],
         if (d.payrollRole != null && d.payrollRole!.isNotEmpty) ...[
-          if (primary != null || extras.isNotEmpty) const SizedBox(height: _chipGap),
+          if (primary != null || extras.isNotEmpty)
+            const SizedBox(height: _chipGap),
           _HumanSkillChip(
             label: d.payrollRole!,
             style: _HumanSkillChipStyle.muted,

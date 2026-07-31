@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 /// [showWorkCostDeleteDialog] 결과.
 enum WorkCostDeleteChoice {
   cancel,
+
   /// 인건비만 삭제(연결된 작업 투입 없음).
   costOnly,
+
   /// 인건비 + 작업 투입(place-work-days) 함께 삭제.
   costAndWorkDay,
 }
@@ -35,9 +37,9 @@ Future<WorkCostDeleteChoice?> showWorkCostDeleteDialog(
             '인건비만 지우면 작업 기록과 금액이 어긋날 수 있어, '
             '함께 삭제하는 것을 권장합니다.',
             style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-              height: 1.45,
-              color: cs.onSurfaceVariant,
-            ),
+                  height: 1.45,
+                  color: cs.onSurfaceVariant,
+                ),
           ),
           actions: [
             TextButton(
@@ -64,9 +66,9 @@ Future<WorkCostDeleteChoice?> showWorkCostDeleteDialog(
           '$workerName · $placeName\n$dateLabel$roleLine\n\n'
           '이 인건비 항목을 삭제할까요?',
           style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-            height: 1.45,
-            color: cs.onSurfaceVariant,
-          ),
+                height: 1.45,
+                color: cs.onSurfaceVariant,
+              ),
         ),
         actions: [
           TextButton(

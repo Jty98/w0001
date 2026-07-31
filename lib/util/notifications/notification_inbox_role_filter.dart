@@ -23,8 +23,13 @@ abstract final class NotificationInboxRoleFilter {
     final t = fcmResolvedPushType(payload) ?? type;
     if (t.isEmpty) return false;
 
+    // 승인·정지 등 계정 알림 — 수신자 본인에게는 역할과 무관하게 보관
+    if (t.startsWith('account_')) return true;
+
     if (user.isWorker) {
       if (t == 'worker_place_photo' || t == 'signup_pending') return false;
+      // 작업 투입 자동 멤버 추가 — 초대 알림은 수동 초대 때만 노출.
+      if (_isAutoPlaceMemberInvite(t, payload)) return false;
       // 작업지시 등록(push)과 일정 배정(push)이 동시에 오면 중복 — 배정만 노출.
       // (시스템 트레이 중복은 서버에서 작업자에게 instruction FCM 미발송이 이상적)
       if (t == 'placeworkday_instruction') return false;
@@ -36,7 +41,7 @@ abstract final class NotificationInboxRoleFilter {
       return user.role.canManageMemberAccounts;
     }
     if (t.startsWith('account_')) {
-      return user.role.canManageMemberAccounts;
+      return true;
     }
     if (t == 'worker_place_photo') return true;
     if (t == 'placeworkday_assignment' || t == 'placeworkday_instruction') {
@@ -49,5 +54,21 @@ abstract final class NotificationInboxRoleFilter {
       return true;
     }
     return true;
+  }
+
+  static bool _isAutoPlaceMemberInvite(
+    String type,
+    Map<String, dynamic> payload,
+  ) {
+    const inviteTypes = <String>{
+      'place_member_invited',
+      'place_member_invite',
+      'place_member_added',
+      'place_member_invitation',
+    };
+    if (!inviteTypes.contains(type)) return false;
+    return payload['auto_added'] == true ||
+        payload['autoAdded'] == true ||
+        payload['auto_add'] == true;
   }
 }

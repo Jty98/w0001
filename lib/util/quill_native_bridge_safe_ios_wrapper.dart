@@ -35,8 +35,7 @@ final class QuillNativeBridgeSafeIosWrapper extends QuillNativeBridgePlatform {
   }
 
   @override
-  Future<bool> isIOSSimulator() =>
-      _guard(() => _inner.isIOSSimulator(), false);
+  Future<bool> isIOSSimulator() => _guard(() => _inner.isIOSSimulator(), false);
 
   @override
   Future<bool> isSupported(QuillNativeBridgeFeature feature) =>
@@ -75,8 +74,7 @@ final class QuillNativeBridgeSafeIosWrapper extends QuillNativeBridgePlatform {
     required GalleryImageSaveOptions options,
   }) =>
       _guardVoid(
-        () =>
-            _inner.saveImageToGallery(imageBytes, options: options),
+        () => _inner.saveImageToGallery(imageBytes, options: options),
       );
 
   @override

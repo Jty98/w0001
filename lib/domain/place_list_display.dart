@@ -75,19 +75,46 @@ int _comparePlaces(PlaceInfoModel a, PlaceInfoModel b, PlaceListSortMode mode) {
   return (a.pid ?? 0).compareTo(b.pid ?? 0);
 }
 
+/// 즐겨찾기한 현장을 상단에 고정 ([favoritePids] 순서 유지).
+List<PlaceInfoModel> pinFavoritePlacesFirst({
+  required List<PlaceInfoModel> sorted,
+  required List<int> favoritePids,
+}) {
+  if (favoritePids.isEmpty || sorted.isEmpty) return sorted;
+
+  final byPid = <int, PlaceInfoModel>{
+    for (final p in sorted)
+      if (p.pid != null) p.pid!: p,
+  };
+  final favSet = favoritePids.toSet();
+  final pinned = <PlaceInfoModel>[];
+  for (final pid in favoritePids) {
+    final place = byPid[pid];
+    if (place != null) pinned.add(place);
+  }
+  final rest =
+      sorted.where((p) => p.pid == null || !favSet.contains(p.pid)).toList();
+  return [...pinned, ...rest];
+}
+
 /// 진행/완료 탭 · 이름 검색 · 정렬을 적용한 목록.
 List<PlaceInfoModel> applyPlaceListDisplay({
   required List<PlaceInfoModel> all,
   required PlaceState tab,
   required String searchQuery,
   required PlaceListSortMode sortMode,
+  List<int> favoritePids = const [],
+  bool skipTabFilter = false,
+  bool skipSearchFilter = false,
 }) {
   final wantComplete = tab == PlaceState.complete ? 1 : 0;
   final q = searchQuery.trim().toLowerCase();
 
-  var list = all.where((p) => p.pcomplete == wantComplete).toList();
+  var list = skipTabFilter
+      ? all
+      : all.where((p) => p.pcomplete == wantComplete).toList();
 
-  if (q.isNotEmpty) {
+  if (!skipSearchFilter && q.isNotEmpty) {
     list = list
         .where(
           (p) =>
@@ -99,7 +126,7 @@ List<PlaceInfoModel> applyPlaceListDisplay({
 
   final sorted = List<PlaceInfoModel>.from(list)
     ..sort((a, b) => _comparePlaces(a, b, sortMode));
-  return sorted;
+  return pinFavoritePlacesFirst(sorted: sorted, favoritePids: favoritePids);
 }
 
 int countPlacesForTab(List<PlaceInfoModel> all, PlaceState tab) {

@@ -25,8 +25,8 @@ final userNotificationsUseCaseProvider = Provider<UserNotificationsUseCase>(
   ),
 );
 
-final userNotificationInboxProvider =
-    AsyncNotifierProvider<UserNotificationInboxNotifier, List<UserNotificationItem>>(
+final userNotificationInboxProvider = AsyncNotifierProvider<
+    UserNotificationInboxNotifier, List<UserNotificationItem>>(
   UserNotificationInboxNotifier.new,
 );
 

@@ -19,7 +19,8 @@ class WorkerSignupProgressHeader extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final total = stepLabels.length;
-    final progress = total == 0 ? 0.0 : (completedThrough / total).clamp(0.0, 1.0);
+    final progress =
+        total == 0 ? 0.0 : (completedThrough / total).clamp(0.0, 1.0);
     final safeActive = activeIndex.clamp(0, total - 1);
 
     return Column(

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:w0001/data/datasources/local/worker_supply_map_preferences_storage.dart';
 import 'package:w0001/data/model/terms_models.dart';
+import 'package:w0001/presentation/viewmodel/large_text_mode_provider.dart';
 import 'package:w0001/presentation/viewmodel/terms_providers.dart';
 import 'package:w0001/presentation/viewmodel/theme_mode_providers.dart';
+import 'package:w0001/presentation/viewmodel/worker_supply_map_providers.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/profile_section_chrome.dart';
-import 'package:w0001/ui/screen/0_auth/widgets/settings_logout_section.dart';
+import 'package:w0001/ui/screen/0_auth/widgets/worker_private_info_entry.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/terms_detail_sheet.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 작업자 설정 화면
@@ -22,7 +26,10 @@ class WorkerSettingsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (ctx) => const AppLoadingIndicator(
+        size: 74,
+        label: '약관 불러오는 중...',
+      ),
     );
 
     try {
@@ -31,11 +38,11 @@ class WorkerSettingsScreen extends ConsumerWidget {
 
       // 해당 타입의 약관 찾기
       final term = terms.where((t) => t.type == type).firstOrNull;
-      
+
       if (term == null) {
         if (!context.mounted) return;
         Navigator.of(context, rootNavigator: true).pop(); // 로딩 닫기
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('약관을 찾을 수 없습니다.')),
         );
@@ -43,8 +50,9 @@ class WorkerSettingsScreen extends ConsumerWidget {
       }
 
       // 약관 상세 가져오기
-      final detail = await ref.read(termsUseCaseProvider).getTermDetail(term.id);
-      
+      final detail =
+          await ref.read(termsUseCaseProvider).getTermDetail(term.id);
+
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop(); // 로딩 닫기
 
@@ -53,7 +61,7 @@ class WorkerSettingsScreen extends ConsumerWidget {
     } catch (e) {
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop(); // 로딩 닫기
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('약관을 불러올 수 없습니다: $e')),
       );
@@ -110,7 +118,7 @@ class WorkerSettingsScreen extends ConsumerWidget {
                     style: TextStyle(fontSize: context.rs(14)),
                   ),
                   subtitle: Text(
-                    '계정, 전화번호, 세무정산, 역할, 스킬',
+                    '비밀번호·전화번호·세무정산·역할·스킬',
                     style: TextStyle(fontSize: context.rs(12)),
                   ),
                   trailing: Icon(
@@ -119,6 +127,15 @@ class WorkerSettingsScreen extends ConsumerWidget {
                   ),
                   onTap: () => context.push('/settings/profile'),
                 ),
+              ),
+
+              SizedBox(height: context.rsi(20)),
+
+              const ProfileSectionTitle('근로 정보'),
+              SizedBox(height: context.rsi(8)),
+              ProfileInsetPanel(
+                padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
+                child: const WorkerPrivateInfoEntry(embedded: true),
               ),
 
               SizedBox(height: context.rsi(20)),
@@ -153,6 +170,103 @@ class WorkerSettingsScreen extends ConsumerWidget {
 
               SizedBox(height: context.rsi(20)),
 
+              const ProfileSectionTitle('지도'),
+              SizedBox(height: context.rsi(8)),
+              ProfileInsetPanel(
+                padding: EdgeInsets.all(context.rsi(12)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '주유소 유종 가격 표시',
+                      style: TextStyle(
+                        fontSize: context.rs(14),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: context.rsi(4)),
+                    Text(
+                      '지도 탭 주유소 유종 표시 방식을 선택하세요',
+                      style: TextStyle(
+                        fontSize: context.rs(12),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    SizedBox(height: context.rsi(10)),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final selectedMode =
+                            ref.watch(workerSupplyFuelPriceDisplayModeProvider);
+                        Widget modeButton(
+                          WorkerSupplyFuelPriceDisplayMode mode,
+                          String label,
+                        ) {
+                          final isSelected = selectedMode == mode;
+                          return Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                ref
+                                    .read(
+                                        workerSupplyFuelPriceDisplayModeProvider
+                                            .notifier)
+                                    .setMode(mode);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: context.rsi(10),
+                                  vertical: context.rsi(10),
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? colorScheme.primaryContainer
+                                      : colorScheme.surfaceContainerHighest
+                                          .withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? colorScheme.primary
+                                        : colorScheme.outlineVariant,
+                                  ),
+                                ),
+                                child: Text(
+                                  label,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: context.rs(13),
+                                    fontWeight: FontWeight.w800,
+                                    color: isSelected
+                                        ? colorScheme.primary
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            modeButton(
+                              WorkerSupplyFuelPriceDisplayMode.gasoline,
+                              '휘발유',
+                            ),
+                            SizedBox(width: context.rsi(8)),
+                            modeButton(
+                              WorkerSupplyFuelPriceDisplayMode.diesel,
+                              '경유',
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: context.rsi(20)),
+
               // 앱 정보 섹션
               const ProfileSectionTitle('앱 정보'),
               SizedBox(height: context.rsi(8)),
@@ -164,12 +278,12 @@ class WorkerSettingsScreen extends ConsumerWidget {
                       builder: (context, ref, _) {
                         final themeMode = ref.watch(themeModeProvider);
                         final isDark = themeMode == ThemeMode.dark;
-                        
+
                         return ListTile(
                           dense: true,
                           leading: Icon(
                             isDark ? Icons.dark_mode : Icons.light_mode,
-                            color: colorScheme.onSurfaceVariant,
+                            color: colorScheme.primary,
                             size: context.rsi(22),
                           ),
                           title: Text(
@@ -197,11 +311,46 @@ class WorkerSettingsScreen extends ConsumerWidget {
                       indent: context.rsi(48),
                       color: colorScheme.outlineVariant,
                     ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final largeText = ref.watch(largeTextModeProvider);
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            Icons.text_fields_rounded,
+                            color: colorScheme.primary,
+                            size: context.rsi(22),
+                          ),
+                          title: Text(
+                            '큰 글씨 모드',
+                            style: TextStyle(fontSize: context.rs(14)),
+                          ),
+                          subtitle: Text(
+                            largeText ? '큰 글씨 적용됨' : '일반 글씨 크기',
+                            style: TextStyle(fontSize: context.rs(12)),
+                          ),
+                          trailing: Switch(
+                            value: largeText,
+                            onChanged: (value) {
+                              ref
+                                  .read(largeTextModeProvider.notifier)
+                                  .setEnabled(value);
+                            },
+                            activeColor: colorScheme.primary,
+                          ),
+                        );
+                      },
+                    ),
+                    Divider(
+                      height: 1,
+                      indent: context.rsi(48),
+                      color: colorScheme.outlineVariant,
+                    ),
                     ListTile(
                       dense: true,
                       leading: Icon(
                         Icons.info_outline,
-                        color: colorScheme.onSurfaceVariant,
+                        color: colorScheme.primary,
                         size: context.rsi(22),
                       ),
                       title: Text(
@@ -222,7 +371,7 @@ class WorkerSettingsScreen extends ConsumerWidget {
                       dense: true,
                       leading: Icon(
                         Icons.article_outlined,
-                        color: colorScheme.onSurfaceVariant,
+                        color: colorScheme.primary,
                         size: context.rsi(22),
                       ),
                       title: Text(
@@ -248,7 +397,7 @@ class WorkerSettingsScreen extends ConsumerWidget {
                       dense: true,
                       leading: Icon(
                         Icons.privacy_tip_outlined,
-                        color: colorScheme.onSurfaceVariant,
+                        color: colorScheme.primary,
                         size: context.rsi(22),
                       ),
                       title: Text(
@@ -268,9 +417,6 @@ class WorkerSettingsScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              const SettingsLogoutSection(),
-              SizedBox(height: context.rsi(8)),
             ],
           ),
         ),

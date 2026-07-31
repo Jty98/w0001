@@ -38,15 +38,29 @@ abstract final class AuthApiErrorCodes {
   static const sensitiveActionTokenMismatch = 'SENSITIVE_ACTION_TOKEN_MISMATCH';
 
   /// 리프레시로 복구할 수 없는 계정 상태 등(인터셉터에서 토큰 클리어 후 즉시 전달).
+  ///
+  /// ⚠️ pending은 제외: 승인 대기 중에도 로그인 허용 (FCM 토큰 등록을 위해)
   static bool isInterceptorAccountBlocked(String code) {
-    return code == accountRejected ||
-        code == accountSuspended ||
-        code == accountPendingApproval;
+    return code == accountRejected || code == accountSuspended;
   }
 
   /// 다른 기기 로그인 등 — 리프레시 없이 토큰 삭제·로그인 화면.
   static bool isInterceptorSessionSuperseded(String code) =>
       code == sessionSuperseded;
+
+  /// access 401에서 refresh 없이 즉시 재로그인해야 하는 코드.
+  static bool isForceReauthCode(String code) {
+    return code == sessionSuperseded ||
+        code == refreshTokenNotFoundOrRevoked ||
+        code == refreshTokenExpired ||
+        code == tokenRevoked;
+  }
+
+  /// `action: reauth` 또는 세션 폐기류 코드 — 인터셉터에서 refresh 생략.
+  static bool isInterceptorForceReauth(AuthStructuredDetail d) {
+    if (d.action == 'reauth') return true;
+    return isForceReauthCode(d.code);
+  }
 }
 
 /// 토큰·세션 만료류 → 동일 사용자 안내.
@@ -54,25 +68,26 @@ const String authTokenSessionUnifiedMessageKo =
     '로그인이 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요.';
 
 /// 다른 기기에서 로그인해 현재 세션이 무효화된 경우.
-const String authSessionSupersededMessageKo =
-    '다른 기기에서 로그인되어 로그아웃되었습니다.';
+const String authSessionSupersededMessageKo = '다른 기기에서 로그인되어 로그아웃되었습니다.';
 
-/// 서버가 JSON `detail` 객체로 줄 때 코드·메시지·사유.
+/// 서버 Auth 에러 구조 — `detail` / `error` / 최상위 `code` + `action`.
 class AuthStructuredDetail {
   const AuthStructuredDetail({
     required this.code,
     this.serverMessage,
     this.reason,
+    this.action,
   });
 
   final String code;
   final String? serverMessage;
   final String? reason;
+
+  /// 서버가 `action: "reauth"` 를 내려주면 refresh 없이 재로그인.
+  final String? action;
 }
 
-/// 응답 본문에서 `detail` 또는 `error` 객체(+ `details.reason`)를 추출한다.
-///
-/// 서버별로 `detail.code` / `error.code`, `reason` 또는 `details.reason` 을 허용.
+/// 응답 본문에서 `detail` / `error` / 최상위 `code` 를 추출한다.
 AuthStructuredDetail? tryParseAuthStructuredDetail(Object? responseData) {
   if (responseData == null) return null;
   Map<String, dynamic>? root;
@@ -92,6 +107,7 @@ AuthStructuredDetail? tryParseAuthStructuredDetail(Object? responseData) {
     code: code,
     serverMessage: _stringOrNull(m['message']),
     reason: _reasonFromParsedMap(m),
+    action: _actionFromResponse(root, m),
   );
 }
 
@@ -110,7 +126,19 @@ Map<String, dynamic>? _extractAuthCodeMap(Map<String, dynamic> root) {
       return m;
     }
   }
+  if (root['code'] != null && root['code'].toString().trim().isNotEmpty) {
+    return root;
+  }
   return null;
+}
+
+String? _actionFromResponse(
+  Map<String, dynamic> root,
+  Map<String, dynamic> codeMap,
+) {
+  final fromMap = _stringOrNull(codeMap['action']);
+  if (fromMap != null) return fromMap;
+  return _stringOrNull(root['action']);
 }
 
 String? _reasonFromParsedMap(Map<String, dynamic> m) {
@@ -171,6 +199,20 @@ String resolveAuthRelatedUserLine({
   return fallbackMessage;
 }
 
+/// refresh 실패·세션 폐기 시 스낵바/강제 로그아웃용 메시지.
+String resolveForceReauthUserMessage({required Object? responseData}) {
+  final d = tryParseAuthStructuredDetail(responseData);
+  if (d != null && d.code == AuthApiErrorCodes.sessionSuperseded) {
+    return authSessionSupersededMessageKo;
+  }
+  final localized = localizedAuthDetailMessage(
+    httpStatusCode: 401,
+    responseData: responseData,
+  );
+  if (localized.trim().isNotEmpty) return localized;
+  return authTokenSessionUnifiedMessageKo;
+}
+
 String _messageForStructured(AuthStructuredDetail d) {
   switch (d.code) {
     case AuthApiErrorCodes.invalidCredentials:
@@ -180,6 +222,7 @@ String _messageForStructured(AuthStructuredDetail d) {
     case AuthApiErrorCodes.tokenRevoked:
     case AuthApiErrorCodes.refreshTokenNotFoundOrRevoked:
     case AuthApiErrorCodes.refreshTokenExpired:
+      return authTokenSessionUnifiedMessageKo;
     case AuthApiErrorCodes.sessionSuperseded:
       return authSessionSupersededMessageKo;
     case AuthApiErrorCodes.userNotFound:

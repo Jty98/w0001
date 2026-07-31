@@ -1,6 +1,9 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/access/user_role_access.dart';
+import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/calendar_view_model.dart';
 import 'package:w0001/ui/screen/3_calendar/calendar_screen.dart';
@@ -22,7 +25,7 @@ class CalendarBranchScreen extends ConsumerWidget {
 
     return isWorker
         ? const WorkerScheduleScreen()
-        : const _CalendarDataBootstrap(child: CalendarScreen());
+        : _CalendarDataBootstrap(child: const CalendarScreen());
   }
 }
 
@@ -36,16 +39,47 @@ class _CalendarDataBootstrap extends ConsumerStatefulWidget {
       _CalendarDataBootstrapState();
 }
 
-class _CalendarDataBootstrapState extends ConsumerState<_CalendarDataBootstrap> {
+class _CalendarDataBootstrapState
+    extends ConsumerState<_CalendarDataBootstrap> {
+  var _scheduledLoad = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _scheduleCalendarLoad());
+  }
+
+  void _scheduleCalendarLoad({bool force = false}) {
+    if (!mounted || _scheduledLoad) return;
+    _scheduledLoad = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(calendarProvider.notifier).loadInitialData();
+      _scheduledLoad = false;
+      _ensureCalendarLoaded(force: force);
     });
   }
 
+  void _ensureCalendarLoaded({bool force = false}) {
+    if (!mounted) return;
+    final u = ref.read(authSessionProvider).asData?.value;
+    if (u == null || u.isWorker) return;
+    if (!force && ref.read(calendarProvider).hasLoadedOnce) return;
+    unawaited(ref.read(calendarProvider.notifier).loadInitialData());
+  }
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UserRead?>>(authSessionProvider, (prev, next) {
+      final u = next.asData?.value;
+      if (u == null || u.isWorker) return;
+      final prevUser = prev?.asData?.value;
+      final accountChanged =
+          prevUser == null || prevUser.uid != u.uid || prevUser.role != u.role;
+      if (!accountChanged && ref.read(calendarProvider).hasLoadedOnce) {
+        return;
+      }
+      _scheduleCalendarLoad(force: accountChanged);
+    });
+    return widget.child;
+  }
 }

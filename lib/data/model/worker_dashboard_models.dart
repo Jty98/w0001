@@ -1,5 +1,6 @@
 import 'package:w0001/data/model/remote/super_admin_json.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
+import 'package:w0001/util/work_instruction_layers_merge.dart';
 
 /// 공통 월·연 합계 블록
 class WorkerDashboardTotals {
@@ -11,8 +12,7 @@ class WorkerDashboardTotals {
 
   factory WorkerDashboardTotals.fromJson(Map<String, dynamic> j) {
     return WorkerDashboardTotals(
-      totalEarned:
-          _firstInt(j, ['total_earned', 'totalEarned', 'earned']) ?? 0,
+      totalEarned: _firstInt(j, ['total_earned', 'totalEarned', 'earned']) ?? 0,
       totalPaid: _firstInt(j, ['total_paid', 'totalPaid', 'paid']) ?? 0,
       totalOutstanding: _firstInt(j, [
             'total_outstanding',
@@ -45,35 +45,48 @@ class WorkerDashboardWorkDay {
   });
 
   factory WorkerDashboardWorkDay.fromJson(Map<String, dynamic> j) {
-    final rawPreview =
-        j['instruction_preview'] ?? j['instructionPreview'];
+    final rawPreview = j['instruction_preview'] ?? j['instructionPreview'];
     final dailywage = _firstInt(j, ['dailywage', 'daily_wage', 'wage']) ?? 0;
     final paid = _parsePaidFlag(j);
     final earned = _firstInt(j, ['earned_amount', 'earnedAmount']) ?? 0;
     final outstanding =
         _firstInt(j, ['outstanding_amount', 'outstandingAmount']) ?? 0;
+    final hasExplicitIndividual =
+        j.containsKey('individual_instruction_blocks') ||
+            j.containsKey('individualInstructionBlocks');
+    final site = parseSiteInstructionBlocks(j);
+    final process = parseProcessInstructionBlocks(j);
+    final individual = hasExplicitIndividual
+        ? parseIndividualInstructionBlocks(j)
+        : const <WorkerAnnouncementBlock>[];
+    final mergedRaw = parseWorkerAnnouncementBlockList(
+      j['instruction_blocks'] ??
+          j['work_instruction_blocks'] ??
+          j['instructionBlocks'],
+    );
+    final resolved = mergeWorkInstructionLayers(
+      site: site,
+      process: process,
+      individual: individual,
+      mergedFallback: mergedRaw,
+    );
     return WorkerDashboardWorkDay(
       pwdid: _firstInt(j, ['pwdid', 'pwd_id', 'place_work_day_id']) ?? 0,
       pid: _firstInt(j, ['pid', 'place_id', 'placeId']) ?? 0,
       placeName: _firstString(j, ['place_name', 'placeName', 'pname']) ?? '',
       workdate: _firstString(j, ['workdate', 'work_date', 'taskdate']) ?? '',
-      workrole: _firstString(j, ['workrole', 'work_role']) ?? '',
+      workrole: _firstString(j, ['workrole', 'work_role', 'wrole']) ?? '',
       dailywage: dailywage,
       paid: paid,
       earnedAmount: earned,
       outstandingAmount: outstanding,
       instructionPreview: rawPreview == null ? '' : rawPreview.toString(),
-      instructionBlocks: parseWorkerAnnouncementBlockList(
-        j['instruction_blocks'] ??
-            j['work_instruction_blocks'] ??
-            j['instructionBlocks'],
-      ),
+      instructionBlocks: resolved,
     );
   }
 
   /// 서버가 `earned_amount`를 안 내려줄 때 투입 일당으로 표시.
-  int get effectiveWorkedAmount =>
-      earnedAmount > 0 ? earnedAmount : dailywage;
+  int get effectiveWorkedAmount => earnedAmount > 0 ? earnedAmount : dailywage;
 
   int get effectiveUnsettledAmount {
     if (outstandingAmount > 0) return outstandingAmount;
@@ -130,15 +143,13 @@ class WorkerDashboardSummary {
     WorkerDashboardTotals? mt;
     final mtot = j['month_totals'];
     if (mtot is Map) {
-      mt = WorkerDashboardTotals.fromJson(
-          Map<String, dynamic>.from(mtot));
+      mt = WorkerDashboardTotals.fromJson(Map<String, dynamic>.from(mtot));
     }
 
     WorkerDashboardTotals? yt;
     final ytot = j['year_totals'];
     if (ytot is Map) {
-      yt = WorkerDashboardTotals.fromJson(
-          Map<String, dynamic>.from(ytot));
+      yt = WorkerDashboardTotals.fromJson(Map<String, dynamic>.from(ytot));
     }
 
     return WorkerDashboardSummary(
@@ -195,8 +206,7 @@ class WorkerDashboardPlaceRollup {
   factory WorkerDashboardPlaceRollup.fromJson(Map<String, dynamic> j) {
     return WorkerDashboardPlaceRollup(
       pid: _firstInt(j, ['pid', 'place_id']) ?? 0,
-      placeName:
-          _firstString(j, ['place_name', 'placeName', 'pname']) ?? '',
+      placeName: _firstString(j, ['place_name', 'placeName', 'pname']) ?? '',
       workedTotal: _firstInt(j, [
             'worked_total',
             'workedTotal',
@@ -272,9 +282,7 @@ List<WorkerDashboardWorkDay> _parseWorkDaysList(Object? raw) {
   final out = <WorkerDashboardWorkDay>[];
   for (final e in raw) {
     if (e is! Map) continue;
-    final m = e is Map<String, dynamic>
-        ? e
-        : Map<String, dynamic>.from(e);
+    final m = e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e);
     final row = WorkerDashboardWorkDay.fromJson(m);
     if (row.pid <= 0 &&
         row.pwdid <= 0 &&
@@ -292,9 +300,7 @@ List<WorkerDashboardPlaceRollup> _parsePlaceRollupsList(Object? raw) {
   final out = <WorkerDashboardPlaceRollup>[];
   for (final e in raw) {
     if (e is! Map) continue;
-    final m = e is Map<String, dynamic>
-        ? e
-        : Map<String, dynamic>.from(e);
+    final m = e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e);
     final row = WorkerDashboardPlaceRollup.fromJson(m);
     if (row.pid <= 0 && row.placeName.isEmpty) continue;
     out.add(row);

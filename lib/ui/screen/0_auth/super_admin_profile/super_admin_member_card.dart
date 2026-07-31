@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/presentation/viewmodel/profile_super_admin_members_state.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 회원 카드 액션: 다이얼로그·스낵바는 상위에서 처리.
@@ -208,85 +209,84 @@ class SuperAdminMemberCard extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.rsi(6)),
-      child: Material(
-        color: cs.surfaceContainerLowest.withValues(alpha: 0.88),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(context.rs(_radius)),
-          side: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.38),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onOpenDetail,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.rsi(10),
-              context.rsi(8),
-              context.rsi(6),
-              context.rsi(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user.uname,
-                            style: tt.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.25,
-                              height: 1.15,
+      child: AppInsetTile(
+        borderRadius: BorderRadius.circular(context.rs(_radius)),
+        child: Material(
+          color: Colors.transparent,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onOpenDetail,
+            borderRadius: BorderRadius.circular(context.rs(_radius)),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.rsi(10),
+                context.rsi(8),
+                context.rsi(6),
+                context.rsi(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user.uname,
+                              style: tt.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.25,
+                                height: 1.15,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: context.rsi(2)),
-                          Text(
-                            primarySpecialty,
-                            style: tt.labelMedium?.copyWith(
-                              color: hasSpecialty
-                                  ? cs.primary
-                                  : cs.onSurfaceVariant.withValues(alpha: 0.75),
-                              fontWeight:
-                                  hasSpecialty ? FontWeight.w700 : FontWeight.w500,
-                              height: 1.2,
+                            SizedBox(height: context.rsi(2)),
+                            Text(
+                              primarySpecialty,
+                              style: tt.labelMedium?.copyWith(
+                                color: hasSpecialty
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant
+                                        .withValues(alpha: 0.75),
+                                fontWeight: hasSpecialty
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: context.rsi(2)),
-                          Text(
-                            hasPhone ? phone : '전화번호 미등록',
-                            style: tt.labelSmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                              height: 1.2,
+                            SizedBox(height: context.rsi(2)),
+                            Text(
+                              hasPhone ? phone : '전화번호 미등록',
+                              style: tt.labelSmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    if (onOpenDetail != null)
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: context.rs(20),
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.55),
-                      ),
+                      if (onOpenDetail != null)
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rs(20),
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.55),
+                        ),
+                    ],
+                  ),
+                  if (actions.isNotEmpty) ...[
+                    SizedBox(height: context.rsi(8)),
+                    Row(children: actions),
                   ],
-                ),
-                if (actions.isNotEmpty) ...[
-                  SizedBox(height: context.rsi(8)),
-                  Row(children: actions),
                 ],
-              ],
+              ),
             ),
           ),
         ),

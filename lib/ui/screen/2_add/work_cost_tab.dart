@@ -15,6 +15,8 @@ import 'package:w0001/ui/widget/date_card_widget.dart';
 import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/theme/app_section_card.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 class WorkCostTab extends ConsumerStatefulWidget {
   const WorkCostTab({super.key});
@@ -104,12 +106,11 @@ class _WorkCostTabState extends ConsumerState<WorkCostTab> {
                   crossAxisCount: 4,
                   mainAxisSpacing: context.rsi(6),
                   crossAxisSpacing: context.rsi(6),
-                  childAspectRatio: 1.18,
+                  childAspectRatio: 0.72,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final originalIndex =
-                        state.workCostList.length - 1 - index;
+                    final originalIndex = state.workCostList.length - 1 - index;
                     final item = state.workCostList[originalIndex];
                     return WorkCostProfileCard(
                       item: item,
@@ -140,37 +141,29 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
   final state = ref.watch(addCostProvider);
   final vm = ref.read(addCostProvider.notifier);
   final cs = Theme.of(context).colorScheme;
-  const radius = BorderRadius.all(Radius.circular(12));
   final recent = state.placeRecentWorkers;
 
   if (state.selectedPlace == null) {
     return Padding(
       padding: ResponsiveLayout.only(context, bottom: 8),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-          borderRadius: radius,
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.65),
-          ),
-        ),
-        child: Padding(
-          padding: ResponsiveLayout.symmetric(context, vertical: 14, horizontal: 12),
-          child: Row(
-            children: [
-              Icon(Icons.place_outlined, size: context.rsi(26), color: cs.onSurfaceVariant),
-              rsH(context, 12),
-              Expanded(
-                child: Text(
-                  '현장을 먼저 선택하면 이전에 투입했던 인원이 여기 표시됩니다.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    height: 1.3,
-                  ),
-                ),
+      child: AppInsetTile(
+        padding:
+            ResponsiveLayout.symmetric(context, vertical: 14, horizontal: 12),
+        child: Row(
+          children: [
+            Icon(Icons.place_outlined,
+                size: context.rsi(26), color: cs.onSurfaceVariant),
+            rsH(context, 12),
+            Expanded(
+              child: Text(
+                '현장을 먼저 선택하면 이전에 투입했던 인원이 여기 표시됩니다.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.3,
+                    ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -179,31 +172,24 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
   if (recent.isEmpty) {
     return Padding(
       padding: ResponsiveLayout.only(context, bottom: 8),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-          borderRadius: radius,
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.65),
-          ),
-        ),
-        child: Padding(
-          padding: ResponsiveLayout.symmetric(context, vertical: 14, horizontal: 12),
-          child: Row(
-            children: [
-              Icon(Icons.history_rounded, size: context.rsi(26), color: cs.onSurfaceVariant),
-              rsH(context, 12),
-              Expanded(
-                child: Text(
-                  '이 현장에 기록된 인원이 없습니다. 위에서 선택하면 최근 목록에 쌓입니다.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    height: 1.3,
-                  ),
-                ),
+      child: AppInsetTile(
+        padding:
+            ResponsiveLayout.symmetric(context, vertical: 14, horizontal: 12),
+        child: Row(
+          children: [
+            Icon(Icons.history_rounded,
+                size: context.rsi(26), color: cs.onSurfaceVariant),
+            rsH(context, 12),
+            Expanded(
+              child: Text(
+                '이 현장에 기록된 인원이 없습니다. 위에서 선택하면 최근 목록에 쌓입니다.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.3,
+                    ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -211,82 +197,63 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
 
   return Padding(
     padding: ResponsiveLayout.only(context, bottom: 8),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: radius,
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.55),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: cs.shadow.withValues(alpha: 0.06),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Padding(
-          padding: ResponsiveLayout.only(context, left: 12, top: 10, right: 12, bottom: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    child: AppInsetCard(
+      padding: ResponsiveLayout.only(context,
+          left: 12, top: 10, right: 12, bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Icon(Icons.history_rounded,
-                      size: context.rsi(18), color: cs.onSurfaceVariant),
-                  rsH(context, 6),
-                  Expanded(
-                    child: Text(
-                      '이 현장에서 일했던 인원',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => showPlaceRecentWorkersSheet(
-                      context: context,
-                      ref: ref,
-                    ),
-                    child: Text('전체보기(${recent.length})'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // 기존 UX 유지: 가로 스크롤 칩 목록
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < recent.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      GestureDetector(
-                        onLongPress: () async {
-                          final hid = recent[i].hid;
-                          if (hid == null) return;
-                          await _confirmDeleteRecentWorker(
-                            context,
-                            ref,
-                            hid,
-                            recent[i].hname,
-                          );
-                        },
-                        child: ActionChip(
-                          label: Text(recent[i].hname),
-                          onPressed: () =>
-                              vm.tapPlaceRecentWorker(context, recent[i]),
-                        ),
+              Icon(Icons.history_rounded,
+                  size: context.rsi(18), color: cs.onSurfaceVariant),
+              rsH(context, 6),
+              Expanded(
+                child: Text(
+                  '이 현장에서 일했던 인원',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
                       ),
-                    ],
-                  ],
                 ),
+              ),
+              TextButton(
+                onPressed: () => showPlaceRecentWorkersSheet(
+                  context: context,
+                  ref: ref,
+                ),
+                child: Text('전체보기(${recent.length})'),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < recent.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  GestureDetector(
+                    onLongPress: () async {
+                      final hid = recent[i].hid;
+                      if (hid == null) return;
+                      await _confirmDeleteRecentWorker(
+                        context,
+                        ref,
+                        hid,
+                        recent[i].hname,
+                      );
+                    },
+                    child: ActionChip(
+                      label: Text(recent[i].hname),
+                      onPressed: () =>
+                          vm.tapPlaceRecentWorker(context, recent[i]),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     ),
   );
@@ -373,13 +340,9 @@ Future<void> _showEditPendingWorkCostDialog(
   }
   if (editHuman == null && item.whid != null) {
     try {
-      final all = await ref.read(humanUseCaseProvider).getAllWorkers();
-      for (final h in all) {
-        if (h.hid == item.whid) {
-          editHuman = h;
-          break;
-        }
-      }
+      final workers =
+          await ref.read(humanUseCaseProvider).getWorkersByHids([item.whid!]);
+      if (workers.isNotEmpty) editHuman = workers.first;
     } catch (_) {}
   }
   final workerSkills = workerSkillRoleSuggestions(
@@ -413,150 +376,187 @@ Future<void> _showEditPendingWorkCostDialog(
           final displayName = item.hname?.trim();
           final cs = Theme.of(ctx).colorScheme;
           final tt = Theme.of(ctx).textTheme;
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            titlePadding: ResponsiveLayout.only(ctx, left: 20, top: 18, right: 20),
-            contentPadding: ResponsiveLayout.only(ctx, left: 20, top: 12, right: 20, bottom: 8),
-            actionsPadding: ResponsiveLayout.only(ctx, left: 12, right: 12, bottom: 12),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName?.isNotEmpty == true ? displayName! : '항목 수정',
-                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          final selectedDay = DateTime.tryParse(item.wdate) ??
+              ref.read(addCostProvider).selectDay;
+          final dateOnly =
+              DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
+          return Dialog(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(ctx.rs(14)),
+                color: cs.surface,
+                border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.45)),
+              ),
+              child: Padding(
+                padding: ResponsiveLayout.only(
+                  ctx,
+                  left: 16,
+                  top: 14,
+                  right: 16,
+                  bottom: 12,
                 ),
-                rsV(ctx, 2),
-                Text(
-                  '오늘 한 일과 금액을 입력하세요',
-                  style: tt.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant,
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: KeyboardAwareScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          displayName?.isNotEmpty == true
+                              ? displayName!
+                              : '인건비 항목 수정',
+                          style: tt.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        rsV(ctx, 2),
+                        Text(
+                          '날짜는 연동 안정성을 위해 변경할 수 없습니다.',
+                          style: tt.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        rsV(ctx, 10),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerLowest,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: cs.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          padding: ResponsiveLayout.all(ctx, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                formatDateTimeWeekDayToString(dateOnly),
+                                style: tt.labelLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              rsV(ctx, 6),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        AppInsetCard(
+                          padding: ResponsiveLayout.all(ctx, 12),
+                          child: WorkRoleChipPanel(
+                            dense: true,
+                            showApplyHint: false,
+                            selectedWorkRole: dialogRole,
+                            processTasks: processTasks,
+                            workerSkills: workerSkills,
+                            processTasksLoading: addState.processTasksLoading,
+                            customRoleController: customRoleController,
+                            onSelectRole: (role) => setLocal(() {
+                              dialogRole = role;
+                              if (role != '직접입력') {
+                                customRoleController.clear();
+                              }
+                            }),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        AppTextField(
+                          scrollPadding: keyboardScrollPadding(ctx),
+                          controller: nameController,
+                          decoration: InputDecoration(
+                            labelText: '이름',
+                            isDense: true,
+                            filled: true,
+                            fillColor: cs.surface,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        AppTextField(
+                          controller: priceController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.right,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            priceFormatter,
+                            LengthLimitingTextInputFormatter(13),
+                          ],
+                          decoration: InputDecoration(
+                            labelText: '금액',
+                            isDense: true,
+                            filled: true,
+                            fillColor: cs.surface,
+                            suffixText: '원',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: const Text('취소'),
+                              ),
+                            ),
+                            SizedBox(width: ctx.rsi(8)),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () {
+                                  final name = nameController.text.trim();
+                                  if (name.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text('이름을 입력해 주세요.')),
+                                    );
+                                    return;
+                                  }
+                                  final priceStr = priceController.text
+                                      .trim()
+                                      .replaceAll(RegExp(r'[,원\s]'), '');
+                                  final price = int.tryParse(priceStr);
+                                  if (price == null || price < 0) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text('올바른 금액을 입력해 주세요.')),
+                                    );
+                                    return;
+                                  }
+
+                                  String wrole;
+                                  if (dialogRole == null) {
+                                    wrole = '';
+                                  } else if (dialogRole == '직접입력') {
+                                    wrole = customRoleController.text.trim();
+                                  } else {
+                                    wrole = dialogRole!;
+                                  }
+
+                                  vm.updateWorkCostAt(
+                                    originalIndex,
+                                    item.copyWith(
+                                      hname: name,
+                                      wprice: price,
+                                      wrole: wrole,
+                                    ),
+                                  );
+                                  Navigator.of(ctx).pop();
+                                },
+                                child: const Text('수정 저장'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: KeyboardAwareScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: cs.outlineVariant.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Padding(
-                        padding: ResponsiveLayout.all(ctx, 12),
-                        child: WorkRoleChipPanel(
-                          dense: true,
-                          showApplyHint: false,
-                          selectedWorkRole: dialogRole,
-                          processTasks: processTasks,
-                          workerSkills: workerSkills,
-                          processTasksLoading: addState.processTasksLoading,
-                          customRoleController: customRoleController,
-                          onSelectRole: (role) => setLocal(() {
-                            dialogRole = role;
-                            if (role != '직접입력') {
-                              customRoleController.clear();
-                            }
-                          }),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      scrollPadding: keyboardScrollPadding(ctx),
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        labelText: '이름',
-                        isDense: true,
-                        filled: true,
-                        fillColor: cs.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: priceController,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.right,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        priceFormatter,
-                        LengthLimitingTextInputFormatter(13),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: '금액',
-                        isDense: true,
-                        filled: true,
-                        fillColor: cs.surface,
-                        suffixText: '원',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('취소'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final name = nameController.text.trim();
-                  if (name.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('이름을 입력해 주세요.')),
-                    );
-                    return;
-                  }
-                  var priceStr = priceController.text
-                      .trim()
-                      .replaceAll(RegExp(r'[,원\s]'), '');
-                  final price = int.tryParse(priceStr);
-                  if (price == null || price < 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('올바른 금액을 입력해 주세요.')),
-                    );
-                    return;
-                  }
-
-                  String wrole;
-                  if (dialogRole == null) {
-                    wrole = '';
-                  } else if (dialogRole == '직접입력') {
-                    wrole = customRoleController.text.trim();
-                  } else {
-                    wrole = dialogRole!;
-                  }
-
-                  vm.updateWorkCostAt(
-                    originalIndex,
-                    item.copyWith(
-                      hname: name,
-                      wprice: price,
-                      wrole: wrole,
-                    ),
-                  );
-                  Navigator.of(ctx).pop();
-                },
-                child: const Text('저장'),
-              ),
-            ],
           );
         },
       );
@@ -586,17 +586,8 @@ class WorkCostProfileCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      color: cs.surfaceContainerLowest.withValues(alpha: 0.9),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.rs(10)),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: 0.38),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return AppInsetTile(
+      borderRadius: BorderRadius.circular(context.rs(10)),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -612,62 +603,74 @@ class WorkCostProfileCard extends StatelessWidget {
                     context.rsi(6),
                     context.rsi(6),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: tt.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                          height: 1.1,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: constraints.maxWidth,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
+                                style: tt.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                  height: 1.12,
+                                ),
+                              ),
+                              SizedBox(height: context.rsi(2)),
+                              Text(
+                                item.wrole.isEmpty ? '오늘 한 일 입력' : item.wrole,
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
+                                style: tt.labelSmall?.copyWith(
+                                  fontSize: context.rs(10),
+                                  fontWeight: item.wrole.isEmpty
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: item.wrole.isEmpty
+                                      ? cs.primary
+                                      : cs.onSurfaceVariant,
+                                  height: 1.15,
+                                ),
+                              ),
+                              SizedBox(height: context.rsi(3)),
+                              Text(
+                                getPrice(price: item.wprice),
+                                maxLines: 1,
+                                textAlign: TextAlign.center,
+                                style: tt.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.05,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      SizedBox(height: context.rsi(2)),
-                      Text(
-                        item.wrole.isEmpty ? '오늘 한 일 입력' : item.wrole,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: tt.labelSmall?.copyWith(
-                          fontSize: context.rs(10.5),
-                          fontWeight: item.wrole.isEmpty
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          color: item.wrole.isEmpty
-                              ? cs.primary
-                              : cs.onSurfaceVariant,
-                          height: 1.1,
-                        ),
-                      ),
-                      SizedBox(height: context.rsi(4)),
-                      Text(
-                        getPrice(price: item.wprice),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: tt.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.1,
-                        ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
           ),
           Positioned(
-            top: -6,
-            right: -6,
+            top: 0,
+            right: 0,
             child: IconButton(
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-              iconSize: 13,
+              constraints: BoxConstraints(
+                minWidth: context.rsi(22),
+                minHeight: context.rsi(22),
+              ),
+              iconSize: context.rsi(15),
               onPressed: onDelete,
               icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
             ),
@@ -687,7 +690,14 @@ Widget humanDropdownSearch(BuildContext context, WidgetRef ref) {
   return SizedBox(
     height: context.rs(48),
     child: DropdownSearch<HumanModel>.multiSelection(
-      asyncItems: (text) => ref.read(humanUseCaseProvider).getAllWorkers(),
+      asyncItems: (text) {
+        final q = text.trim();
+        final uc = ref.read(humanUseCaseProvider);
+        if (q.isEmpty) {
+          return uc.getAllWorkers();
+        }
+        return uc.searchWorkers(q: q);
+      },
       itemAsString: (item) => item.hname,
       compareFn: (a, b) => a.hid != null && b.hid != null && a.hid == b.hid,
       onChanged: (values) async {

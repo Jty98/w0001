@@ -73,34 +73,46 @@ class _MemberQueueScreenState extends ConsumerState<MemberQueueScreen> {
           title: const Text('회원 관리'),
         ),
         body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: () => reloadProfileSuperAdminMembers(ref),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                context.rsi(16),
-                context.rsi(8),
-                context.rsi(16),
-                context.rsi(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.rsi(16),
+                  context.rsi(8),
+                  context.rsi(16),
+                  0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '처리 필요',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    SizedBox(height: context.rsi(4)),
+                    Text(
+                      '가입 승인 대기·정지·거절 계정을 처리합니다.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    SizedBox(height: context.rsi(12)),
+                  ],
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '처리 필요',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    context.rsi(16),
+                    0,
+                    context.rsi(16),
+                    context.rsi(24),
                   ),
-                  SizedBox(height: context.rsi(4)),
-                  Text(
-                    '가입 승인 대기·정지·거절 계정을 처리합니다.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                  SizedBox(height: context.rsi(12)),
-                  ProfileInsetPanel(
+                  child: ProfileInsetPanel(
                     padding: EdgeInsets.fromLTRB(
                       context.rsi(12),
                       context.rsi(12),
@@ -111,11 +123,13 @@ class _MemberQueueScreenState extends ConsumerState<MemberQueueScreen> {
                       searchController: _searchController,
                       debounceHolder: _debounceHolder,
                       initialSection: 0,
+                      expandBody: true,
+                      onRefresh: () => reloadProfileSuperAdminMembers(ref),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

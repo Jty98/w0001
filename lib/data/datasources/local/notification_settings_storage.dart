@@ -18,7 +18,7 @@ class NotificationSettingsStorage {
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString(_key);
-      
+
       if (json == null) {
         // 저장된 데이터 없음 - 기본값 반환
         return NotificationSettings.initial();

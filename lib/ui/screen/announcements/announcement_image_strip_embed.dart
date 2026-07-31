@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'package:w0001/ui/screen/announcements/worker_announcement_quill_codec.dart';
 import 'package:w0001/ui/widget/network_image_viewer_sheet.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
@@ -27,8 +29,10 @@ abstract final class AnnouncementImageStripEmbed {
     required List<String> urls,
     AnnouncementImageStripMode mode = AnnouncementImageStripMode.grid,
   }) {
-    final trimmed =
-        urls.map((e) => e.trim()).where((e) => e.isNotEmpty).toList(growable: false);
+    final trimmed = urls
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
     return BlockEmbed(
       type,
       jsonEncode(<String, Object?>{
@@ -255,7 +259,6 @@ class _CollageThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final u = _announcementNormalizeImageUrl(url);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -271,8 +274,8 @@ class _CollageThumb extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Image.network(
-                  u,
+                announcementEmbedImage(
+                  url,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
@@ -296,10 +299,11 @@ class _CollageThumb extends StatelessWidget {
                     child: Center(
                       child: Text(
                         overlayLabel!,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
                       ),
                     ),
                   ),
@@ -318,4 +322,28 @@ String _announcementNormalizeImageUrl(String url) {
     if (parts.length > 1) return parts[1];
   }
   return url;
+}
+
+/// Quill 단일 이미지·콜라주 썸네일 — 로컬 파일과 원격 URL 모두 표시.
+Widget announcementEmbedImage(
+  String url, {
+  BoxFit fit = BoxFit.cover,
+  ImageLoadingBuilder? loadingBuilder,
+  ImageErrorWidgetBuilder? errorBuilder,
+}) {
+  if (WorkerAnnouncementQuillCodec.isLocalImageRef(url)) {
+    final path = WorkerAnnouncementQuillCodec.localPathFromRef(url);
+    return Image.file(
+      File(path),
+      fit: fit,
+      errorBuilder: errorBuilder,
+    );
+  }
+  final u = _announcementNormalizeImageUrl(url);
+  return Image.network(
+    u,
+    fit: fit,
+    loadingBuilder: loadingBuilder,
+    errorBuilder: errorBuilder,
+  );
 }

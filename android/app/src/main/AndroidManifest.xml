@@ -1,6 +1,7 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.w0001">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
@@ -59,9 +60,9 @@
             android:label="@string/schedule_widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.w0001.widget.SHIFT_WEEK" />
-                <action android:name="com.example.w0001.widget.RESET_WEEK" />
-                <action android:name="com.example.w0001.widget.TOGGLE_DONE" />
+                <action android:name="com.example.interior_work_cost_app.widget.SHIFT_WEEK" />
+                <action android:name="com.example.interior_work_cost_app.widget.RESET_WEEK" />
+                <action android:name="com.example.interior_work_cost_app.widget.TOGGLE_DONE" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/schedule_widget_info" />
@@ -90,5 +91,24 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="kakaonavi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="kakaonavi-sdk" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="kakaomap" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tmap" />
+        </intent>
+        <package android:name="com.locnall.KimGiSa" />
+        <package android:name="net.daum.android.map" />
+        <package android:name="com.skt.tmap.ku" />
     </queries>
 </manifest>

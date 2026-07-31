@@ -1,5 +1,9 @@
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/model/paged_result.dart';
+import 'package:w0001/data/model/place_work_day_instruction_layers.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
+import 'package:w0001/data/model/worker_announcement_models.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
 
 /// `super_admin` CRUD — [SuperAdminRemoteRepository] 를 그대로 노출.
@@ -11,7 +15,6 @@ class SuperAdminRemoteUseCase {
   SuperAdminRemoteRepository get repository => _repository;
 
   // Users
-  Future<List<UserRead>> usersList() => _repository.usersList();
   Future<UserRead> userGet(String uid) => _repository.userGet(uid);
   Future<UserRead> userCreate(UserCreateBody body) =>
       _repository.userCreate(body);
@@ -21,6 +24,12 @@ class SuperAdminRemoteUseCase {
 
   Future<List<UserRead>> usersPendingList({String? q}) =>
       _repository.usersPendingList(q: q);
+  Future<PagedResult<UserRead>> usersPendingPage({
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _repository.usersPendingPage(q: q, limit: limit, cursor: cursor);
   Future<List<UserRead>> usersSearch({
     String? role,
     String? approvalStatus,
@@ -32,6 +41,22 @@ class SuperAdminRemoteUseCase {
         approvalStatus: approvalStatus,
         isActive: isActive,
         q: q,
+      );
+  Future<PagedResult<UserRead>> usersSearchPage({
+    String? role,
+    String? approvalStatus,
+    bool? isActive,
+    String? q,
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _repository.usersSearchPage(
+        role: role,
+        approvalStatus: approvalStatus,
+        isActive: isActive,
+        q: q,
+        limit: limit,
+        cursor: cursor,
       );
   Future<void> userApprove(String uid, {String? note}) =>
       _repository.userApprove(uid, note: note);
@@ -66,6 +91,10 @@ class SuperAdminRemoteUseCase {
 
   // Humans
   Future<List<HumanRead>> humansList() => _repository.humansList();
+  Future<List<HumanRead>> humansQuery(ListQuery query) =>
+      _repository.humansQuery(query);
+  Future<PagedResult<HumanRead>> humansQueryPage(ListQuery query) =>
+      _repository.humansQueryPage(query);
   Future<HumanRead> humanGet(int hid) => _repository.humanGet(hid);
   Future<HumanRead> humanCreate(Map<String, dynamic> body) =>
       _repository.humanCreate(body);
@@ -76,6 +105,8 @@ class SuperAdminRemoteUseCase {
   // Place work days
   Future<List<PlaceWorkDayRead>> placeWorkDaysList() =>
       _repository.placeWorkDaysList();
+  Future<List<PlaceWorkDayRead>> placeWorkDaysQuery(ListQuery query) =>
+      _repository.placeWorkDaysQuery(query);
   Future<PlaceWorkDayRead> placeWorkDayGet(int pwdid) =>
       _repository.placeWorkDayGet(pwdid);
   Future<PlaceWorkDayRead> placeWorkDayCreate(Map<String, dynamic> body) =>
@@ -88,8 +119,40 @@ class SuperAdminRemoteUseCase {
   Future<void> placeWorkDayDelete(int pwdid) =>
       _repository.placeWorkDayDelete(pwdid);
 
+  Future<PlaceWorkDayInstructionBundle> placeWorkDayInstructionBundle({
+    required int pid,
+    required String workdate,
+  }) =>
+      _repository.placeWorkDayInstructionBundle(pid: pid, workdate: workdate);
+
+  Future<void> placeWorkDaySiteInstructionUpsert({
+    required int pid,
+    required String workdate,
+    required List<WorkerAnnouncementBlock> blocks,
+  }) =>
+      _repository.placeWorkDaySiteInstructionUpsert(
+        pid: pid,
+        workdate: workdate,
+        blocks: blocks,
+      );
+
+  Future<void> placeWorkDayProcessInstructionUpsert({
+    required int pid,
+    required String workdate,
+    required String workrole,
+    required List<WorkerAnnouncementBlock> blocks,
+  }) =>
+      _repository.placeWorkDayProcessInstructionUpsert(
+        pid: pid,
+        workdate: workdate,
+        workrole: workrole,
+        blocks: blocks,
+      );
+
   // Work costs
   Future<List<WorkCostRead>> workCostsList() => _repository.workCostsList();
+  Future<List<WorkCostRead>> workCostsQuery(ListQuery query) =>
+      _repository.workCostsQuery(query);
   Future<WorkCostRead> workCostGet(int wid) => _repository.workCostGet(wid);
   Future<WorkCostRead> workCostCreate(Map<String, dynamic> body) =>
       _repository.workCostCreate(body);
@@ -100,6 +163,8 @@ class SuperAdminRemoteUseCase {
   // Material costs
   Future<List<MaterialCostRead>> materialCostsList() =>
       _repository.materialCostsList();
+  Future<List<MaterialCostRead>> materialCostsQuery(ListQuery query) =>
+      _repository.materialCostsQuery(query);
   Future<MaterialCostRead> materialCostGet(int mid) =>
       _repository.materialCostGet(mid);
   Future<MaterialCostRead> materialCostCreate(Map<String, dynamic> body) =>
@@ -123,22 +188,6 @@ class SuperAdminRemoteUseCase {
   Future<void> placeRevenueDelete(int rid) =>
       _repository.placeRevenueDelete(rid);
 
-  // Place collections
-  Future<List<PlaceCollectionRead>> placeCollectionsList() =>
-      _repository.placeCollectionsList();
-  Future<PlaceCollectionRead> placeCollectionGet(int cid) =>
-      _repository.placeCollectionGet(cid);
-  Future<PlaceCollectionRead> placeCollectionCreate(
-          Map<String, dynamic> body) =>
-      _repository.placeCollectionCreate(body);
-  Future<PlaceCollectionRead> placeCollectionPatch(
-    int cid,
-    Map<String, dynamic> body,
-  ) =>
-      _repository.placeCollectionPatch(cid, body);
-  Future<void> placeCollectionDelete(int cid) =>
-      _repository.placeCollectionDelete(cid);
-
   // Place worker recents
   Future<List<PlaceWorkerRecentRead>> placeWorkerRecentsList() =>
       _repository.placeWorkerRecentsList();
@@ -160,6 +209,12 @@ class SuperAdminRemoteUseCase {
   // Schedule memos
   Future<List<ScheduleMemoRead>> scheduleMemosList() =>
       _repository.scheduleMemosList();
+  Future<List<ScheduleMemoRead>> scheduleMemosQuery(ListQuery query) =>
+      _repository.scheduleMemosQuery(query);
+  Future<PagedResult<ScheduleMemoRead>> scheduleMemosQueryPage(
+    ListQuery query,
+  ) =>
+      _repository.scheduleMemosQueryPage(query);
   Future<ScheduleMemoRead> scheduleMemoGet(int sid) =>
       _repository.scheduleMemoGet(sid);
   Future<ScheduleMemoRead> scheduleMemoCreate(Map<String, dynamic> body) =>
@@ -199,6 +254,12 @@ class SuperAdminRemoteUseCase {
 
   Future<List<WorkerMgmtNoteRead>> workerMgmtNotesList(int workerHid) =>
       _repository.workerMgmtNotesList(workerHid);
+  Future<PagedResult<WorkerMgmtNoteRead>> workerMgmtNotesPage(
+    int workerHid, {
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _repository.workerMgmtNotesPage(workerHid, limit: limit, cursor: cursor);
   Future<WorkerMgmtNoteRead> workerMgmtNoteCreate({
     required int workerHid,
     required String noteType,
@@ -215,6 +276,16 @@ class SuperAdminRemoteUseCase {
     bool activeOnly = true,
   }) =>
       _repository.workerMgmtConflictsList(activeOnly: activeOnly);
+  Future<PagedResult<WorkerMgmtConflictRead>> workerMgmtConflictsPage({
+    bool activeOnly = true,
+    int limit = kListPageSize,
+    String? cursor,
+  }) =>
+      _repository.workerMgmtConflictsPage(
+        activeOnly: activeOnly,
+        limit: limit,
+        cursor: cursor,
+      );
   Future<WorkerMgmtConflictRead> workerMgmtConflictUpsert({
     required int workerAHid,
     required int workerBHid,

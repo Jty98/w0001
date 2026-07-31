@@ -43,11 +43,14 @@ class DashboardChartMetrics {
   double get _baselineAxisFont {
     final estPlot = math.max(
       48,
-      _safeWidth - _estimateLeftReserved(minAxisFont) - _estimateRightReserved(minAxisFont),
+      _safeWidth -
+          _estimateLeftReserved(minAxisFont) -
+          _estimateRightReserved(minAxisFont),
     );
     final fromSlot = (estPlot / _n) * 0.38;
     final fromHeight = _safeHeight * 0.048;
-    return fromSlot.clamp(minAxisFont, fromHeight.clamp(minAxisFont, maxAxisFont));
+    return fromSlot.clamp(
+        minAxisFont, fromHeight.clamp(minAxisFont, maxAxisFont));
   }
 
   double _estimateLeftReserved(double font) {
@@ -64,8 +67,9 @@ class DashboardChartMetrics {
 
   double get rightReserved => _estimateRightReserved(axisFontSize);
 
-  double get bottomReserved =>
-      _s((math.max(maxBottomLabelChars * axisFontSize * 0.55, axisFontSize * 2.2) + 8)
+  double get bottomReserved => _s(
+      (math.max(maxBottomLabelChars * axisFontSize * 0.55, axisFontSize * 2.2) +
+              8)
           .clamp(20, 34));
 
   double get plotWidth =>
@@ -94,9 +98,8 @@ class DashboardChartMetrics {
     final base = tt.labelSmall ?? const TextStyle();
     return base.copyWith(
       fontSize: axisFontSize,
-      color: emphasis
-          ? cs.onSurface.withValues(alpha: 0.9)
-          : cs.onSurfaceVariant,
+      color:
+          emphasis ? cs.onSurface.withValues(alpha: 0.9) : cs.onSurfaceVariant,
       fontWeight: emphasis ? FontWeight.w700 : weight,
     );
   }

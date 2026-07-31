@@ -50,7 +50,8 @@ String? _firstStringIn(Map<String, dynamic> m, List<String> keys) {
 }
 
 /// FCM·알림함 payload에서 분기용 `type` (snake_case).
-String? fcmResolvedPushType(Map<String, dynamic> data) => _resolvedPushType(data);
+String? fcmResolvedPushType(Map<String, dynamic> data) =>
+    _resolvedPushType(data);
 
 /// 서버·게이트웨이마다 `type` 키 이름이 다를 수 있어 후보를 순서대로 본다.
 String? _resolvedPushType(Map<String, dynamic> data) {
@@ -60,6 +61,11 @@ String? _resolvedPushType(Map<String, dynamic> data) {
     'pushType',
     'message_type',
     'messageType',
+    'event_type',
+    'eventType',
+    'notification_type',
+    'notificationType',
+    'event',
   ];
   for (final k in keyOrder) {
     final raw = _parseString(data[k]);
@@ -90,10 +96,13 @@ String _normalizePushTypeWire(String raw) {
     case 'placeworkdayInstruction':
       return 'placeworkday_instruction';
     case 'accountSignupApproved':
+    case 'account_signup_approved':
       return 'account_signup_approved';
     case 'accountSignupRejected':
+    case 'account_signup_rejected':
       return 'account_signup_rejected';
     case 'accountSuspended':
+    case 'account_suspended':
       return 'account_suspended';
     case 'accountReactivated':
     case 'accountUnsuspended':
@@ -112,6 +121,13 @@ String _normalizePushTypeWire(String raw) {
     case 'placeEndDateReminder':
     case 'place_end_date_reminder':
       return 'place_end_date_reminder';
+    case 'placeMemberInvited':
+    case 'place_member_invited':
+    case 'place_member_invite':
+      return 'place_member_invited';
+    case 'placeMemberAdded':
+    case 'place_member_added':
+      return 'place_member_added';
     default:
       return raw;
   }
@@ -125,10 +141,15 @@ bool _isAccountPushType(String type) {
       type == 'account_permissions_updated';
 }
 
+bool fcmIsAccountPushType(String type) => _isAccountPushType(type);
+
 /// 서버 `notify_user_account_event` 타입과 동일한지 (포그라운드 자동 처리용).
 bool fcmAccountPushShouldAutoOpen(Map<String, dynamic> data) {
   final t = _resolvedPushType(data);
-  return t == 'account_suspended' || t == 'account_signup_rejected';
+  return t == 'account_suspended' ||
+      t == 'account_signup_rejected' ||
+      t == 'account_signup_approved' ||
+      t == 'account_reactivated';
 }
 
 (String, String) _accountDefaultBanner(String type) {
@@ -172,17 +193,16 @@ String? _accountRoleLabel(Map<String, dynamic> data) {
   }
 }
 
-Future<void> _showAccountDialogFromPush(String type, Map<String, dynamic> data) async {
+Future<void> _showAccountDialogFromPush(
+    String type, Map<String, dynamic> data) async {
   final ctx = rootNavigatorKey.currentContext;
   if (ctx == null || !ctx.mounted) return;
   final title = _accountDialogTitle(type, data);
   final body = _accountDialogBody(type, data);
-  final role = type == 'account_permissions_updated'
-      ? _accountRoleLabel(data)
-      : null;
-  final content = role != null && role.isNotEmpty
-      ? '적용 역할: $role\n\n$body'
-      : body;
+  final role =
+      type == 'account_permissions_updated' ? _accountRoleLabel(data) : null;
+  final content =
+      role != null && role.isNotEmpty ? '적용 역할: $role\n\n$body' : body;
   await showDialog<void>(
     context: ctx,
     builder: (c) => AlertDialog(
@@ -200,14 +220,15 @@ Future<void> _showAccountDialogFromPush(String type, Map<String, dynamic> data) 
   );
 }
 
+/// 정지·거절 푸시 수신 시 **로컬 세션만** 정리한다.
+///
+/// `POST /auth/logout` 을 호출하면 서버가 `user_device.is_active=false` 로
+/// 바꿔 재활성화(`account_reactivated`) 푸시가 더 이상 가지 않는다.
+/// 관리자 정지는 `app_user.is_active` 만 바꾸므로 FCM 디바이스는 유지해야 한다.
 Future<void> _forceLocalSignOut(ProviderContainer container) async {
-  try {
-    await container.read(authUseCaseProvider).logout();
-  } catch (e, st) {
-    debugPrint('FCM account: logout API failed: $e\n$st');
-  }
   await AuthTokenStorage.I.clear();
   await PendingPostAuthNavigation.clear();
+  clearAllUserProviders(container);
   container.read(authSessionProvider.notifier).clearSession();
 }
 
@@ -219,7 +240,10 @@ Future<void> _handleAccountPushEvent(
 ) async {
   final router = appBoundGoRouter;
   final pushUid = _firstStringIn(data, ['uid', 'user_id', 'userId']);
-  if (user != null && pushUid != null && pushUid.isNotEmpty && pushUid != user.uid) {
+  if (user != null &&
+      pushUid != null &&
+      pushUid.isNotEmpty &&
+      pushUid != user.uid) {
     debugPrint(
       'FCM account event: uid mismatch (push=$pushUid session=${user.uid})',
     );
@@ -279,8 +303,7 @@ Future<void> _handleAccountPushEvent(
   }
 }
 
-bool _isMountedContext() =>
-    rootNavigatorKey.currentContext?.mounted ?? false;
+bool _isMountedContext() => rootNavigatorKey.currentContext?.mounted ?? false;
 
 /// 하단 탭 **상황판(홈)** 을 연 뒤 한 단계만 쌓아, 뒤로가기 한 번으로 홈으로 돌아오게 한다.
 void _goDashboardThen(void Function(GoRouter router) navigate) {
@@ -419,8 +442,8 @@ Future<void> handleFcmNavigationFromData(
             (r) => r.push('/announcements/view', extra: item),
           );
         } else {
-          final pid = item.pid ??
-              _firstIntIn(data, ['pid', 'place_id', 'placeId']);
+          final pid =
+              item.pid ?? _firstIntIn(data, ['pid', 'place_id', 'placeId']);
           if (pid == null) {
             _goDashboardThen(
               (r) => r.push('/announcements/inbox?filter=place'),

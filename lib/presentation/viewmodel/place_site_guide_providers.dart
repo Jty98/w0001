@@ -58,9 +58,7 @@ final placeSiteGuideRepositoryProvider = Provider<PlaceSiteGuideRepository>(
 );
 
 final placeSiteGuideByPidProvider = NotifierProvider.family<
-    PlaceSiteGuideByPidNotifier,
-    PlaceSiteGuideByPidState,
-    int>(
+    PlaceSiteGuideByPidNotifier, PlaceSiteGuideByPidState, int>(
   PlaceSiteGuideByPidNotifier.new,
 );
 
@@ -75,7 +73,21 @@ class PlaceSiteGuideByPidNotifier extends Notifier<PlaceSiteGuideByPidState> {
   PlaceSiteGuideRepository get _repo =>
       ref.read(placeSiteGuideRepositoryProvider);
 
-  Future<void> load() async {
+  /// 인수인계 데이터 로드
+  ///
+  /// [forceRefresh]: true면 캐시를 무시하고 서버에서 새로 가져옴
+  Future<void> load({bool forceRefresh = false}) async {
+    // ✅ 캐시 확인: 이미 로드했고, 강제 새로고침이 아니면 스킵
+    if (!forceRefresh &&
+        state.hasLoadedOnce &&
+        state.guide != null &&
+        !state.accessDenied) {
+      print('✅ [인수인계] 캐시 사용: PID $pid');
+      return;
+    }
+
+    print('🌐 [인수인계] API 호출 시작: PID $pid (forceRefresh: $forceRefresh)');
+
     final generation = state.loadGeneration + 1;
     state = PlaceSiteGuideByPidState(
       guide: state.guide,
@@ -84,6 +96,7 @@ class PlaceSiteGuideByPidNotifier extends Notifier<PlaceSiteGuideByPidState> {
       hasLoadedOnce: state.hasLoadedOnce,
       accessDenied: false,
     );
+
     try {
       final fetched = await _repo.fetch(pid);
       state = PlaceSiteGuideByPidState(
@@ -92,7 +105,9 @@ class PlaceSiteGuideByPidNotifier extends Notifier<PlaceSiteGuideByPidState> {
         loadGeneration: generation,
         hasLoadedOnce: true,
       );
+      print('✅ [인수인계] 로드 완료: PID $pid, 데이터 ${fetched != null ? "있음" : "없음"}');
     } catch (e) {
+      print('❌ [인수인계] 로드 실패: PID $pid, 에러: $e');
       final msg = placeSiteGuideUserMessage(
         e,
         fallback: '인수인계를 불러오지 못했습니다.',

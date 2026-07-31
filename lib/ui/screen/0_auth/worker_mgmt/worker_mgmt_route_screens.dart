@@ -1,18 +1,21 @@
-import 'dart:async' show unawaited;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
-import 'package:w0001/util/worker_skills_display.dart';
 import 'package:w0001/domain/use_case/super_admin_remote_use_case.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/worker_mgmt_view_model.dart';
+import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_theme_colors.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/screen/0_auth/worker_mgmt/worker_mgmt_hid_content.dart';
-import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
+import 'package:w0001/ui/widget/human_picker/human_search_pick_sheet.dart';
+import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:w0001/util/worker_mgmt_messages.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 인력 목록에서 작업자 hid를 고른 뒤 메모·평가 화면으로 이동하는 허브.
 class WorkerMgmtMemosHubScreen extends ConsumerStatefulWidget {
@@ -26,15 +29,32 @@ class WorkerMgmtMemosHubScreen extends ConsumerStatefulWidget {
 class _WorkerMgmtMemosHubScreenState
     extends ConsumerState<WorkerMgmtMemosHubScreen> {
   final _search = TextEditingController();
+  late final ScrollController _scroll;
 
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {}));
+    _scroll = ScrollController()..addListener(_onScroll);
+    _search.addListener(_onSearchChanged);
+  }
+
+  void _onScroll() {
+    onPagedScrollNearEnd(
+      _scroll,
+      onLoadMore: () =>
+          ref.read(workerMgmtHumanDirectoryProvider.notifier).loadMore(),
+    );
+  }
+
+  void _onSearchChanged() {
+    ref
+        .read(workerMgmtHumanDirectoryProvider.notifier)
+        .setSearchQuery(_search.text);
   }
 
   @override
   void dispose() {
+    _scroll.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -56,36 +76,18 @@ class _WorkerMgmtMemosHubScreenState
         hdelete: h.hdelete,
       );
 
-  String _avatarLetter(String name) {
-    final t = name.trim();
-    if (t.isEmpty) return '?';
-    final it = t.runes.iterator;
-    return it.moveNext() ? String.fromCharCode(it.current) : '?';
-  }
-
   @override
   Widget build(BuildContext context) {
     final dir = ref.watch(workerMgmtHumanDirectoryProvider);
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final sortedHumans = dir.humans.where((h) => h.hdelete == 0).toList()
-      ..sort((a, b) => a.hname.compareTo(b.hname));
-    final q = _search.text.trim().toLowerCase();
-    final filtered = q.isEmpty
-        ? sortedHumans
-        : sortedHumans
-            .where(
-              (h) =>
-                  h.hname.toLowerCase().contains(q) ||
-                  h.hnumber.toLowerCase().contains(q),
-            )
-            .toList();
+    final humans = dir.humans;
+    final hasSearch = dir.searchQuery.trim().isNotEmpty;
 
     final blockingLoading =
         dir.initialLoading && dir.humans.isEmpty && dir.error == null;
 
     return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
       appBar: AppBar(
         centerTitle: false,
         title: const Text('작업자 평가/메모'),
@@ -100,16 +102,16 @@ class _WorkerMgmtMemosHubScreenState
               context.rsi(20),
               context.rsi(12),
             ),
-            child: TextField(
+            child: AppTextField(
               controller: _search,
               decoration: InputDecoration(
                 prefixIcon: Icon(
                   Icons.search_rounded,
                   color: cs.onSurfaceVariant,
                 ),
-                hintText: '이름 또는 주민번호로 검색',
+                hintText: '이름으로 검색',
                 filled: true,
-                fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                fillColor: cs.appMutedFill,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: context.rsi(18),
                   vertical: context.rsi(14),
@@ -163,7 +165,7 @@ class _WorkerMgmtMemosHubScreenState
                       ),
                     ),
                   )
-                : dir.error != null && sortedHumans.isEmpty
+                : dir.error != null && humans.isEmpty
                     ? Center(
                         child: Padding(
                           padding: EdgeInsets.all(context.rsi(28)),
@@ -192,10 +194,10 @@ class _WorkerMgmtMemosHubScreenState
                           ),
                         ),
                       )
-                    : RefreshIndicator(
+                    : AppRefreshIndicator(
                         onRefresh: _reloadHumans,
                         color: cs.primary,
-                        child: filtered.isEmpty
+                        child: humans.isEmpty
                             ? ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 children: [
@@ -211,7 +213,9 @@ class _WorkerMgmtMemosHubScreenState
                                   SizedBox(height: context.rsi(12)),
                                   Center(
                                     child: Text(
-                                      '조건에 맞는 인력이 없습니다.',
+                                      hasSearch
+                                          ? '조건에 맞는 인력이 없습니다.'
+                                          : '등록된 인력이 없습니다.',
                                       style: tt.bodyLarge?.copyWith(
                                         color: cs.onSurfaceVariant,
                                       ),
@@ -220,6 +224,7 @@ class _WorkerMgmtMemosHubScreenState
                                 ],
                               )
                             : ListView.builder(
+                                controller: _scroll,
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: EdgeInsets.fromLTRB(
                                   context.rsi(20),
@@ -227,90 +232,32 @@ class _WorkerMgmtMemosHubScreenState
                                   context.rsi(20),
                                   context.rsi(28),
                                 ),
-                                itemCount: filtered.length,
+                                itemCount: humans.length + 1,
                                 itemBuilder: (context, i) {
-                                  final h = filtered[i];
-                                  return Padding(
-                                    padding:
-                                        EdgeInsets.only(bottom: context.rsi(12)),
-                                    child: Material(
-                                      color: cs.surface,
-                                      elevation: 0,
-                                      shadowColor: Colors.transparent,
-                                      surfaceTintColor: cs.surfaceTint,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(18),
-                                        side: BorderSide(
-                                          color: cs.outlineVariant
-                                              .withValues(alpha: 0.55),
-                                        ),
-                                      ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: InkWell(
-                                        onTap: () {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (ctx) =>
-                                                  WorkerMgmtWorkerDetailScreen(
-                                                workerHid: h.hid,
-                                                initialName: h.hname,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                        child: Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: context.rsi(16),
-                                            vertical: context.rsi(14),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              CircleAvatar(
-                                                radius: context.rs(24),
-                                                backgroundColor:
-                                                    cs.primaryContainer,
-                                                foregroundColor:
-                                                    cs.onPrimaryContainer,
-                                                child: Text(
-                                                  _avatarLetter(h.hname),
-                                                  style:
-                                                      tt.titleMedium?.copyWith(
-                                                    fontWeight: FontWeight.w800,
-                                                  ),
-                                                ),
-                                              ),
-                                              SizedBox(width: context.rsi(14)),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      h.hname,
-                                                      style: tt.titleSmall
-                                                          ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                      ),
-                                                    ),
-                                                    SizedBox(
-                                                        height: context.rsi(8)),
-                                                    HumanSkillsChipRow(
-                                                      human: _humanModel(h),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              Icon(
-                                                Icons.arrow_forward_ios_rounded,
-                                                size: context.rs(16),
-                                                color: cs.outline,
-                                              ),
-                                            ],
+                                  if (i >= humans.length) {
+                                    return PagedListFooter(
+                                      isLoading: dir.isLoadingMore,
+                                      hasMore: dir.hasMore && !dir.fullyLoaded,
+                                    );
+                                  }
+                                  final h = humans[i];
+                                  return HumanPickPersonTile(
+                                    name: h.hname,
+                                    human: _humanModel(h),
+                                    showRrn: false,
+                                    selected: false,
+                                    multi: false,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (ctx) =>
+                                              WorkerMgmtWorkerDetailScreen(
+                                            workerHid: h.hid,
+                                            initialName: h.hname,
                                           ),
                                         ),
-                                      ),
-                                    ),
+                                      );
+                                    },
                                   );
                                 },
                               ),
@@ -340,10 +287,20 @@ class WorkerMgmtWorkerDetailScreen extends ConsumerStatefulWidget {
 
 class _WorkerMgmtWorkerDetailScreenState
     extends ConsumerState<WorkerMgmtWorkerDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref
+          .read(workerMgmtHumanDirectoryProvider.notifier)
+          .loadAllHumans(blocking: false);
+    });
+  }
+
   Future<void> _refreshAll() async {
     await ref
         .read(workerMgmtHumanDirectoryProvider.notifier)
-        .reload(blocking: false);
+        .loadAllHumans(blocking: false);
     await ref
         .read(workerMgmtHidVmProvider(widget.workerHid).notifier)
         .reload(silent: true);
@@ -358,7 +315,6 @@ class _WorkerMgmtWorkerDetailScreenState
         : '작업자';
 
     return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
       appBar: AppBar(
         title: const Text('메모 · 평가'),
       ),
@@ -366,7 +322,7 @@ class _WorkerMgmtWorkerDetailScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: RefreshIndicator(
+            child: AppRefreshIndicator(
               color: cs.primary,
               onRefresh: _refreshAll,
               child: SingleChildScrollView(
@@ -380,75 +336,54 @@ class _WorkerMgmtWorkerDetailScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            cs.primaryContainer.withValues(alpha: 0.85),
-                            cs.secondaryContainer.withValues(alpha: 0.35),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: cs.shadow.withValues(alpha: 0.08),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+                    AppInsetCard(
+                      padding: EdgeInsets.fromLTRB(
+                        context.rsi(22),
+                        context.rsi(22),
+                        context.rsi(22),
+                        context.rsi(24),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: context.rs(28),
+                            backgroundColor:
+                                cs.primaryContainer.withValues(alpha: 0.45),
+                            foregroundColor: cs.onPrimaryContainer,
+                            child: Text(
+                              displayName.runes.isEmpty
+                                  ? '?'
+                                  : String.fromCharCode(
+                                      displayName.runes.first,
+                                    ),
+                              style: tt.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: tt.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '관리 메모 · 평가 · 트러블 인력',
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          context.rsi(22),
-                          context.rsi(22),
-                          context.rsi(22),
-                          context.rsi(24),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: context.rs(28),
-                              backgroundColor:
-                                  cs.surface.withValues(alpha: 0.92),
-                              foregroundColor: cs.onPrimaryContainer,
-                              child: Text(
-                                displayName.runes.isEmpty
-                                    ? '?'
-                                    : String.fromCharCode(
-                                        displayName.runes.first,
-                                      ),
-                                style: tt.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    displayName,
-                                    style: tt.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                      color: cs.onPrimaryContainer,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '관리 메모 · 평가 · 트러블 인력',
-                                    style: tt.bodySmall?.copyWith(
-                                      color: cs.onPrimaryContainer
-                                          .withValues(alpha: 0.88),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -479,36 +414,144 @@ class WorkerMgmtTroublesHubScreen extends ConsumerStatefulWidget {
 
 class _WorkerMgmtTroublesHubScreenState
     extends ConsumerState<WorkerMgmtTroublesHubScreen> {
+  late final ScrollController _scroll;
   SuperAdminRemoteUseCase get _uc => ref.read(superAdminRemoteUseCaseProvider);
 
-  String _hname(List<HumanRead> humans, int hid) {
-    for (final h in humans) {
-      if (h.hid == hid) return h.hname;
-    }
-    return '알 수 없음';
+  @override
+  void initState() {
+    super.initState();
+    _scroll = ScrollController()..addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    onPagedScrollNearEnd(
+      _scroll,
+      onLoadMore: () =>
+          ref.read(workerMgmtConflictsHubProvider.notifier).loadMore(),
+    );
+  }
+
+  String _hname(int hid, WorkerMgmtConflictsHubState hub) {
+    final resolved = hub.nameByHid[hid];
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final cached =
+        ref.read(workerMgmtHumanDirectoryProvider.notifier).humanByHid(hid);
+    if (cached != null && cached.hname.isNotEmpty) return cached.hname;
+    return hub.initialLoading || hub.refreshing ? '…' : '이름 없음';
   }
 
   Future<void> _reloadConflicts() =>
       ref.read(workerMgmtConflictsHubProvider.notifier).reload(silent: false);
 
-  Future<void> _ensureHumans() async {
-    await ref
-        .read(workerMgmtHumanDirectoryProvider.notifier)
-        .reload(blocking: false);
-  }
+  Future<void> _openAddDialog() async {
+    final aHid = await showHumanHidServerSearchPickSheet(
+      context: context,
+      ref: ref,
+      title: '작업자 A 선택',
+    );
+    if (aHid == null || !mounted) return;
 
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() async {
+    final bHid = await showHumanHidServerSearchPickSheet(
+      context: context,
+      ref: ref,
+      title: '작업자 B 선택',
+      excludeHid: aHid,
+    );
+    if (bHid == null || !mounted) return;
+
+    final noteCtrl = TextEditingController();
+    var severity = 2;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: const Text('트러블 페어 등록'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '작업자 A · B를 선택했습니다. 심각도와 비고를 입력해 주세요.',
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('심각도', style: Theme.of(ctx).textTheme.labelLarge),
+                  Slider(
+                    value: severity.toDouble(),
+                    min: 1,
+                    max: 3,
+                    divisions: 2,
+                    label: '$severity',
+                    onChanged: (v) => setLocal(() => severity = v.round()),
+                  ),
+                  AppTextField(
+                    controller: noteCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: '비고',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('저장'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => noteCtrl.dispose());
+
+    if (ok != true || !mounted) return;
+
+    try {
+      await _uc.workerMgmtConflictUpsert(
+        workerAHid: aHid,
+        workerBHid: bHid,
+        severity: severity,
+        note: noteCtrl.text.trim(),
+        active: true,
+      );
       await ref
-          .read(workerMgmtHumanDirectoryProvider.notifier)
-          .reload(blocking: false);
-    });
+          .read(workerMgmtConflictsHubProvider.notifier)
+          .reload(silent: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('저장했습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(workerMgmtUserMessage(e))),
+        );
+      }
+    }
   }
-
-  Future<void> _setActiveOnly(bool v) =>
-      ref.read(workerMgmtConflictsHubProvider.notifier).setActiveOnly(v);
 
   Future<void> _deleteConflict(WorkerMgmtConflictRead c) async {
     final pid = c.pairId;
@@ -520,9 +563,9 @@ class _WorkerMgmtTroublesHubScreenState
       }
       return;
     }
-    final humans = ref.read(workerMgmtHumanDirectoryProvider).humans;
-    final left = _hname(humans, c.workerAHid);
-    final right = _hname(humans, c.workerBHid);
+    final hub = ref.read(workerMgmtConflictsHubProvider);
+    final left = _hname(c.workerAHid, hub);
+    final right = _hname(c.workerBHid, hub);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -564,167 +607,16 @@ class _WorkerMgmtTroublesHubScreenState
     }
   }
 
-  Future<void> _openAddDialog() async {
-    await _ensureHumans();
-    if (!mounted) return;
-    final humans = ref.read(workerMgmtHumanDirectoryProvider).humans;
-    final activeHumans = humans.where((h) => h.hdelete == 0).toList()
-      ..sort((a, b) => a.hname.compareTo(b.hname));
-    if (activeHumans.length < 2) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('인력이 2명 이상이어야 합니다.')),
-        );
-      }
-      return;
-    }
-
-    HumanRead? a = activeHumans.first;
-    HumanRead? b = activeHumans[1];
-    final noteCtrl = TextEditingController();
-    var severity = 2;
-    var active = true;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: const Text('트러블 페어 등록'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '작업자 A',
-                    style: Theme.of(ctx).textTheme.labelLarge,
-                  ),
-                  DropdownButton<HumanRead>(
-                    isExpanded: true,
-                    value: a,
-                    items: activeHumans
-                        .map(
-                          (h) => DropdownMenuItem(
-                            value: h,
-                            child: Text(h.hname),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setLocal(() => a = v),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '작업자 B',
-                    style: Theme.of(ctx).textTheme.labelLarge,
-                  ),
-                  DropdownButton<HumanRead>(
-                    isExpanded: true,
-                    value: b,
-                    items: activeHumans
-                        .map(
-                          (h) => DropdownMenuItem(
-                            value: h,
-                            child: Text(h.hname),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setLocal(() => b = v),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('심각도', style: Theme.of(ctx).textTheme.labelLarge),
-                  Slider(
-                    value: severity.toDouble(),
-                    min: 1,
-                    max: 3,
-                    divisions: 2,
-                    label: '$severity',
-                    onChanged: (v) => setLocal(() => severity = v.round()),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('활성'),
-                    value: active,
-                    onChanged: (v) => setLocal(() => active = v),
-                  ),
-                  TextField(
-                    controller: noteCtrl,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: '비고',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('취소'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('저장'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => noteCtrl.dispose());
-
-    if (ok != true || !mounted) return;
-    final ha = a;
-    final hb = b;
-    if (ha == null || hb == null || ha.hid == hb.hid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('서로 다른 작업자 두 명을 선택해 주세요.')),
-      );
-      return;
-    }
-
-    try {
-      await _uc.workerMgmtConflictUpsert(
-        workerAHid: ha.hid,
-        workerBHid: hb.hid,
-        severity: severity,
-        note: noteCtrl.text.trim(),
-        active: active,
-      );
-      await ref
-          .read(workerMgmtConflictsHubProvider.notifier)
-          .reload(silent: true);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('저장했습니다.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(workerMgmtUserMessage(e))),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final hub = ref.watch(workerMgmtConflictsHubProvider);
-    final humans = ref.watch(workerMgmtHumanDirectoryProvider).humans;
 
     final blockingHub =
         hub.initialLoading && hub.conflicts.isEmpty && hub.error == null;
 
     return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
       appBar: AppBar(
         centerTitle: false,
         title: const Text('트러블 페어 관리'),
@@ -741,44 +633,6 @@ class _WorkerMgmtTroublesHubScreenState
             padding: EdgeInsets.fromLTRB(
               context.rsi(20),
               context.rsi(12),
-              context.rsi(20),
-              context.rsi(6),
-            ),
-            child: SegmentedButton<bool>(
-              showSelectedIcon: false,
-              style: AppSegmentedButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.rsi(14),
-                  vertical: context.rsi(12),
-                ),
-                visualDensity: VisualDensity.compact,
-                side: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.65),
-                ),
-              ),
-              segments: const [
-                ButtonSegment<bool>(
-                  value: true,
-                  label: Text('활성만'),
-                  icon: Icon(Icons.visibility_rounded, size: 18),
-                ),
-                ButtonSegment<bool>(
-                  value: false,
-                  label: Text('전체'),
-                  icon: Icon(Icons.list_rounded, size: 18),
-                ),
-              ],
-              selected: {hub.activeOnly},
-              onSelectionChanged: (s) {
-                final v = s.first;
-                unawaited(_setActiveOnly(v));
-              },
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.rsi(20),
-              0,
               context.rsi(20),
               context.rsi(8),
             ),
@@ -845,7 +699,7 @@ class _WorkerMgmtTroublesHubScreenState
                           ),
                         ),
                       )
-                    : RefreshIndicator(
+                    : AppRefreshIndicator(
                         color: cs.primary,
                         onRefresh: _reloadConflicts,
                         child: hub.conflicts.isEmpty
@@ -873,6 +727,7 @@ class _WorkerMgmtTroublesHubScreenState
                                 ],
                               )
                             : ListView.builder(
+                                controller: _scroll,
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: EdgeInsets.fromLTRB(
                                   context.rsi(20),
@@ -880,112 +735,76 @@ class _WorkerMgmtTroublesHubScreenState
                                   context.rsi(20),
                                   context.rsi(100),
                                 ),
-                                itemCount: hub.conflicts.length,
+                                itemCount: hub.conflicts.length + 1,
                                 itemBuilder: (context, i) {
+                                  if (i >= hub.conflicts.length) {
+                                    return PagedListFooter(
+                                      isLoading: hub.isLoadingMore,
+                                      hasMore: hub.hasMore,
+                                    );
+                                  }
                                   final c = hub.conflicts[i];
-                                  final left = _hname(humans, c.workerAHid);
-                                  final right = _hname(humans, c.workerBHid);
+                                  final left = _hname(c.workerAHid, hub);
+                                  final right = _hname(c.workerBHid, hub);
                                   return Padding(
-                                    padding:
-                                        EdgeInsets.only(bottom: context.rsi(12)),
-                                    child: Material(
-                                      color: cs.surface,
-                                      elevation: 0,
-                                      surfaceTintColor: cs.surfaceTint,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(18),
-                                        side: BorderSide(
-                                          color: cs.outlineVariant
-                                              .withValues(alpha: 0.55),
-                                        ),
-                                      ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: Padding(
-                                        padding: EdgeInsets.all(context.rsi(16)),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    '$left · $right',
-                                                    style:
-                                                        tt.titleSmall?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (c.pairId != null)
-                                                  IconButton(
-                                                    tooltip: '페어 삭제',
-                                                    icon: Icon(
-                                                      Icons
-                                                          .delete_outline_rounded,
-                                                      color: cs.error,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _deleteConflict(c),
-                                                  ),
-                                                Container(
-                                                  padding: EdgeInsets.symmetric(
-                                                    horizontal: context.rsi(10),
-                                                    vertical: context.rsi(4),
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: c.active
-                                                        ? cs.tertiaryContainer
-                                                            .withValues(
-                                                                alpha: 0.55)
-                                                        : cs.surfaceContainerHighest,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            20),
-                                                  ),
-                                                  child: Text(
-                                                    c.active ? '활성' : '비활성',
-                                                    style: tt.labelMedium
-                                                        ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: c.active
-                                                          ? cs.onTertiaryContainer
-                                                          : cs.onSurfaceVariant,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 10),
-                                            Row(
-                                              children: [
-                                                Text(
-                                                  '심각도',
+                                    padding: EdgeInsets.only(
+                                        bottom: context.rsi(12)),
+                                    child: AppInsetCard(
+                                      padding: EdgeInsets.all(context.rsi(16)),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  '$left · $right',
                                                   style:
-                                                      tt.labelMedium?.copyWith(
-                                                    color: cs.onSurfaceVariant,
+                                                      tt.titleSmall?.copyWith(
+                                                    fontWeight: FontWeight.w800,
                                                   ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                _TroubleSeverityDots(
-                                                  severity: c.severity,
-                                                ),
-                                              ],
-                                            ),
-                                            if (c.note.isNotEmpty) ...[
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                c.note,
-                                                style: tt.bodySmall?.copyWith(
-                                                  color: cs.onSurfaceVariant,
-                                                  height: 1.35,
                                                 ),
                                               ),
+                                              if (c.pairId != null)
+                                                IconButton(
+                                                  tooltip: '페어 삭제',
+                                                  icon: Icon(
+                                                    Icons
+                                                        .delete_outline_rounded,
+                                                    color: cs.error,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _deleteConflict(c),
+                                                ),
                                             ],
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                '심각도',
+                                                style: tt.labelMedium?.copyWith(
+                                                  color: cs.onSurfaceVariant,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              _TroubleSeverityDots(
+                                                severity: c.severity,
+                                              ),
+                                            ],
+                                          ),
+                                          if (c.note.isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              c.note,
+                                              style: tt.bodySmall?.copyWith(
+                                                color: cs.onSurfaceVariant,
+                                                height: 1.35,
+                                              ),
+                                            ),
                                           ],
-                                        ),
+                                        ],
                                       ),
                                     ),
                                   );

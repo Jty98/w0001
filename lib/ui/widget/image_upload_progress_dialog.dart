@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 이미지 업로드·첨부 중 모달 로딩(취소 불가).
@@ -27,7 +29,7 @@ Future<T> runWithImageUploadProgressDialog<T>({
             width: dCtx.rs(280),
             child: Row(
               children: [
-                const CircularProgressIndicator(),
+                const HammerLoadingIndicator(size: 28),
                 SizedBox(width: dCtx.rsi(16)),
                 Expanded(
                   child: Text(
@@ -44,6 +46,7 @@ Future<T> runWithImageUploadProgressDialog<T>({
       ),
     ),
   );
+  await SchedulerBinding.instance.endOfFrame;
 
   try {
     return await body((m) {

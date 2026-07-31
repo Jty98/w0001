@@ -34,7 +34,10 @@ final class AuthApi {
       ApiEndpoint.authRefresh,
       data: refreshRequestBody(refreshToken),
     );
-    return LoginResponse.fromJson(res.data! as Map<String, dynamic>);
+    return LoginResponse.fromJson(
+      res.data! as Map<String, dynamic>,
+      requireRefreshTokenInResponse: true,
+    );
   }
 
   /// GET `/auth/check-uid?uid=` — 가입 전 아이디 사용 가능 여부.
@@ -81,8 +84,8 @@ final class AuthApi {
     );
   }
 
-  /// POST `/auth/signup` — 인증 헤더 없음·토큰 없음
-  Future<void> signup({
+  /// POST `/auth/signup` — JWT + 계정 상태 반환
+  Future<SignupResponse> signup({
     required String uid,
     required String upw,
     required String uname,
@@ -93,7 +96,7 @@ final class AuthApi {
     List<TermAgreementInput>? termsAgreements,
     String? phoneForMatching,
   }) async {
-    await _http.post<dynamic>(
+    final res = await _http.post<dynamic>(
       ApiEndpoint.authSignup,
       data: signupRequestBody(
         uid: uid,
@@ -107,12 +110,29 @@ final class AuthApi {
         phoneForMatching: phoneForMatching,
       ),
     );
+    return SignupResponse.fromJson(
+      _unwrapUserPayload(res.data),
+    );
   }
 
   /// GET `/auth/me` — Bearer access (인터셉터가 붙임)
   Future<UserRead> getMe() async {
     final res = await _http.get<dynamic>(ApiEndpoint.authMe);
-    return UserRead.fromJson(res.data! as Map<String, dynamic>);
+    return UserRead.fromJson(_unwrapUserPayload(res.data));
+  }
+
+  static Map<String, dynamic> _unwrapUserPayload(dynamic data) {
+    if (data is! Map) {
+      throw const FormatException('사용자 정보 응답 형식이 올바르지 않습니다.');
+    }
+    final root = Map<String, dynamic>.from(data);
+    for (final key in ['data', 'user', 'result']) {
+      final wrapped = root[key];
+      if (wrapped is Map) {
+        return Map<String, dynamic>.from(wrapped);
+      }
+    }
+    return root;
   }
 
   /// POST `/auth/logout` — Bearer access + 저장된 refresh_token, 응답 **204**

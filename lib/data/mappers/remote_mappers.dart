@@ -90,10 +90,13 @@ HumanModel humanReadToModel(HumanRead h) {
     primarySpecialty: h.primarySpecialty,
     specialties: h.specialties,
     career: h.career,
+    workerRank: h.workerRank,
     canBePlaceMember: h.canBePlaceMember,
     linkedUserName: h.linkedUserName,
     hphone: h.hphone,
     linkedPhone: h.linkedPhone,
+    linkedUserIsActive: h.linkedUserIsActive,
+    linkedUserApprovalStatus: h.linkedUserApprovalStatus,
     hstar: h.hstar,
     hdelete: h.hdelete,
   );

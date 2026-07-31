@@ -7,6 +7,7 @@ import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/place_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
+import 'package:w0001/presentation/viewmodel/material_name_history_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
     show materialCostUseCaseProvider, workCostUseCaseProvider;
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
@@ -18,6 +19,7 @@ import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/ui/screen/2_add/add_cost_date_picker_dialog.dart';
+import 'package:w0001/domain/data_change_event.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 
@@ -47,6 +49,7 @@ class AddCostState {
     required this.selectedWorker,
     required this.selectedWorkers,
     required this.placeRecentWorkers,
+    required this.placeRecentWorkersLoading,
     required this.selectedCategory,
     required this.isSaving,
     required this.processTasksOnSelectDay,
@@ -71,6 +74,10 @@ class AddCostState {
 
   /// 선택된 현장에서 예전에 투입했던 인원(최근 순, DB).
   final List<HumanModel> placeRecentWorkers;
+
+  /// 현장 작업자 목록 로딩 중 여부
+  final bool placeRecentWorkersLoading;
+
   final String? selectedCategory;
 
   /// 선택 현장·날짜의 공정표에 잡힌 공정 이름.
@@ -96,6 +103,7 @@ class AddCostState {
         selectedWorker: null,
         selectedWorkers: const [],
         placeRecentWorkers: const [],
+        placeRecentWorkersLoading: false,
         selectedCategory: null,
         processTasksOnSelectDay: const [],
         processTasksLoading: false,
@@ -116,6 +124,7 @@ class AddCostState {
     bool clearSelectedWorkers = false,
     List<HumanModel>? placeRecentWorkers,
     bool clearPlaceRecentWorkers = false,
+    bool? placeRecentWorkersLoading,
     String? selectedCategory,
     bool clearSelectedCategory = false,
     List<String>? processTasksOnSelectDay,
@@ -139,6 +148,8 @@ class AddCostState {
       placeRecentWorkers: clearPlaceRecentWorkers
           ? const []
           : (placeRecentWorkers ?? this.placeRecentWorkers),
+      placeRecentWorkersLoading:
+          placeRecentWorkersLoading ?? this.placeRecentWorkersLoading,
       selectedCategory: clearSelectedCategory
           ? null
           : (selectedCategory ?? this.selectedCategory),
@@ -421,48 +432,198 @@ class AddCostViewModel extends Notifier<AddCostState> {
         if (seen.add(id)) orderedHids.add(id);
       }
     }
-    final all = await _humanUseCase.getAllWorkers();
+    final workers = await _humanUseCase.getWorkersByHids(orderedHids);
     final byHid = {
-      for (final h in all)
+      for (final h in workers)
         if (h.hid != null) h.hid!: h
     };
-    final workers = <HumanModel>[];
+    final ordered = <HumanModel>[];
     for (final id in orderedHids) {
       final h = byHid[id];
-      if (h != null) workers.add(h);
+      if (h != null) ordered.add(h);
     }
     state = state.copyWith(
-      selectedWorkers: workers,
-      selectedWorker: workers.isEmpty ? null : workers.last,
-      clearSelectedWorker: workers.isEmpty,
+      selectedWorkers: ordered,
+      selectedWorker: ordered.isEmpty ? null : ordered.last,
+      clearSelectedWorker: ordered.isEmpty,
     );
   }
 
-  Future<void> refreshPlaceRecentWorkers() async {
+  /// 현장 작업자 목록 캐시 (pid → workers)
+  final Map<int, List<HumanModel>> _placeWorkersCache = {};
+
+  /// 현장 작업자 목록 캐시 타임스탬프
+  final Map<int, DateTime> _placeWorkersCacheTime = {};
+
+  /// 캐시 유효 시간 (5분)
+  static const _cacheValidDuration = Duration(minutes: 5);
+
+  /// 현재 진행 중인 API 호출 (중복 방지)
+  final Map<int, Future<List<HumanModel>>> _pendingRequests = {};
+
+  Future<void> refreshPlaceRecentWorkers({bool forceRefresh = false}) async {
+    print('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🔄 [START] refreshPlaceRecentWorkers 시작');
+    print('   - forceRefresh: $forceRefresh');
+
     final pid = state.selectedPlace?.pid;
+    print('   - PID: $pid');
+    print('   - 현장명: ${state.selectedPlace?.pname}');
+
     if (pid == null) {
-      state = state.copyWith(clearPlaceRecentWorkers: true);
+      print('❌ [SKIP] PID가 없어서 종료');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      state = state.copyWith(
+        clearPlaceRecentWorkers: true,
+        placeRecentWorkersLoading: false,
+      );
       return;
     }
-    final hids = await _humanUseCase.getPlaceWorkerRecentHids(pid);
-    final all = await _humanUseCase.getAllWorkers();
-    final byHid = {
-      for (final h in all)
-        if (h.hid != null) h.hid!: h
-    };
-    final list = <HumanModel>[];
-    for (final id in hids) {
-      final h = byHid[id];
-      if (h != null) list.add(h);
+
+    // 캐시 확인 (강제 새로고침이 아닐 때만)
+    if (!forceRefresh) {
+      final cached = _placeWorkersCache[pid];
+      final cacheTime = _placeWorkersCacheTime[pid];
+      final cacheAge = cacheTime != null
+          ? DateTime.now().difference(cacheTime).inSeconds
+          : null;
+
+      print('🔍 [CACHE] 캐시 확인 중...');
+      print('   - 캐시 존재: ${cached != null}');
+      print('   - 캐시 시간: ${cacheTime?.toIso8601String() ?? "없음"}');
+      print('   - 캐시 나이: ${cacheAge}초');
+      print(
+          '   - 캐시 유효: ${cacheAge != null && cacheAge < _cacheValidDuration.inSeconds}');
+
+      if (cached != null &&
+          cacheTime != null &&
+          DateTime.now().difference(cacheTime) < _cacheValidDuration) {
+        print('✅ [CACHE HIT] 캐시에서 로드 (${cached.length}명)');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        state = state.copyWith(
+          placeRecentWorkers: cached,
+          placeRecentWorkersLoading: false,
+        );
+        return;
+      } else {
+        print('⚠️ [CACHE MISS] 캐시 없거나 만료됨 - API 호출 필요');
+      }
+    } else {
+      print('🔄 [FORCE REFRESH] 강제 새로고침 - 캐시 무시');
     }
-    state = state.copyWith(placeRecentWorkers: list);
+
+    // 로딩 시작
+    final startTime = DateTime.now();
+    print('\n⏱️ [API CALL] 작업자 목록 조회 시작');
+    print('   - 호출 스택 추적을 위해 타임스탬프: ${DateTime.now().toIso8601String()}');
+
+    final stateUpdateStart1 = DateTime.now();
+    state = state.copyWith(placeRecentWorkersLoading: true);
+    final stateUpdateDuration1 =
+        DateTime.now().difference(stateUpdateStart1).inMilliseconds;
+    print('   - 로딩 상태 설정: ${stateUpdateDuration1}ms');
+
+    try {
+      // 중복 호출 방지: 이미 진행 중인 요청이 있으면 기다림
+      final pendingRequest = _pendingRequests[pid];
+      if (pendingRequest != null) {
+        print('⏳ [PENDING] 이미 진행 중인 요청이 있음 - 기다림');
+        final workers = await pendingRequest;
+        print('✅ [PENDING] 진행 중이던 요청 완료: ${workers.length}명');
+        state = state.copyWith(
+          placeRecentWorkers: workers,
+          placeRecentWorkersLoading: false,
+        );
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        return;
+      }
+
+      // 통합 API 사용 (서버에서 최적화된 쿼리로 한 번에 조회)
+      print('\n📞 [USE CASE] _humanUseCase.getPlaceRecentWorkers 호출');
+      print('   - PID: $pid');
+      print('   - Limit: 30');
+
+      final apiStartTime = DateTime.now();
+
+      // 요청 시작 - 중복 방지를 위해 Future 저장
+      final requestFuture = _humanUseCase.getPlaceRecentWorkers(pid, limit: 30);
+      _pendingRequests[pid] = requestFuture;
+
+      final workers = await requestFuture;
+      final apiEndTime = DateTime.now();
+
+      // 요청 완료 - pending 제거
+      _pendingRequests.remove(pid);
+      final apiDuration = apiEndTime.difference(apiStartTime).inMilliseconds;
+
+      print('\n✅ [API SUCCESS] 서버 응답 완료');
+      print('   - API 시간: ${apiDuration}ms');
+      print('   - 받은 데이터: ${workers.length}명');
+      print(
+          '   - 첫 번째 작업자: ${workers.isNotEmpty ? workers.first.hname : "없음"}');
+
+      // 캐시 저장
+      final cacheStartTime = DateTime.now();
+      _placeWorkersCache[pid] = workers;
+      _placeWorkersCacheTime[pid] = DateTime.now();
+      final cacheDuration =
+          DateTime.now().difference(cacheStartTime).inMilliseconds;
+      print('   - 캐시 저장: ${cacheDuration}ms');
+
+      // 결과 업데이트
+      print('\n🔄 [STATE UPDATE] 상태 업데이트 시작');
+      final stateUpdateStart = DateTime.now();
+      state = state.copyWith(
+        placeRecentWorkers: workers,
+        placeRecentWorkersLoading: false,
+      );
+      final stateUpdateDuration =
+          DateTime.now().difference(stateUpdateStart).inMilliseconds;
+      print('   - 상태 업데이트: ${stateUpdateDuration}ms');
+
+      final totalDuration = DateTime.now().difference(startTime).inMilliseconds;
+      print('\n🎉 [COMPLETE] 작업자 목록 로드 완료');
+      print('   ┌─ API 호출: ${apiDuration}ms');
+      print('   ├─ 캐시 저장: ${cacheDuration}ms');
+      print('   ├─ 상태 업데이트: ${stateUpdateDuration}ms');
+      print('   └─ 총 시간: ${totalDuration}ms');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      if (totalDuration > 1000) {
+        print('⚠️ [WARNING] 1초 이상 소요됨! ($totalDuration ms)');
+        print('   - API가 ${apiDuration}ms 걸렸다면 서버 또는 네트워크 문제');
+        print('   - 상태 업데이트가 ${stateUpdateDuration}ms 걸렸다면 클라이언트 문제');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      }
+    } catch (e, stackTrace) {
+      // 에러 발생 시 pending 요청 제거
+      _pendingRequests.remove(pid);
+
+      final errorDuration = DateTime.now().difference(startTime).inMilliseconds;
+      print('\n❌ [ERROR] 작업자 목록 로드 실패');
+      print('   - 소요 시간: ${errorDuration}ms');
+      print('   - 에러: $e');
+      print('   - 스택: ${stackTrace.toString().split('\n').take(5).join('\n')}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      // 에러 발생 시 로딩 상태 해제
+      state = state.copyWith(placeRecentWorkersLoading: false);
+      rethrow;
+    }
+  }
+
+  /// 캐시 무효화 (삭제 시 호출)
+  void _invalidatePlaceWorkersCache(int pid) {
+    _placeWorkersCache.remove(pid);
+    _placeWorkersCacheTime.remove(pid);
   }
 
   Future<void> deletePlaceRecentWorker(int hid) async {
     final pid = state.selectedPlace?.pid;
     if (pid == null) return;
     await _humanUseCase.deletePlaceWorkerRecent(pid, hid);
-    await refreshPlaceRecentWorkers();
+    _invalidatePlaceWorkersCache(pid);
+    await refreshPlaceRecentWorkers(forceRefresh: true);
   }
 
   Future<void> tapPlaceRecentWorker(BuildContext context, HumanModel h) async {
@@ -520,13 +681,14 @@ class AddCostViewModel extends Notifier<AddCostState> {
     final wageText =
         hDailyWageController.text.trim().replaceAll(RegExp(r'[,원\s]'), '');
     final hdailyWage = int.tryParse(wageText) ?? 0;
-    final workerInfoList = await _humanUseCase.getAllWorkers();
-
     if (hName.isEmpty) {
       state = state.copyWith(alertText: '이름을 입력해주세요.');
       return false;
     }
-    if (workerInfoList.any((e) => e.hname == hName)) {
+    final dupes = await _humanUseCase.searchWorkers(q: hName, limit: 5);
+    if (dupes.any(
+      (e) => e.hname.toLowerCase() == hName.toLowerCase(),
+    )) {
       state = state.copyWith(alertText: '중복된 이름입니다.');
       return false;
     }
@@ -611,7 +773,7 @@ class AddCostViewModel extends Notifier<AddCostState> {
     await refreshProcessTasksOnSelectedDay();
   }
 
-  void addMaterialCostList(BuildContext context) {
+  Future<void> addMaterialCostList(BuildContext context) async {
     var mpriceString = mPriceController.text.trim();
     mpriceString = mpriceString.replaceAll(RegExp(r'[,원]'), '');
     final mprice = int.tryParse(mpriceString);
@@ -639,8 +801,9 @@ class AddCostViewModel extends Notifier<AddCostState> {
       return;
     }
 
+    final category = state.selectedCategory!;
     final model = MaterialCostModel(
-      mcategory: state.selectedCategory!,
+      mcategory: category,
       pname: state.selectedPlace!.pname,
       mpid: state.selectedPlace!.pid,
       mname: mname,
@@ -653,6 +816,10 @@ class AddCostViewModel extends Notifier<AddCostState> {
     mNameController.clear();
     mPriceController.clear();
     FocusScope.of(context).unfocus();
+
+    await ref
+        .read(materialNameHistoryProvider.notifier)
+        .remember(category, mname);
   }
 
   void deleteMaterialList(int index) {
@@ -674,212 +841,270 @@ class AddCostViewModel extends Notifier<AddCostState> {
     state = state.copyWith(workCostList: list);
   }
 
+  void updateMaterialCostAt(int index, MaterialCostModel next) {
+    if (index < 0 || index >= state.materialCostList.length) return;
+    final list = List<MaterialCostModel>.from(state.materialCostList);
+    list[index] = next;
+    state = state.copyWith(materialCostList: list);
+  }
+
   Future<void> insertCostLists(BuildContext context) async {
     // 이미 저장 중이면 중복 실행 방지
     if (state.isSaving) return;
-    
+
     // 저장 시작
     state = state.copyWith(isSaving: true);
-    
+
     try {
       var isMaterialCostSuccess = false;
       var isWorkCostSuccess = false;
       final selectedPid = state.selectedPlace?.pid;
       final dateKey = _dateKey(state.selectDay);
 
-    final materialToSave = state.materialCostList
-        .where((m) => m.mdate.length >= 10
-            ? m.mdate.substring(0, 10) == dateKey
-            : m.mdate == dateKey)
-        .toList();
-    final workToSave = state.workCostList
-        .where((w) =>
-            w.wpid == selectedPid &&
-            (w.wdate.length >= 10
-                ? w.wdate.substring(0, 10) == dateKey
-                : w.wdate == dateKey))
-        .toList();
+      final materialToSave = state.materialCostList
+          .where((m) => m.mdate.length >= 10
+              ? m.mdate.substring(0, 10) == dateKey
+              : m.mdate == dateKey)
+          .toList();
+      final workToSave = state.workCostList
+          .where((w) =>
+              w.wpid == selectedPid &&
+              (w.wdate.length >= 10
+                  ? w.wdate.substring(0, 10) == dateKey
+                  : w.wdate == dateKey))
+          .toList();
 
-    // 같은 날짜/현장에 같은 인원이 2번 들어가면 "의도치 않은 중복 저장"이 발생한다.
-    // (사용자가 정말로 2번 저장하고 싶다면 저장을 2번 누르는 방식으로 남기고,
-    //  한 번의 저장 액션에서는 1인 1건만 허용)
-    final hidCounts = <int, int>{};
-    for (final w in workToSave) {
-      final hid = w.whid;
-      if (hid == null) continue;
-      hidCounts[hid] = (hidCounts[hid] ?? 0) + 1;
-    }
-    final dupHids =
-        hidCounts.entries.where((e) => e.value > 1).map((e) => e.key).toList();
-    if (dupHids.isNotEmpty) {
-      final names = workToSave
-          .where((e) => e.whid != null && dupHids.contains(e.whid))
-          .map((e) => e.hname ?? '')
-          .where((e) => e.trim().isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              names.isEmpty
-                  ? '같은 날짜에 같은 인원이 중복으로 포함되어 있습니다. 목록을 정리한 뒤 저장해주세요.'
-                  : '같은 날짜에 같은 인원이 중복으로 포함되어 있습니다. (${names.join(', ')})\n목록을 정리한 뒤 저장해주세요.',
-            ),
-          ),
-        );
+      // 같은 날짜/현장에 같은 인원이 2번 들어가면 "의도치 않은 중복 저장"이 발생한다.
+      // (사용자가 정말로 2번 저장하고 싶다면 저장을 2번 누르는 방식으로 남기고,
+      //  한 번의 저장 액션에서는 1인 1건만 허용)
+      final hidCounts = <int, int>{};
+      for (final w in workToSave) {
+        final hid = w.whid;
+        if (hid == null) continue;
+        hidCounts[hid] = (hidCounts[hid] ?? 0) + 1;
       }
-      return;
-    }
-
-    if (materialToSave.isNotEmpty) {
-      isMaterialCostSuccess =
-          await _materialCostUseCase.addMaterialCosts(materialToSave);
-    }
-
-    if (workToSave.isNotEmpty && selectedPid != null) {
-      final savedHids = (await _workCostUseCase.getSavedWorkDayHidsForPlaceDate(
-        pid: selectedPid,
-        dateKey: dateKey,
-      ))
-          .toSet();
-      final pendingHids =
-          workToSave.where((e) => e.whid != null).map((e) => e.whid!).toSet();
-      final dup = pendingHids.intersection(savedHids);
-      if (dup.isNotEmpty) {
-        final dupNames = workToSave
-            .where((e) => e.whid != null && dup.contains(e.whid))
+      final dupHids = hidCounts.entries
+          .where((e) => e.value > 1)
+          .map((e) => e.key)
+          .toList();
+      if (dupHids.isNotEmpty) {
+        final names = workToSave
+            .where((e) => e.whid != null && dupHids.contains(e.whid))
             .map((e) => e.hname ?? '')
             .where((e) => e.trim().isNotEmpty)
             .toSet()
             .toList()
           ..sort();
-        final msg = dupNames.isEmpty
-            ? '이미 $dateKey에 저장된 인원이 포함되어 있습니다.\n정말로 또 저장할까요?'
-            : '이미 $dateKey에 저장된 인원이 포함되어 있습니다.\n'
-                '(${dupNames.join(', ')})\n\n정말로 또 저장할까요?';
-        if (!context.mounted) return;
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('중복 저장 확인'),
-            content: Text(msg),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('취소'),
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                names.isEmpty
+                    ? '같은 날짜에 같은 인원이 중복으로 포함되어 있습니다. 목록을 정리한 뒤 저장해주세요.'
+                    : '같은 날짜에 같은 인원이 중복으로 포함되어 있습니다. (${names.join(', ')})\n목록을 정리한 뒤 저장해주세요.',
               ),
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('저장', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-        );
-        if (ok != true) return;
+            ),
+          );
+        }
+        return;
       }
-    }
 
-    if (workToSave.isNotEmpty) {
-      try {
-        isWorkCostSuccess = await _workCostUseCase.addWorkCosts(workToSave);
-      } catch (e) {
-        if (!context.mounted) return;
-        if (isWorkerTroublePairConflictError(e)) {
-          final proceed = await showDialog<bool>(
+      if (materialToSave.isEmpty && workToSave.isEmpty) {
+        return;
+      }
+
+      if (workToSave.isNotEmpty && selectedPid != null) {
+        final savedHids =
+            (await _workCostUseCase.getSavedWorkDayHidsForPlaceDate(
+          pid: selectedPid,
+          dateKey: dateKey,
+        ))
+                .toSet();
+        final pendingHids =
+            workToSave.where((e) => e.whid != null).map((e) => e.whid!).toSet();
+        final dup = pendingHids.intersection(savedHids);
+        if (dup.isNotEmpty) {
+          final dupNames = workToSave
+              .where((e) => e.whid != null && dup.contains(e.whid))
+              .map((e) => e.hname ?? '')
+              .where((e) => e.trim().isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
+          final msg = dupNames.isEmpty
+              ? '이미 $dateKey에 저장된 인원이 포함되어 있습니다.\n정말로 또 저장할까요?'
+              : '이미 $dateKey에 저장된 인원이 포함되어 있습니다.\n'
+                  '(${dupNames.join(', ')})\n\n정말로 또 저장할까요?';
+          if (!context.mounted) return;
+          final ok = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('트러블 페어'),
-              content: const Text(
-                '선택한 인력에 트러블 페어로 묶인 조합이 포함되어 있어, 기본적으로는 같은 날 함께 투입할 수 없습니다.\n\n'
-                '그래도 투입을 진행할까요?',
-              ),
+              title: const Text('중복 저장 확인'),
+              content: Text(msg),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
                   child: const Text('취소'),
                 ),
-                FilledButton(
+                TextButton(
                   onPressed: () => Navigator.of(ctx).pop(true),
-                  child: const Text('투입 진행'),
+                  child: const Text('저장', style: TextStyle(color: Colors.red)),
                 ),
               ],
             ),
           );
-          if (proceed == true && context.mounted) {
-            try {
-              isWorkCostSuccess = await _workCostUseCase.addWorkCosts(
-                workToSave,
-                acknowledgeTroublePair: true,
-              );
-            } catch (e2) {
-              if (!context.mounted) return;
-              final msg = snackMessageForHttpFailure(e2);
-              if (msg != null && msg.isNotEmpty) {
-                ScaffoldMessenger.of(context).clearSnackBars();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(msg)),
-                );
-              }
-              return;
-            }
-          } else {
-            return;
-          }
-        } else {
-          final msg = snackMessageForHttpFailure(e);
-          if (msg != null && msg.isNotEmpty) {
-            ScaffoldMessenger.of(context).clearSnackBars();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(msg)),
-            );
-          }
-          return;
+          if (ok != true) return;
         }
       }
-    }
 
-    if (!isMaterialCostSuccess && !isWorkCostSuccess) {
-      return;
-    }
-
-    // "이 현장에서 일했던 인원"은 실제로 인건비가 저장된 경우에만 누적한다.
-    if (isWorkCostSuccess) {
-      for (final w in workToSave) {
-        final pid = w.wpid;
-        final hid = w.whid;
-        if (hid == null) continue;
-        await _humanUseCase.rememberPlaceWorker(pid, hid);
+      if (materialToSave.isNotEmpty && workToSave.isNotEmpty) {
+        final materialTask =
+            _materialCostUseCase.addMaterialCosts(materialToSave);
+        try {
+          final results = await Future.wait([
+            materialTask.then((_) => true),
+            _saveWorkCostsWithTroubleHandling(workToSave),
+          ]);
+          isMaterialCostSuccess = results[0];
+          isWorkCostSuccess = results[1];
+        } catch (e) {
+          isMaterialCostSuccess =
+              await materialTask.then((_) => true).catchError((_) => false);
+          if (!context.mounted) return;
+          final handled =
+              await _handleWorkCostSaveError(context, e, workToSave);
+          if (handled != true) return;
+          isWorkCostSuccess = true;
+        }
+      } else if (materialToSave.isNotEmpty) {
+        isMaterialCostSuccess =
+            await _materialCostUseCase.addMaterialCosts(materialToSave);
+      } else if (workToSave.isNotEmpty) {
+        try {
+          isWorkCostSuccess =
+              await _saveWorkCostsWithTroubleHandling(workToSave);
+        } catch (e) {
+          if (!context.mounted) return;
+          final handled =
+              await _handleWorkCostSaveError(context, e, workToSave);
+          if (handled != true) return;
+          isWorkCostSuccess = true;
+        }
       }
-      await refreshPlaceRecentWorkers();
-    }
 
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    await FetchData.fetchAllData();
-    if (!context.mounted) return;
-    FocusScope.of(context).unfocus();
+      if (!isMaterialCostSuccess && !isWorkCostSuccess) {
+        return;
+      }
 
-    String message;
-    if (isMaterialCostSuccess && isWorkCostSuccess) {
-      message = '인건비 및 자재비가 저장되었습니다.';
-    } else if (isMaterialCostSuccess) {
-      message = '자재비가 저장되었습니다.';
-    } else {
-      message = '인건비가 저장되었습니다.';
-    }
+      if (isWorkCostSuccess && selectedPid != null) {
+        final hids = workToSave
+            .where((w) => w.whid != null)
+            .map((w) => w.whid!)
+            .toList();
+        await _humanUseCase.rememberPlaceWorkers(selectedPid, hids);
+        await refreshPlaceRecentWorkers();
+      }
 
-    if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => saveDialog(text: message),
-    );
-    clearAllLists();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      FocusScope.of(context).unfocus();
+
+      String message;
+      if (isMaterialCostSuccess && isWorkCostSuccess) {
+        message = '인건비 및 자재비가 저장되었습니다.';
+      } else if (isMaterialCostSuccess) {
+        message = '자재비가 저장되었습니다.';
+      } else {
+        message = '인건비가 저장되었습니다.';
+      }
+
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => saveDialog(text: message),
+      );
+      clearAllLists();
+
+      FetchData.onDataChanged(
+        DataChangeEvent(
+          isWorkCostSuccess
+              ? DataChangeKind.workCost
+              : DataChangeKind.materialCost,
+          pid: state.selectedPlace?.pid,
+          date: state.selectDay,
+        ),
+      );
     } finally {
       // 저장 완료 (성공/실패 관계없이)
       state = state.copyWith(isSaving: false);
+    }
+  }
+
+  Future<bool> _saveWorkCostsWithTroubleHandling(
+    List<WorkCostModel> workToSave, {
+    bool acknowledgeTroublePair = false,
+  }) async {
+    await _workCostUseCase.addWorkCosts(
+      workToSave,
+      acknowledgeTroublePair: acknowledgeTroublePair,
+    );
+    return true;
+  }
+
+  /// 트러블 페어 재시도까지 처리. 저장을 계속하면 `true`, 중단하면 `false`.
+  Future<bool> _handleWorkCostSaveError(
+    BuildContext context,
+    Object e,
+    List<WorkCostModel> workToSave,
+  ) async {
+    if (!isWorkerTroublePairConflictError(e)) {
+      final msg = snackMessageForHttpFailure(e);
+      if (msg != null && msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+      return false;
+    }
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('트러블 페어'),
+        content: const Text(
+          '선택한 인력에 트러블 페어로 묶인 조합이 포함되어 있어, 기본적으로는 같은 날 함께 투입할 수 없습니다.\n\n'
+          '그래도 투입을 진행할까요?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('투입 진행'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !context.mounted) return false;
+    try {
+      await _saveWorkCostsWithTroubleHandling(
+        workToSave,
+        acknowledgeTroublePair: true,
+      );
+      return true;
+    } catch (e2) {
+      if (!context.mounted) return false;
+      final msg = snackMessageForHttpFailure(e2);
+      if (msg != null && msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+      return false;
     }
   }
 

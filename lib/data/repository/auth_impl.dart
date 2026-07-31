@@ -5,6 +5,7 @@ import 'package:w0001/data/model/phone_verification_models.dart';
 import 'package:w0001/data/model/terms_models.dart';
 import 'package:w0001/data/model/worker_profile_model.dart';
 import 'package:w0001/domain/repository/auth_abst.dart';
+import 'package:w0001/util/auth_debug_log.dart';
 import 'package:w0001/util/auth_forced_sign_out.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
@@ -24,6 +25,11 @@ class AuthRepositoryImpl implements AuthRepository {
       access: r.accessToken,
       refresh: r.refreshToken,
     );
+    authDebugLogTokensSaved(
+      event: 'login ok',
+      access: r.accessToken,
+      refresh: r.refreshToken,
+    );
     return r;
   }
 
@@ -34,16 +40,19 @@ class AuthRepositoryImpl implements AuthRepository {
       throw StateError('refresh_token 이 없습니다.');
     }
     final r = await _api.refresh(refreshToken: rt);
-    final nextRefresh = r.refreshToken.isNotEmpty ? r.refreshToken : rt;
+    if (r.refreshToken.isEmpty) {
+      throw const FormatException('갱신 응답에 refresh_token 이 없습니다.');
+    }
     await AuthTokenStorage.I.write(
       access: r.accessToken,
-      refresh: nextRefresh,
+      refresh: r.refreshToken,
     );
-    return LoginResponse(
-      accessToken: r.accessToken,
-      refreshToken: nextRefresh,
-      tokenType: r.tokenType,
+    authDebugLogTokensSaved(
+      event: 'refreshWithStoredRefresh ok',
+      access: r.accessToken,
+      refresh: r.refreshToken,
     );
+    return r;
   }
 
   @override
@@ -78,7 +87,7 @@ class AuthRepositoryImpl implements AuthRepository {
       _api.verifyPhone(phone: phone);
 
   @override
-  Future<void> signup({
+  Future<SignupResponse> signup({
     required String uid,
     required String upw,
     required String uname,
@@ -88,16 +97,28 @@ class AuthRepositoryImpl implements AuthRepository {
     String? hnumber,
     List<TermAgreementInput>? termsAgreements,
     String? phoneForMatching,
-  }) =>
-      _api.signup(
-        uid: uid,
-        upw: upw,
-        uname: uname,
-        workerProfile: workerProfile,
-        phone: phone,
-        phoneVerificationToken: phoneVerificationToken,
-        hnumber: hnumber,
-        termsAgreements: termsAgreements,
-        phoneForMatching: phoneForMatching,
-      );
+  }) async {
+    resetForcedSignOutSnackThrottle();
+    final r = await _api.signup(
+      uid: uid,
+      upw: upw,
+      uname: uname,
+      workerProfile: workerProfile,
+      phone: phone,
+      phoneVerificationToken: phoneVerificationToken,
+      hnumber: hnumber,
+      termsAgreements: termsAgreements,
+      phoneForMatching: phoneForMatching,
+    );
+    await AuthTokenStorage.I.write(
+      access: r.accessToken,
+      refresh: r.refreshToken,
+    );
+    authDebugLogTokensSaved(
+      event: 'signup ok',
+      access: r.accessToken,
+      refresh: r.refreshToken,
+    );
+    return r;
+  }
 }

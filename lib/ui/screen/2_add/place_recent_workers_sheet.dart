@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_sheet.dart'
     show WorkerGroupedListSheetBody;
 import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_utils.dart';
@@ -81,11 +83,15 @@ Future<void> showPlaceRecentWorkersSheet({
         builder: (ctx, scrollController) {
           return Consumer(
             builder: (ctx, ref, _) {
-              final all = ref.watch(addCostProvider).placeRecentWorkers;
+              final state = ref.watch(addCostProvider);
+              final all = state.placeRecentWorkers;
+              final loading = state.placeRecentWorkersLoading;
+
               return _PlaceRecentWorkersGroupedLauncher(
                 sheetContext: sheetCtx,
                 parentContext: context,
                 initialWorkers: all,
+                isLoading: loading,
                 scrollController: scrollController,
                 onWorkerTap: (h) => vm.tapPlaceRecentWorker(context, h),
                 onRemoveFromList: (h) async {
@@ -110,6 +116,7 @@ class _PlaceRecentWorkersGroupedLauncher extends StatefulWidget {
     required this.initialWorkers,
     required this.scrollController,
     required this.onWorkerTap,
+    this.isLoading = false,
     this.onRemoveFromList,
     this.onWorkersListChanged,
     this.closeSheetOnWorkerTap = true,
@@ -118,6 +125,7 @@ class _PlaceRecentWorkersGroupedLauncher extends StatefulWidget {
   final BuildContext sheetContext;
   final BuildContext parentContext;
   final List<HumanModel> initialWorkers;
+  final bool isLoading;
   final ScrollController scrollController;
   final Future<void> Function(HumanModel human) onWorkerTap;
   final Future<void> Function(HumanModel human)? onRemoveFromList;
@@ -181,6 +189,25 @@ class _PlaceRecentWorkersGroupedLauncherState
 
   @override
   Widget build(BuildContext context) {
+    // 로딩 중이고 아직 데이터가 없는 경우
+    if (widget.isLoading && _workers.isEmpty) {
+      return SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AppLoadingIndicator(size: 70),
+              const SizedBox(height: 10),
+              Text(
+                '작업자 목록을 불러오는 중...',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_workers.isEmpty) {
       return SafeArea(
         child: Center(
@@ -192,27 +219,52 @@ class _PlaceRecentWorkersGroupedLauncherState
       );
     }
 
-    return WorkerGroupedListSheetBody(
-      title: '이 현장에서 일했던 인원 (${_workers.length})',
-      workers: _workers,
-      scrollController: widget.scrollController,
-      onWorkerTap: (h) async {
-        await widget.onWorkerTap(h);
-        if (widget.closeSheetOnWorkerTap && widget.sheetContext.mounted) {
-          Navigator.of(widget.sheetContext).pop();
-        }
-      },
-      personTileBuilder: (tileCtx, h) => _PlaceRecentWorkerTile(
-        human: h,
-        onAdd: () async {
-          await widget.onWorkerTap(h);
-          if (widget.closeSheetOnWorkerTap && widget.sheetContext.mounted) {
-            Navigator.of(widget.sheetContext).pop();
-          }
-        },
-        onRemoveFromList:
-            widget.onRemoveFromList == null ? null : () => _handleRemove(h),
-      ),
+    return Column(
+      children: [
+        Expanded(
+          child: WorkerGroupedListSheetBody(
+            title:
+                '이 현장에서 일했던 인원 (${_workers.length}${widget.isLoading ? '+' : ''})',
+            workers: _workers,
+            scrollController: widget.scrollController,
+            onWorkerTap: (h) async {
+              await widget.onWorkerTap(h);
+              if (widget.closeSheetOnWorkerTap && widget.sheetContext.mounted) {
+                Navigator.of(widget.sheetContext).pop();
+              }
+            },
+            personTileBuilder: (tileCtx, h) => _PlaceRecentWorkerTile(
+              human: h,
+              onAdd: () async {
+                await widget.onWorkerTap(h);
+                if (widget.closeSheetOnWorkerTap &&
+                    widget.sheetContext.mounted) {
+                  Navigator.of(widget.sheetContext).pop();
+                }
+              },
+              onRemoveFromList: widget.onRemoveFromList == null
+                  ? null
+                  : () => _handleRemove(h),
+            ),
+          ),
+        ),
+        // 추가 로딩 인디케이터 (배치 로딩 중)
+        if (widget.isLoading && _workers.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const HammerLoadingIndicator(size: 32),
+                const SizedBox(width: 12),
+                Text(
+                  '추가 목록 불러오는 중...',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

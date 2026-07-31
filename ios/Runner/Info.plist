@@ -34,6 +34,15 @@
 	<string>현장 사진을 선택하고 업로드하기 위해 사진 라이브러리 접근 권한이 필요합니다.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>촬영한 현장 사진을 저장하기 위해 사진 라이브러리 쓰기 권한이 필요합니다.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>내 위치 기준 반경으로 주변 철물점, 주유소, 음식점을 조회하기 위해 위치 권한이 필요합니다.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>kakaonavi</string>
+		<string>kakaonavi-sdk</string>
+		<string>kakaomap</string>
+		<string>tmap</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

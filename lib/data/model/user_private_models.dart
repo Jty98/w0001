@@ -1,5 +1,7 @@
 import 'package:w0001/util/resident_registration_format.dart';
 
+bool _jsonBool(Object? v) => v == true || v == 1 || v == '1' || v == 'true';
+
 /// `GET /users/me/private` — 마스킹된 고위험 정보.
 class UserPrivateRead {
   const UserPrivateRead({
@@ -10,6 +12,7 @@ class UserPrivateRead {
     this.hasRrn = false,
     this.hasBankAccount = false,
     this.workerTaxTermAgreed = false,
+    this.registrationCompleteExplicit = false,
   });
 
   final String? rrnMasked;
@@ -19,20 +22,40 @@ class UserPrivateRead {
   final bool hasRrn;
   final bool hasBankAccount;
   final bool workerTaxTermAgreed;
+  final bool registrationCompleteExplicit;
 
-  bool get isComplete =>
-      hasRrn && hasBankAccount && workerTaxTermAgreed;
+  bool get isComplete => hasRrn && hasBankAccount && workerTaxTermAgreed;
+
+  /// 세무·정산 등록 완료 — 서버 플래그 또는 필드·약관 이력 조합.
+  bool isRegistrationComplete({bool hasTaxAgreementHistory = false}) {
+    if (registrationCompleteExplicit) return true;
+    return hasRrn &&
+        hasBankAccount &&
+        (workerTaxTermAgreed || hasTaxAgreementHistory);
+  }
 
   factory UserPrivateRead.fromJson(Map<String, dynamic> json) {
     final rrnMasked = _opt(json['rrn_masked'] ?? json['rrnMasked']);
     final bankMasked =
         _opt(json['bank_account_masked'] ?? json['bankAccountMasked']);
-    final hasRrn = json['has_rrn'] == true ||
-        json['hasRrn'] == true ||
+    final hasRrn = _jsonBool(json['has_rrn'] ?? json['hasRrn']) ||
         (rrnMasked != null && rrnMasked.isNotEmpty);
-    final hasBank = json['has_bank_account'] == true ||
-        json['hasBankAccount'] == true ||
-        (bankMasked != null && bankMasked.isNotEmpty);
+    final hasBank =
+        _jsonBool(json['has_bank_account'] ?? json['hasBankAccount']) ||
+            (bankMasked != null && bankMasked.isNotEmpty);
+    final taxAgreed = _jsonBool(
+      json['worker_tax_term_agreed'] ??
+          json['workerTaxTermAgreed'] ??
+          json['worker_tax_agreed'] ??
+          json['workerTaxAgreed'],
+    );
+    final explicitComplete = _jsonBool(
+      json['is_complete'] ??
+          json['isComplete'] ??
+          json['registration_complete'] ??
+          json['registrationComplete'] ??
+          json['registered'],
+    );
     return UserPrivateRead(
       rrnMasked: rrnMasked,
       bankAccountMasked: bankMasked,
@@ -40,8 +63,8 @@ class UserPrivateRead {
       bankName: _opt(json['bank_name'] ?? json['bankName']),
       hasRrn: hasRrn,
       hasBankAccount: hasBank,
-      workerTaxTermAgreed: json['worker_tax_term_agreed'] == true ||
-          json['workerTaxTermAgreed'] == true,
+      workerTaxTermAgreed: taxAgreed,
+      registrationCompleteExplicit: explicitComplete,
     );
   }
 }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:w0001/theme/app_input_styles.dart';
 import 'package:w0001/ui/screen/4_human/widgets/human_number_formatter.dart';
 import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 class RoundTextField extends StatelessWidget {
   static const double _suffixActionSize = 36;
@@ -32,6 +34,9 @@ class RoundTextField extends StatelessWidget {
   /// false면 빨간 테두리만 표시하고 오류 문구는 [errorText]로 외부 배치.
   final bool showErrorMessageBelow;
 
+  /// 필드 본문 글자 크기·스타일.
+  final TextStyle? textStyle;
+
   /// [suffixIcon]이 텍스트 버튼 등 넓을 때 슬롯 너비(기본 36).
   final double? suffixTrailingWidth;
 
@@ -55,6 +60,7 @@ class RoundTextField extends StatelessWidget {
     this.inputFormatters,
     this.scrollPaddingExtra = 96,
     this.showErrorMessageBelow = true,
+    this.textStyle,
     this.suffixTrailingWidth,
     this.enabled = true,
     required this.onChanged,
@@ -94,9 +100,7 @@ class RoundTextField extends StatelessWidget {
   double _suffixSlotWidth(BuildContext context) {
     final slot = context.rs(_suffixActionSize);
     final clearW = showClearButton ? slot : 0.0;
-    final trailingW = suffixIcon != null
-        ? (suffixTrailingWidth ?? slot)
-        : 0.0;
+    final trailingW = suffixIcon != null ? (suffixTrailingWidth ?? slot) : 0.0;
     return clearW + trailingW;
   }
 
@@ -173,7 +177,7 @@ class RoundTextField extends StatelessWidget {
       children: [
         SizedBox(
           height: fieldHeight,
-          child: TextField(
+          child: AppTextField(
             scrollPadding: keyboardScrollPadding(
               context,
               extra: scrollPaddingExtra,
@@ -206,7 +210,11 @@ class RoundTextField extends StatelessWidget {
                 vertical: 14,
               ),
             ),
-            style: tt.bodyMedium,
+            style: textStyle ??
+                AppInputStyles.fieldText(
+                  context,
+                  height: 1.2,
+                ),
           ),
         ),
         if (hasError && showErrorMessageBelow)

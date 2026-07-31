@@ -138,8 +138,7 @@ class DashboardLineChart extends StatelessWidget {
         : integerYAxis
             ? 3
             : 5;
-    final maxBottomChars =
-        dashboardChartMaxLabelChars(bottomLabels);
+    final maxBottomChars = dashboardChartMaxLabelChars(bottomLabels);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -564,8 +563,7 @@ class _DashboardLineChartMoneyAndPercentState
 
     final useCurve = n > 2;
 
-    final maxBottomChars =
-        dashboardChartMaxLabelChars(bottomLabels);
+    final maxBottomChars = dashboardChartMaxLabelChars(bottomLabels);
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -759,7 +757,8 @@ class _DashboardLineChartMoneyAndPercentState
                   child: Align(
                     alignment: Alignment.topCenter,
                     child: Padding(
-                      padding: ResponsiveLayout.only(context, left: 8, top: 4, right: 8),
+                      padding: ResponsiveLayout.only(context,
+                          left: 8, top: 4, right: 8),
                       child: Material(
                         elevation: 8,
                         shadowColor: Colors.black45,
@@ -777,7 +776,8 @@ class _DashboardLineChartMoneyAndPercentState
                             horizontal: 14,
                             vertical: 12,
                           ),
-                          constraints: BoxConstraints(maxWidth: context.rs(220)),
+                          constraints:
+                              BoxConstraints(maxWidth: context.rs(220)),
                           child: RichText(
                             textAlign: TextAlign.center,
                             text: TextSpan(

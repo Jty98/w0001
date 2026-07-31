@@ -1,20 +1,22 @@
-import 'dart:math' as math;
+import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
-import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
+import 'package:w0001/domain/cost_place_picker_filter.dart';
 import 'package:w0001/presentation/viewmodel/worker_announcement_providers.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_quill_codec.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_rich_quill.dart';
+import 'package:w0001/ui/widget/place_picker/place_cost_picker_sheet.dart';
+import 'package:w0001/theme/app_input_styles.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
 import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 현장에서 공지 작성·수정 시 범위 고정·상단 라벨용.
 final class PlaceAnnouncementEditAnchor {
@@ -65,13 +67,15 @@ class _AdminWorkerAnnouncementEditScreenState
   final _titleCtrl = TextEditingController();
   WorkerAnnouncementScope _scope = WorkerAnnouncementScope.global;
   int? _placeId;
+  String? _selectedPlaceName;
   var _busy = false;
   var _uploadingImages = false;
+  var _loadingEditor = false;
+  String? _editorLoadError;
 
-  late final QuillController _quillCtrl;
+  late QuillController _quillCtrl;
   final _editorFocus = FocusNode();
   final _quillScroll = ScrollController();
-  final _bodyScroll = ScrollController();
   final GlobalKey _editorBlockKey = GlobalKey();
 
   bool _toolbarVisible = false;
@@ -88,32 +92,80 @@ class _AdminWorkerAnnouncementEditScreenState
     final e = widget.existing;
     final anchor = widget.placeAnchor;
 
+    _quillCtrl = WorkerAnnouncementQuillCodec.createEditingController(
+      document: Document(),
+    );
+
     if (e != null) {
       _titleCtrl.text = e.title;
       if (anchor != null) {
         _scope = WorkerAnnouncementScope.place;
         _placeId = anchor.pid;
+        _selectedPlaceName = anchor.displayName;
       } else {
         _scope = e.scope;
         _placeId = e.pid;
       }
-      _quillCtrl = QuillController(
-        document: WorkerAnnouncementQuillCodec.documentForEditing(e),
-        selection: const TextSelection.collapsed(offset: 0),
-      );
+      if (WorkerAnnouncementQuillCodec.blocksHaveDisplayableBody(e.blocks)) {
+        _applyEditorContent(e);
+      } else {
+        _loadingEditor = true;
+        unawaited(_loadEditorContent(e));
+      }
     } else {
-      _quillCtrl = QuillController(
+      _quillCtrl = WorkerAnnouncementQuillCodec.createEditingController(
         document: WorkerAnnouncementQuillCodec.documentForEditing(null),
-        selection: const TextSelection.collapsed(offset: 0),
       );
       if (anchor != null) {
         _scope = WorkerAnnouncementScope.place;
         _placeId = anchor.pid;
+        _selectedPlaceName = anchor.displayName;
       }
     }
 
     _editorFocus.addListener(_onEditorFocusChanged);
     _toolbarVisible = _editorFocus.hasFocus;
+  }
+
+  void _applyEditorContent(WorkerAnnouncementRead full) {
+    final anchor = widget.placeAnchor;
+    _titleCtrl.text = full.title;
+    if (anchor != null) {
+      _scope = WorkerAnnouncementScope.place;
+      _placeId = anchor.pid;
+    } else {
+      _scope = full.scope;
+      _placeId = full.pid;
+    }
+    _replaceQuillDocument(
+      WorkerAnnouncementQuillCodec.documentForEditing(full),
+    );
+    _loadingEditor = false;
+    _editorLoadError = null;
+  }
+
+  Future<void> _loadEditorContent(WorkerAnnouncementRead summary) async {
+    try {
+      final full = await ref
+          .read(workerAnnouncementUseCaseProvider)
+          .resolveDetail(summary);
+      if (!mounted) return;
+      _applyEditorContent(full);
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingEditor = false;
+        _editorLoadError = '$e';
+      });
+    }
+  }
+
+  void _replaceQuillDocument(Document doc) {
+    _quillCtrl.dispose();
+    _quillCtrl = WorkerAnnouncementQuillCodec.createEditingController(
+      document: doc,
+    );
   }
 
   @override
@@ -145,11 +197,38 @@ class _AdminWorkerAnnouncementEditScreenState
     _quillCtrl.dispose();
     _editorFocus.dispose();
     _quillScroll.dispose();
-    _bodyScroll.dispose();
     super.dispose();
   }
 
-  bool get _placeUiLocked => widget.placeAnchor != null;
+  bool get _scopeFieldsLocked =>
+      widget.placeAnchor != null || widget.existing != null;
+
+  Future<void> _pickPlaceForAnnouncement() async {
+    final picked = await showPlaceCostPickerSheet(
+      context: context,
+      ref: ref,
+      filter: CostPlacePickerFilter.all,
+      selectedPid: _placeId,
+    );
+    if (!mounted || picked == null) return;
+    final pid = picked.pid;
+    if (pid == null || pid <= 0) return;
+    setState(() {
+      _placeId = pid;
+      _selectedPlaceName = picked.pname.trim();
+    });
+  }
+
+  WorkerAnnouncementScope get _effectiveScope => _scopeFieldsLocked
+      ? (widget.existing?.scope ?? WorkerAnnouncementScope.place)
+      : _scope;
+
+  int? get _effectivePlaceId {
+    if (_scopeFieldsLocked) {
+      return widget.placeAnchor?.pid ?? widget.existing?.pid ?? _placeId;
+    }
+    return _effectiveScope == WorkerAnnouncementScope.place ? _placeId : null;
+  }
 
   Future<String?> _onRequestPickImages(BuildContext context) {
     return WorkerAnnouncementRichQuill.galleryPickWorkflow(
@@ -164,6 +243,7 @@ class _AdminWorkerAnnouncementEditScreenState
   }
 
   Future<void> _save() async {
+    if (_loadingEditor) return;
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -171,7 +251,8 @@ class _AdminWorkerAnnouncementEditScreenState
       );
       return;
     }
-    if (_scope == WorkerAnnouncementScope.place && _placeId == null) {
+    if (_effectiveScope == WorkerAnnouncementScope.place &&
+        _effectivePlaceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('현장 공지인 경우 현장을 선택해 주세요.')),
       );
@@ -184,19 +265,28 @@ class _AdminWorkerAnnouncementEditScreenState
       return;
     }
 
-    final blocks =
-        WorkerAnnouncementQuillCodec.blocksForApi(_quillCtrl.document);
-    final body = WorkerAnnouncementWriteBody(
-      scope: _scope,
-      pid: _scope == WorkerAnnouncementScope.place ? _placeId : null,
-      title: title,
-      blocks: blocks,
-    );
-
     setState(() {
       _busy = true;
     });
     try {
+      final hadLocal = WorkerAnnouncementQuillCodec.documentHasLocalImages(
+        _quillCtrl.document,
+      );
+      final doc = await WorkerAnnouncementRichQuill.prepareDocumentForSave(
+        context: context,
+        doc: _quillCtrl.document,
+        mounted: () => mounted,
+      );
+      if (!mounted) return;
+      if (hadLocal) _replaceQuillDocument(doc);
+
+      final body = WorkerAnnouncementWriteBody(
+        scope: _effectiveScope,
+        pid: _effectivePlaceId,
+        title: title,
+        blocks: WorkerAnnouncementQuillCodec.blocksForApi(_quillCtrl.document),
+      );
+
       final uc = ref.read(workerAnnouncementUseCaseProvider);
       if (widget.existing == null) {
         await uc.create(body);
@@ -207,7 +297,7 @@ class _AdminWorkerAnnouncementEditScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('저장했습니다.')),
         );
-        context.pop();
+        context.pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -227,21 +317,10 @@ class _AdminWorkerAnnouncementEditScreenState
   @override
   Widget build(BuildContext context) {
     final anchor = widget.placeAnchor;
-    final showScopeUi = !_placeUiLocked;
-    final places = showScopeUi
-        ? ref
-            .watch(placeListProvider)
-            .placeList
-            .where((p) => p.pid != null)
-            .toList(growable: false)
-        : const <PlaceInfoModel>[];
+    final showScopeUi = !_scopeFieldsLocked;
     final isNew = widget.existing == null;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-
-    final viewInsets = MediaQuery.viewInsetsOf(context);
-    final screenH = MediaQuery.sizeOf(context).height;
-    final editorH = math.min(440.0, math.max(220.0, screenH * 0.34));
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -256,142 +335,197 @@ class _AdminWorkerAnnouncementEditScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              controller: _bodyScroll,
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 12 + viewInsets.bottom),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (anchor != null) ...[
-                    Text(
-                      '「${anchor.displayName}」 공지',
-                      textAlign: TextAlign.center,
-                      style: tt.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.35,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  TextField(
-                    controller: _titleCtrl,
-                    decoration: const InputDecoration(
-                      labelText: '제목',
-                      border: OutlineInputBorder(),
-                    ),
-                    textInputAction: TextInputAction.next,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    context.rsi(16),
+                    context.rsi(12),
+                    context.rsi(16),
+                    context.rsi(8),
                   ),
-                  const SizedBox(height: 16),
-                  if (showScopeUi) ...[
-                    Text(
-                      '공지 범위',
-                      style: tt.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    SegmentedButton<WorkerAnnouncementScope>(
-                      showSelectedIcon: false,
-                      style: AppSegmentedButton.styleFrom(),
-                      segments: const [
-                        ButtonSegment(
-                          value: WorkerAnnouncementScope.global,
-                          label: Text('전체 공지'),
-                          icon: Icon(Icons.campaign_outlined),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (anchor != null) ...[
+                        Text(
+                          '「${anchor.displayName}」 공지',
+                          textAlign: TextAlign.center,
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.35,
+                          ),
                         ),
-                        ButtonSegment(
-                          value: WorkerAnnouncementScope.place,
-                          label: Text('현장 공지'),
-                          icon: Icon(Icons.place_outlined),
+                        SizedBox(height: context.rsi(12)),
+                      ],
+                      AppTextField(
+                        controller: _titleCtrl,
+                        style: AppInputStyles.fieldText(context),
+                        decoration: const InputDecoration(
+                          labelText: '제목',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        textInputAction: TextInputAction.next,
+                      ),
+                      if (showScopeUi) ...[
+                        SizedBox(height: context.rsi(12)),
+                        Text(
+                          '공지 범위',
+                          style: tt.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        SizedBox(height: context.rsi(6)),
+                        SegmentedButton<WorkerAnnouncementScope>(
+                          showSelectedIcon: false,
+                          style: AppSegmentedButton.styleFrom(),
+                          segments: const [
+                            ButtonSegment(
+                              value: WorkerAnnouncementScope.global,
+                              label: Text('전체 공지'),
+                            ),
+                            ButtonSegment(
+                              value: WorkerAnnouncementScope.place,
+                              label: Text('현장 공지'),
+                            ),
+                          ],
+                          selected: {_scope},
+                          onSelectionChanged: _busy
+                              ? null
+                              : (next) {
+                                  setState(() {
+                                    _scope = next.first;
+                                    if (_scope ==
+                                        WorkerAnnouncementScope.global) {
+                                      _placeId = null;
+                                      _selectedPlaceName = null;
+                                    }
+                                  });
+                                },
+                        ),
+                        if (_scope == WorkerAnnouncementScope.place) ...[
+                          SizedBox(height: context.rsi(8)),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            title: Text(
+                              _selectedPlaceName?.trim().isNotEmpty == true
+                                  ? _selectedPlaceName!.trim()
+                                  : '현장을 선택하세요',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _busy ? null : _pickPlaceForAnnouncement,
+                          ),
+                        ],
+                      ] else ...[
+                        SizedBox(height: context.rsi(12)),
+                        Text(
+                          '공지 범위',
+                          style: tt.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        SizedBox(height: context.rsi(6)),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerLowest,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: cs.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: context.rsi(12),
+                            vertical: context.rsi(10),
+                          ),
+                          child: Text(
+                            _effectiveScope == WorkerAnnouncementScope.global
+                                ? '전체 공지 (수정 불가)'
+                                : '현장 공지 (수정 불가)',
+                            style: tt.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                            ),
+                          ),
                         ),
                       ],
-                      selected: {_scope},
-                      onSelectionChanged: _busy
-                          ? null
-                          : (next) {
-                              setState(() {
-                                _scope = next.first;
-                                if (_scope ==
-                                    WorkerAnnouncementScope.global) {
-                                  _placeId = null;
-                                } else if (_placeId == null &&
-                                    places.isNotEmpty) {
-                                  _placeId = places.first.pid;
-                                }
-                              });
-                            },
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    context.rsi(16),
+                    context.rsi(4),
+                    context.rsi(16),
+                    context.rsi(6),
+                  ),
+                  child: Text(
+                    '내용',
+                    style: tt.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    if (_scope == WorkerAnnouncementScope.place) ...[
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<int>(
-                        // ignore: deprecated_member_use
-                        value: _placeId != null &&
-                                places.any((p) => p.pid == _placeId)
-                            ? _placeId
-                            : (places.isEmpty ? null : places.first.pid),
-                        decoration: const InputDecoration(
-                          labelText: '현장',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: places
-                            .map(
-                              (p) => DropdownMenuItem<int>(
-                                value: p.pid!,
-                                child: Text(
-                                  p.pname,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: KeyedSubtree(
+                    key: _editorBlockKey,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        context.rsi(16),
+                        0,
+                        context.rsi(16),
+                        context.rsi(8),
+                      ),
+                      child: _loadingEditor
+                          ? Skeletonizer(
+                              enabled: true,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: cs.outline.withValues(alpha: 0.32),
+                                  ),
                                 ),
                               ),
                             )
-                            .toList(),
-                        onChanged: _busy
-                            ? null
-                            : (v) => setState(() {
-                                  _placeId = v;
-                                }),
-                      ),
-                    ],
-                  ],
-                  KeyedSubtree(
-                    key: _editorBlockKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 12),
-                        Text(
-                          '내용',
-                          style: tt.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: editorH,
-                          child: WorkerAnnouncementRichQuillDocumentEditor(
-                            controller: _quillCtrl,
-                            focusNode: _editorFocus,
-                            scrollController: _quillScroll,
-                            placeholder: '본문을 입력하세요',
-                            decorated: true,
-                          ),
-                        ),
-                      ],
+                          : _editorLoadError != null
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Text(
+                                      '본문을 불러오지 못했습니다.\n$_editorLoadError',
+                                      textAlign: TextAlign.center,
+                                      style: tt.bodySmall?.copyWith(
+                                        color: cs.error,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : WorkerAnnouncementRichQuillDocumentEditor(
+                                  controller: _quillCtrl,
+                                  focusNode: _editorFocus,
+                                  scrollController: _quillScroll,
+                                  placeholder: '본문을 입력하세요',
+                                  decorated: true,
+                                  fillParentHeight: true,
+                                ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           if (_toolbarVisible) ...[
             WorkerAnnouncementRichQuillToolbar(
               controller: _quillCtrl,
-              variant:
-                  WorkerAnnouncementRichQuillToolbarVariant.bottomSheetBar,
+              variant: WorkerAnnouncementRichQuillToolbarVariant.bottomSheetBar,
               toolbarConfig: _toolbarConfig,
               uploading: _uploadingImages,
-              uploadHintText: '이미지를 올리는 중입니다…',
+              uploadHintText: '이미지 선택 중…',
               leadingToolbarWidget: _AnnouncementFontSizeDropdown(
                 controller: _quillCtrl,
                 editorFocus: _editorFocus,
@@ -426,8 +560,9 @@ class _AdminWorkerAnnouncementEditScreenState
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed:
-                        (_busy || _uploadingImages) ? null : _save,
+                    onPressed: (_busy || _uploadingImages || _loadingEditor)
+                        ? null
+                        : _save,
                     style: FilledButton.styleFrom(
                       padding: EdgeInsets.symmetric(vertical: context.rsi(16)),
                       shape: RoundedRectangleBorder(
@@ -611,7 +746,9 @@ class _AnnouncementFontSizeDropdownState
               child: Material(
                 type: MaterialType.transparency,
                 child: InkWell(
-                  onTap: widget.enabled ? () => _showFontSizeMenu(context, wire) : null,
+                  onTap: widget.enabled
+                      ? () => _showFontSizeMenu(context, wire)
+                      : null,
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: EdgeInsets.symmetric(

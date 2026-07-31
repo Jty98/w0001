@@ -26,17 +26,15 @@ List<CoworkerOnSite> excludeSelfFromCoworkers(
   String? viewerUname,
 }) {
   final vn = viewerUname?.trim();
-  return peers
-      .where((c) {
-        if (workerHid != null && workerHid > 0 && c.hid == workerHid) {
-          return false;
-        }
-        if (vn != null && vn.isNotEmpty && c.workerName.trim() == vn) {
-          return false;
-        }
-        return true;
-      })
-      .toList(growable: false);
+  return peers.where((c) {
+    if (workerHid != null && workerHid > 0 && c.hid == workerHid) {
+      return false;
+    }
+    if (vn != null && vn.isNotEmpty && c.workerName.trim() == vn) {
+      return false;
+    }
+    return true;
+  }).toList(growable: false);
 }
 
 /// 현장 투입 명단에서 본인 행 제외.

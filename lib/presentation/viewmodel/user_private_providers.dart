@@ -22,11 +22,7 @@ final workerPrivateInfoProvider =
 class WorkerPrivateInfoNotifier extends AsyncNotifier<UserPrivateRead?> {
   @override
   Future<UserPrivateRead?> build() async {
-    try {
-      return await ref.read(userPrivateUseCaseProvider).getMine();
-    } catch (_) {
-      return null;
-    }
+    return ref.read(userPrivateUseCaseProvider).getMine();
   }
 
   Future<void> reload() async {

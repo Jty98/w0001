@@ -28,9 +28,11 @@ abstract final class AppTypography {
       titleLarge: s(base.titleLarge, 22, FontWeight.w700, height: 1.25),
       titleMedium: s(base.titleMedium, 16, FontWeight.w600, height: 1.3),
       titleSmall: s(base.titleSmall, 14, FontWeight.w700, height: 1.3),
-      bodyLarge: s(base.bodyLarge, 16, FontWeight.w500, height: 1.35),
-      bodyMedium: s(base.bodyMedium, 14, FontWeight.w400, height: 1.4),
-      bodySmall: s(base.bodySmall, 12, FontWeight.w400, height: 1.35),
+      bodyLarge: s(base.bodyLarge, 16, FontWeight.w600, height: 1.35),
+      // SCDream5 단일 파일(medium)과 맞춤 — w400 요청 시 실기기에서 글자가 안 보일 수 있음.
+      bodyMedium: s(base.bodyMedium, 14, FontWeight.w600, height: 1.4),
+      // SCDream5 단일 weight — w400은 실기기에서 흐리게/안 보일 수 있음.
+      bodySmall: s(base.bodySmall, 12, FontWeight.w600, height: 1.35),
       labelLarge: s(base.labelLarge, 14, FontWeight.w600, height: 1.2),
       labelMedium: s(base.labelMedium, 12, FontWeight.w500, height: 1.2),
       labelSmall: s(base.labelSmall, 11, FontWeight.w500, height: 1.15),

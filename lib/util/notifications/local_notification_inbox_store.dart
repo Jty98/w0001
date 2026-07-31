@@ -78,9 +78,20 @@ final class LocalNotificationInboxStore {
         'wa:${pick(['wa_id', 'waId', 'announcement_id'])}',
       'placeworkday_assignment' ||
       'placeworkday_instruction' =>
-        'pwd:${pick(['pwdid', 'pwd_id', 'place_work_day_id'])}:${pick(['workdate', 'work_date', 'taskdate'])}',
-      'worker_place_photo' =>
-        'photo:${pick(['pid', 'place_id', 'placeId'])}:${pick(['phid', 'photo_id'])}',
+        'pwd:${pick(['pwdid', 'pwd_id', 'place_work_day_id'])}:'
+            '${pick([
+              'workdate',
+              'work_date',
+              'taskdate',
+              'startDate',
+              'start_date'
+            ])}:'
+            '${pick(['endDate', 'end_date', 'workdate_end', 'workdateEnd'])}',
+      'worker_place_photo' => 'photo:${pick([
+              'pid',
+              'place_id',
+              'placeId'
+            ])}:${pick(['phid', 'photo_id'])}',
       'place_end_date_reminder' =>
         'pend:${pick(['pid', 'place_id'])}:${pick(['pend', 'reminder_date'])}',
       'place_access_revoked' => 'revoke:${pick(['pid', 'place_id'])}',

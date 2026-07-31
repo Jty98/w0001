@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
+import 'package:w0001/enums.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcements_inbox_screen.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
@@ -8,11 +9,9 @@ class WorkerAnnouncementListSection {
   const WorkerAnnouncementListSection({
     required this.items,
     this.headerTitle,
-    this.headerIcon,
   });
 
   final String? headerTitle;
-  final IconData? headerIcon;
   final List<WorkerAnnouncementRead> items;
 }
 
@@ -31,19 +30,16 @@ List<WorkerAnnouncementRead> sortWorkerAnnouncementsPinnedFirst(
   return [...pinned, ...rest];
 }
 
-String workerAnnouncementEmptyMessage(WorkerAnnouncementInboxSegment segment) {
+String workerAnnouncementEmptyMessage(
+  WorkerAnnouncementInboxSegment segment, {
+  PlaceState placeState = PlaceState.incomplete,
+}) {
   return switch (segment) {
     WorkerAnnouncementInboxSegment.globalOnly => '등록된 전체 공지가 없습니다.',
-    WorkerAnnouncementInboxSegment.placeOnly => '등록된 현장 공지가 없습니다.',
-  };
-}
-
-String workerAnnouncementSegmentHint(WorkerAnnouncementInboxSegment segment) {
-  return switch (segment) {
-    WorkerAnnouncementInboxSegment.globalOnly =>
-      '모든 작업자에게 적용되는 전체 공지입니다.',
     WorkerAnnouncementInboxSegment.placeOnly =>
-      '현장별로 묶어 표시합니다. 해당 현장에 접근한 작업자에게만 전달됩니다.',
+      placeState == PlaceState.complete
+          ? '완료 현장 공지가 없습니다.'
+          : '진행 중 현장 공지가 없습니다.',
   };
 }
 
@@ -52,15 +48,22 @@ List<WorkerAnnouncementListSection> buildWorkerAnnouncementListSections({
   required List<WorkerAnnouncementRead> announcements,
   required Map<int, String> placeNameByPid,
   required WorkerAnnouncementInboxSegment segment,
+  bool groupByPlace = true,
 }) {
   final filtered =
       announcements.where((a) => segment.accepts(a)).toList(growable: false);
   if (filtered.isEmpty) return const [];
 
-  final global =
-      filtered.where((a) => a.isGlobal).toList(growable: false);
-  final place =
-      filtered.where((a) => !a.isGlobal).toList(growable: false);
+  if (segment == WorkerAnnouncementInboxSegment.placeOnly && !groupByPlace) {
+    return [
+      WorkerAnnouncementListSection(
+        items: sortWorkerAnnouncementsPinnedFirst(filtered),
+      ),
+    ];
+  }
+
+  final global = filtered.where((a) => a.isGlobal).toList(growable: false);
+  final place = filtered.where((a) => !a.isGlobal).toList(growable: false);
 
   final out = <WorkerAnnouncementListSection>[];
 
@@ -71,7 +74,6 @@ List<WorkerAnnouncementListSection> buildWorkerAnnouncementListSections({
         headerTitle: segment == WorkerAnnouncementInboxSegment.globalOnly
             ? null
             : '전체 공지',
-        headerIcon: Icons.campaign_outlined,
         items: sortWorkerAnnouncementsPinnedFirst(global),
       ),
     );
@@ -97,7 +99,6 @@ List<WorkerAnnouncementListSection> buildWorkerAnnouncementListSections({
       out.add(
         WorkerAnnouncementListSection(
           headerTitle: name != null && name.isNotEmpty ? name : '현장 #$pid',
-          headerIcon: Icons.apartment_rounded,
           items: items,
         ),
       );
@@ -118,7 +119,6 @@ Widget workerAnnouncementSectionHeader(
   BuildContext context, {
   required String title,
   required int itemCount,
-  IconData icon = Icons.folder_outlined,
 }) {
   final cs = Theme.of(context).colorScheme;
   final tt = Theme.of(context).textTheme;
@@ -129,8 +129,6 @@ Widget workerAnnouncementSectionHeader(
     ),
     child: Row(
       children: [
-        Icon(icon, size: context.rs(20), color: cs.primary),
-        SizedBox(width: context.rsi(8)),
         Expanded(
           child: Text(
             title,

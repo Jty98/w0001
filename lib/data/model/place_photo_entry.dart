@@ -4,6 +4,8 @@ class PlacePhotoEntry {
     required this.phid,
     required this.displayUrl,
     this.originalName,
+    this.originalUrl,
+    this.mediaKind,
     this.createdByUid,
     this.authorDisplayName,
     this.memo,
@@ -17,6 +19,15 @@ class PlacePhotoEntry {
 
   /// DB `originalname` (원본 저장 시 파일명에 사용 가능).
   final String? originalName;
+
+  /// 원본 파일 URL (`original_url`). 썸네일만 있을 때 확장자 힌트용.
+  final String? originalUrl;
+
+  /// `image` | `document` 등 서버 `mediakind`.
+  final String? mediaKind;
+
+  /// PDF·엑셀 등 비이미지 원본 (`mediakind == document`).
+  bool get isDocumentMedia => mediaKind?.trim().toLowerCase() == 'document';
 
   /// 업로더 계정 UID ([UsersRemoteApi.get] 등으로 이름 보강).
   final String? createdByUid;
@@ -35,6 +46,8 @@ class PlacePhotoEntry {
     int? phid,
     String? displayUrl,
     String? originalName,
+    String? originalUrl,
+    String? mediaKind,
     String? createdByUid,
     String? authorDisplayName,
     String? memo,
@@ -43,6 +56,8 @@ class PlacePhotoEntry {
         phid: phid ?? this.phid,
         displayUrl: displayUrl ?? this.displayUrl,
         originalName: originalName ?? this.originalName,
+        originalUrl: originalUrl ?? this.originalUrl,
+        mediaKind: mediaKind ?? this.mediaKind,
         createdByUid: createdByUid ?? this.createdByUid,
         authorDisplayName: authorDisplayName ?? this.authorDisplayName,
         memo: memo ?? this.memo,

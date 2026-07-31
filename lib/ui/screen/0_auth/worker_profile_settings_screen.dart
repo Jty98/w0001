@@ -6,7 +6,7 @@ import 'package:w0001/ui/screen/0_auth/widgets/account_settings_sections.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/profile_section_chrome.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/profile_worker_rank_career_section.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/profile_worker_skills_section.dart';
-import 'package:w0001/ui/screen/0_auth/widgets/worker_private_info_entry.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 작업자 프로필 설정 화면
@@ -41,7 +41,7 @@ class _WorkerProfileSettingsScreenState
         backgroundColor: colorScheme.surface,
       ),
       body: SafeArea(
-        child: RefreshIndicator(
+        child: AppRefreshIndicator(
           onRefresh: () async {
             await Future.wait([
               ref.read(userAccountProvider.notifier).reload(),
@@ -58,14 +58,9 @@ class _WorkerProfileSettingsScreenState
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const AccountSettingsSectionBody(
-                  phoneSettingRoute: WorkerProfileSettingsScreen.phoneSettingRoute,
-                ),
-                SizedBox(height: context.rsi(20)),
-                const ProfileSectionTitle('세무·정산'),
-                SizedBox(height: context.rsi(8)),
-                ProfileInsetPanel(
-                  padding: EdgeInsets.all(context.rsi(12)),
-                  child: const WorkerPrivateInfoEntry(),
+                  phoneSettingRoute:
+                      WorkerProfileSettingsScreen.phoneSettingRoute,
+                  includePrivateInfo: true,
                 ),
                 SizedBox(height: context.rsi(20)),
                 const ProfileSectionTitle('현장 역할·경력'),

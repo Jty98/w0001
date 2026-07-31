@@ -33,14 +33,15 @@ class SelectDateButton extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              Icon(Icons.calendar_month, size: context.rsi(20), color: cs.primary),
+              Icon(Icons.calendar_month,
+                  size: context.rsi(20), color: cs.primary),
               rsH(context, 10),
               Expanded(
                 child: Text(
                   formatDateTimeWeekDayToString(state.selectDay),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: const Color.fromARGB(255, 70, 70, 70),
-                  ),
+                        color: const Color.fromARGB(255, 70, 70, 70),
+                      ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

@@ -8,7 +8,8 @@ import 'package:w0001/domain/repository/user_notifications_repository.dart';
 import 'package:w0001/util/notifications/local_notification_inbox_store.dart';
 import 'package:w0001/util/notifications/notification_inbox_role_filter.dart';
 
-final class UserNotificationsRepositoryImpl implements UserNotificationsRepository {
+final class UserNotificationsRepositoryImpl
+    implements UserNotificationsRepository {
   UserNotificationsRepositoryImpl({
     required UserNotificationsRemoteApi api,
     required UserRead? Function() currentUser,
@@ -37,11 +38,8 @@ final class UserNotificationsRepositoryImpl implements UserNotificationsReposito
     if (uid == null || uid.isEmpty) return const [];
     final user = _currentUser();
     try {
-      final remote = await _api
-          .list()
-          .timeout(const Duration(seconds: 10));
-      final filtered =
-          NotificationInboxRoleFilter.filterForUser(user, remote);
+      final remote = await _api.list().timeout(const Duration(seconds: 10));
+      final filtered = NotificationInboxRoleFilter.filterForUser(user, remote);
       if (filtered.isNotEmpty) return filtered;
       // 서버 API는 있으나 목록만 비어 있음 → 기기에 쌓인 FCM 로컬 항목 병합
       final local = await _loadLocalFiltered(uid);
@@ -121,7 +119,8 @@ final class UserNotificationsRepositoryImpl implements UserNotificationsReposito
     final uid = _uid;
     final user = _currentUser();
     if (uid == null || user == null) return;
-    if (!NotificationInboxRoleFilter.shouldStoreFcmForUser(user, type, payload)) {
+    if (!NotificationInboxRoleFilter.shouldStoreFcmForUser(
+        user, type, payload)) {
       return;
     }
 

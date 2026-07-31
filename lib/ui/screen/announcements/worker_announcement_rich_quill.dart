@@ -1,18 +1,26 @@
-import 'dart:math' as math;
-
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
+import 'package:w0001/theme/app_input_styles.dart';
 import 'package:w0001/ui/screen/announcements/announcement_image_strip_embed.dart';
+import 'package:w0001/ui/screen/announcements/worker_announcement_quill_codec.dart';
 import 'package:w0001/ui/widget/image_upload_progress_dialog.dart';
 import 'package:w0001/util/image_attachment/image_upload_result.dart';
 import 'package:w0001/util/image_attachment/upload_image_remote.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
-/// 공지·작업 내용 등에서 쓰는 Quill 에디터(동일 포맷) 공통: 툴바 설정, 에디터 설정, 이미지 넣기, UI 조각.
+/// 공지·작업지시 등 Quill 리치 텍스트 공통: 툴바·에디터·이미지 삽입·저장 전 업로드.
+///
+/// **편집 화면** (갤러리 첨부 → 로컬만, 저장 시 업로드):
+/// - [AdminWorkerAnnouncementEditScreen]
+/// - [_PlaceWorkInstructionEditorPage] (`place_work_instruction_editor_sheet.dart`)
+///
+/// **읽기 전용**: [WorkerAnnouncementBlocksDisplay]
 abstract final class WorkerAnnouncementRichQuill {
   WorkerAnnouncementRichQuill._();
 
@@ -24,6 +32,8 @@ abstract final class WorkerAnnouncementRichQuill {
     bool scrollable = true,
     bool autoFocus = false,
     bool expands = false,
+    DefaultStyles? customStyles,
+    TextSpanBuilder? textSpanBuilder,
   }) {
     return QuillEditorConfig(
       placeholder: placeholder,
@@ -31,6 +41,8 @@ abstract final class WorkerAnnouncementRichQuill {
       scrollable: scrollable,
       autoFocus: autoFocus,
       expands: expands,
+      customStyles: customStyles,
+      textSpanBuilder: textSpanBuilder ?? defaultSpanBuilder,
       embedBuilders: announcementQuillEmbedBuilders(
         imageEmbedConfig: const QuillEditorImageEmbedConfig(),
         videoEmbedConfig: null,
@@ -52,6 +64,7 @@ abstract final class WorkerAnnouncementRichQuill {
       showInlineCode: false,
       showColorButton: false,
       showBackgroundColorButton: false,
+
       /// 붙여넣기·외부 델타로 들어온 투명 색 등 복구용(본문 색 버튼은 끔).
       showClearFormat: true,
       showSmallButton: false,
@@ -99,7 +112,54 @@ abstract final class WorkerAnnouncementRichQuill {
     );
   }
 
-  /// 갤러리에서 고른 로컬 이미지 업로드 후 URL 목록 반환 (비어 있으면 취소·실패).
+  /// Quill 본문 — 투명·SCDream 상속 방지.
+  static DefaultStyles quillDefaultStyles(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final body = AppInputStyles.fieldText(
+      context,
+      designFontSize: 16,
+      height: 1.45,
+    );
+    const h = HorizontalSpacing(0, 0);
+    const v = VerticalSpacing(0, 0);
+    return DefaultStyles(
+      color: cs.onSurface,
+      paragraph: DefaultTextBlockStyle(body, h, v, v, null),
+      placeHolder: DefaultTextBlockStyle(
+        body.copyWith(
+          inherit: false,
+          color: cs.onSurfaceVariant.withValues(alpha: 0.72),
+          fontSize: body.fontSize ?? 16,
+          textBaseline: body.textBaseline ?? TextBaseline.alphabetic,
+        ),
+        h,
+        v,
+        v,
+        null,
+      ),
+    );
+  }
+
+  static TextSpanBuilder safeTextSpanBuilder(BuildContext context) {
+    return (
+      BuildContext _,
+      Node node,
+      int nodeOffset,
+      String text,
+      TextStyle? style,
+      GestureRecognizer? recognizer,
+    ) {
+      return TextSpan(
+        text: text,
+        style: AppInputStyles.visibleTextStyle(context, style),
+        recognizer: recognizer,
+        mouseCursor: recognizer != null ? SystemMouseCursors.click : null,
+      );
+    };
+  }
+
+  /// 갤러리에서 고른 로컬 이미지를 **즉시** 업로드한다. (일반 Quill 편집에서는 사용하지 않음)
+  @Deprecated('Use galleryPickWorkflow + prepareDocumentForSave on save')
   static Future<List<String>> pickAndUploadGalleryDisplayUrls({
     required ImagePicker picker,
     required bool Function() mounted,
@@ -137,6 +197,7 @@ abstract final class WorkerAnnouncementRichQuill {
         if (!mounted()) return;
         insertSingleImageEmbedAtCursor(controller: controller, imageUrl: u);
       }
+      scheduleCursorAfterEmbedInsert(controller);
       return;
     }
     if (!mounted()) return;
@@ -149,9 +210,48 @@ abstract final class WorkerAnnouncementRichQuill {
       cursor,
       0,
       embed,
-      TextSelection.collapsed(offset: cursor + 1),
+      null,
+      ignoreFocus: true,
     );
-    _ensureNewlineAfterOffset(controller, cursor + 1);
+    _finalizeEmbedInsertion(controller, cursor);
+    scheduleCursorAfterEmbedInsert(controller);
+    return;
+  }
+
+  /// 임베드 삽입·업로드 다이얼로그 닫힘 뒤에도 커서가 임베드 앞(0)으로 돌아가
+  /// 입력 시 이미지가 덮이지 않도록 문서 끝으로 되돌린다.
+  static void scheduleCursorAfterEmbedInsert(QuillController controller) {
+    void apply() {
+      final end = controller.document.length;
+      if (end <= 0) return;
+      final sel = TextSelection.collapsed(offset: end);
+      if (controller.selection.baseOffset != end ||
+          controller.selection.extentOffset != end) {
+        controller.updateSelection(sel, ChangeSource.local);
+      }
+    }
+
+    apply();
+    SchedulerBinding.instance.addPostFrameCallback((_) => apply());
+    SchedulerBinding.instance.scheduleFrameCallback((_) => apply());
+  }
+
+  /// 이미지·콜라주 임베드 바로 뒤에 줄바꿈을 넣고 커서를 그 다음으로 둔다.
+  ///
+  /// [toPlainText]는 임베드를 빈 문자열로 처리해 문서 오프셋과 맞지 않으므로
+  /// 줄바꿈 존재 여부를 plain text로 검사하지 않는다.
+  static void _finalizeEmbedInsertion(
+    QuillController controller,
+    int embedIndex,
+  ) {
+    final afterEmbed = (embedIndex + 1).clamp(0, controller.document.length);
+    controller.replaceText(
+      afterEmbed,
+      0,
+      '\n',
+      TextSelection.collapsed(offset: afterEmbed + 1),
+      ignoreFocus: true,
+    );
   }
 
   /// 잘못된 selection·키보드 레이아웃 변화 후에도 삽입 위치가 문서 밖으로 나가지 않게 한다.
@@ -160,7 +260,7 @@ abstract final class WorkerAnnouncementRichQuill {
     if (len <= 0) return 0;
     final sel = controller.selection;
     if (!sel.isValid) {
-      return math.max(0, len - 1);
+      return len;
     }
     return sel.baseOffset.clamp(0, len);
   }
@@ -177,29 +277,14 @@ abstract final class WorkerAnnouncementRichQuill {
       cursor,
       0,
       BlockEmbed.image(url),
-      TextSelection.collapsed(offset: cursor + 1),
+      null,
+      ignoreFocus: true,
     );
-    _ensureNewlineAfterOffset(controller, cursor + 1);
+    _finalizeEmbedInsertion(controller, cursor);
   }
 
-  static void _ensureNewlineAfterOffset(QuillController controller, int offset) {
-    final len = controller.document.length;
-    final at = offset.clamp(0, len);
-    if (at < len) {
-      try {
-        final plain = controller.document.toPlainText();
-        if (at < plain.length && plain[at] == '\n') return;
-      } catch (_) {}
-    }
-    controller.replaceText(
-      at,
-      0,
-      '\n',
-      TextSelection.collapsed(offset: at + 1),
-    );
-  }
-
-  /// 툴바 [onRequestPickImage] 안에서 호출하면 됨. 실패 시 스낵바.
+  /// 툴바 [onRequestPickImage] — 갤러리에서 고른 **로컬 경로**만 본문에 넣는다.
+  /// 서버 업로드는 저장 시 [WorkerAnnouncementQuillCodec.uploadLocalImagesInDocument]에서 한다.
   static Future<String?> galleryPickWorkflow({
     required BuildContext context,
     required QuillController controller,
@@ -208,52 +293,63 @@ abstract final class WorkerAnnouncementRichQuill {
     required bool uploadingGuard,
     void Function(bool uploading)? setUploading,
     bool stripLayoutWhenMultiple = true,
-    ImageUploadCategory uploadCategory = ImageUploadCategory.announcementImage,
   }) async {
     if (uploadingGuard) return null;
     if (!context.mounted) return null;
     setUploading?.call(true);
     try {
-      await runWithImageUploadProgressDialog<void>(
+      final imgs = await picker.pickMultiImage(imageQuality: 88);
+      if (!mounted()) return null;
+      if (imgs.isEmpty) return null;
+      final paths = imgs
+          .map((e) => e.path.trim())
+          .where((p) => p.isNotEmpty)
+          .toList(growable: false);
+      if (paths.isEmpty) return null;
+      await insertImageUrlsAtCursor(
+        controller: controller,
         context: context,
-        body: (setMessage) async {
-          setMessage('사진 선택 중…');
-          final imgs = await picker.pickMultiImage(imageQuality: 88);
-          if (!mounted()) return;
-          if (imgs.isEmpty) return;
-          final urls = <String>[];
-          final total = imgs.length;
-          for (var i = 0; i < imgs.length; i++) {
-            if (!mounted()) return;
-            setMessage('이미지 업로드 중… (${i + 1}/$total)');
-            final res = await uploadLocalImageFile(
-              imgs[i].path,
-              category: uploadCategory,
-            );
-            urls.add(res.displayUrl);
-          }
-          if (!mounted()) return;
-          if (!context.mounted) return;
-          setMessage('본문에 붙이는 중…');
-          await insertImageUrlsAtCursor(
-            controller: controller,
-            context: context,
-            urls: urls,
-            mounted: mounted,
-            stripLayoutWhenMultiple: stripLayoutWhenMultiple,
-          );
-        },
+        urls: paths,
+        mounted: mounted,
+        stripLayoutWhenMultiple: stripLayoutWhenMultiple,
       );
+      if (mounted()) {
+        scheduleCursorAfterEmbedInsert(controller);
+      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지 업로드 실패: $e')),
+          SnackBar(content: Text('이미지 첨부 실패: $e')),
         );
       }
     } finally {
       if (mounted()) setUploading?.call(false);
     }
     return null;
+  }
+
+  /// 저장·적용 직전 — 문서에 로컬 이미지가 있으면 업로드 후 URL로 치환한 문서를 반환한다.
+  static Future<Document> prepareDocumentForSave({
+    required BuildContext context,
+    required Document doc,
+    required bool Function() mounted,
+    ImageUploadCategory uploadCategory = ImageUploadCategory.announcementImage,
+  }) async {
+    if (!WorkerAnnouncementQuillCodec.documentHasLocalImages(doc)) {
+      return doc;
+    }
+    if (!context.mounted || !mounted()) return doc;
+    return runWithImageUploadProgressDialog(
+      context: context,
+      body: (setMessage) {
+        return WorkerAnnouncementQuillCodec.uploadLocalImagesInDocument(
+          doc,
+          category: uploadCategory,
+          onProgress: (current, total) =>
+              setMessage('이미지 업로드 중… ($current/$total)'),
+        );
+      },
+    );
   }
 
   /// 현장·공지 등 — URL 목록을 한 번에 삽입(업로드 없음).
@@ -296,6 +392,7 @@ class WorkerAnnouncementRichQuillDocumentEditor extends StatefulWidget {
     this.scrollable,
     this.autoFocus,
     this.expands,
+
     /// [Column]/[Expanded] 안에서 세로 높이를 채울 때 true (무한 높이 제약 방지).
     this.fillParentHeight = false,
     this.decorated = false,
@@ -325,14 +422,18 @@ class _WorkerAnnouncementRichQuillDocumentEditorState
     extends State<WorkerAnnouncementRichQuillDocumentEditor>
     with AutomaticKeepAliveClientMixin {
   late QuillEditorConfig _editorConfig;
+  var _editorConfigReady = false;
 
   @override
   bool get wantKeepAlive => true;
 
   @override
-  void initState() {
-    super.initState();
-    _rebuildEditorConfig();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_editorConfigReady) {
+      _rebuildEditorConfig();
+      _editorConfigReady = true;
+    }
   }
 
   @override
@@ -362,6 +463,8 @@ class _WorkerAnnouncementRichQuillDocumentEditorState
       scrollable: widget.scrollable ?? true,
       autoFocus: widget.autoFocus ?? false,
       expands: useExpands,
+      customStyles: WorkerAnnouncementRichQuill.quillDefaultStyles(context),
+      textSpanBuilder: WorkerAnnouncementRichQuill.safeTextSpanBuilder(context),
     );
   }
 
@@ -382,8 +485,7 @@ class _WorkerAnnouncementRichQuillDocumentEditorState
     if (!widget.decorated) return inner;
 
     final bg = widget.surfaceColor ?? cs.surfaceContainerLow;
-    final border =
-        widget.borderColor ?? cs.outline.withValues(alpha: 0.32);
+    final border = widget.borderColor ?? cs.outline.withValues(alpha: 0.32);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,
@@ -447,7 +549,8 @@ class _WorkerAnnouncementRichQuillToolbarState
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.leadingToolbarWidget != null) widget.leadingToolbarWidget!,
+            if (widget.leadingToolbarWidget != null)
+              widget.leadingToolbarWidget!,
             if (widget.leadingToolbarWidget != null)
               VerticalDivider(
                 width: 1,
@@ -500,7 +603,7 @@ class _WorkerAnnouncementRichQuillToolbarState
                           SizedBox(width: context.rsi(12)),
                           Expanded(
                             child: Text(
-                              widget.uploadHintText ?? '이미지를 올리는 중입니다…',
+                              widget.uploadHintText ?? '이미지 선택 중…',
                               style: tt.bodySmall?.copyWith(
                                 color: cs.onSurfaceVariant,
                               ),
@@ -516,8 +619,7 @@ class _WorkerAnnouncementRichQuillToolbarState
           ),
         );
       case WorkerAnnouncementRichQuillToolbarVariant.inlineScrolledBar:
-        final outerH =
-            context.rs(widget.uploading ? 54 : 52);
+        final outerH = context.rs(widget.uploading ? 54 : 52);
         return SizedBox(
           height: outerH,
           child: Material(

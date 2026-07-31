@@ -1,6 +1,10 @@
 import 'package:w0001/domain/repository/workcost_abst.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/model/place_dropdown_model.dart';
+import 'package:w0001/data/model/paged_result.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
+import 'package:w0001/data/model/work_cost_period_totals.dart';
+import 'package:w0001/data/model/work_cost_worker_summary.dart';
 import 'package:w0001/data/model/workcost_model.dart';
 
 class WorkCostUseCase {
@@ -10,9 +14,38 @@ class WorkCostUseCase {
 
   Future<List<TotalWorkCostModel>> getWorkCostsByDateRange(
     DateTime startDate,
-    DateTime endDate,
+    DateTime endDate, {
+    int? wcomplete,
+    int? hid,
+    int? pid,
+  }) {
+    return _repository.getWorkCostsByDateRange(
+      startDate,
+      endDate,
+      wcomplete: wcomplete,
+      hid: hid,
+      pid: pid,
+    );
+  }
+
+  Future<WorkCostPeriodTotals?> getWorkCostPeriodTotals(
+    DateTime startDate,
+    DateTime endDate, {
+    String? q,
+    int? pid,
+  }) {
+    return _repository.getWorkCostPeriodTotals(
+      startDate,
+      endDate,
+      q: q,
+      pid: pid,
+    );
+  }
+
+  Future<PagedResult<WorkCostWorkerSummary>?> getWorkCostWorkerSummariesPage(
+    ListQuery query,
   ) {
-    return _repository.getWorkCostsByDateRange(startDate, endDate);
+    return _repository.getWorkCostWorkerSummariesPage(query);
   }
 
   Future<List<WorkCost2Model>> getWorkCostsByPlaceAndDate(
@@ -112,11 +145,18 @@ class WorkCostUseCase {
     return _repository.getPlacesForWorkCost(hid);
   }
 
+  Future<List<PlaceDropDownModel>> getPlacesForWorkCostInPeriod(
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    return _repository.getPlacesForWorkCostInPeriod(startDate, endDate);
+  }
+
   Future<List<int>> getSavedWorkDayHidsForPlaceDate({
     required int pid,
     required String dateKey,
   }) {
-    return _repository.getSavedWorkDayHidsForPlaceDate(pid: pid, dateKey: dateKey);
+    return _repository.getSavedWorkDayHidsForPlaceDate(
+        pid: pid, dateKey: dateKey);
   }
 }
-

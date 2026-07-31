@@ -17,6 +17,7 @@ import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_editor_sh
 import 'package:w0001/ui/screen/1_dashboard/widgets/schedule_memo_editor_shared.dart';
 import 'package:w0001/util/alarm_permission_helper.dart';
 import 'package:w0001/util/schedule_memo_alarm_sync.dart';
+import 'package:w0001/util/widget_data_manager.dart';
 
 final workerScheduleNotifierProvider =
     AsyncNotifierProvider<WorkerScheduleNotifier, List<ScheduleMemoRead>>(
@@ -79,8 +80,10 @@ class WorkerScheduleNotifier extends AsyncNotifier<List<ScheduleMemoRead>> {
     }
     final out = byKey.values.toList(growable: false)
       ..sort((a, b) {
-        final da = a.taskdate.length >= 10 ? a.taskdate.substring(0, 10) : a.taskdate;
-        final db = b.taskdate.length >= 10 ? b.taskdate.substring(0, 10) : b.taskdate;
+        final da =
+            a.taskdate.length >= 10 ? a.taskdate.substring(0, 10) : a.taskdate;
+        final db =
+            b.taskdate.length >= 10 ? b.taskdate.substring(0, 10) : b.taskdate;
         final dc = da.compareTo(db);
         if (dc != 0) return dc;
         if (a.isAssignment != b.isAssignment) return a.isAssignment ? -1 : 1;
@@ -101,14 +104,29 @@ class WorkerScheduleNotifier extends AsyncNotifier<List<ScheduleMemoRead>> {
       final y = DateTime.now().year;
       final summary = await _workerApi.fetchSummary(year: y);
       final assign = _assignmentMemosFromWorkDays(summary.workDays);
-      return _mergeAndSort(manual, assign);
+      final merged = _mergeAndSort(manual, assign);
+      await _syncWidget(merged);
+      return merged;
     } catch (_) {
       // 배정 로딩 실패 시에도 개인 메모는 표시.
+      await _syncWidget(manual);
       return manual;
     }
   }
 
-  Future<void> _syncLocalAlarmsForManualMemos(List<ScheduleMemoRead> memos) async {
+  Future<void> _syncWidget(List<ScheduleMemoRead> list) async {
+    try {
+      await WidgetDataManager.syncWorkerScheduleReads(
+        list,
+        weekMonday: scheduleStartOfWeekMonday(DateTime.now()),
+      );
+    } catch (e) {
+      debugPrint('Worker schedule widget sync failed: $e');
+    }
+  }
+
+  Future<void> _syncLocalAlarmsForManualMemos(
+      List<ScheduleMemoRead> memos) async {
     await AlarmPermissionHelper.ensurePermissions();
     await syncScheduleMemoLocalAlarmsFromReads(memos);
   }
@@ -118,7 +136,18 @@ class WorkerScheduleNotifier extends AsyncNotifier<List<ScheduleMemoRead>> {
     final list = state.asData?.value;
     if (list != null) {
       await _syncLocalAlarmsForManualMemos(list);
+      await _syncWidget(list);
     }
+  }
+
+  /// 홈 위젯 스냅샷을 즉시 갱신 (앱 포그라운드 복귀 등).
+  Future<void> syncWidgetSnapshotNow() async {
+    final list = state.asData?.value;
+    if (list != null) {
+      await _syncWidget(list);
+      return;
+    }
+    await reload();
   }
 
   Future<int> _nextSortOrder(String taskDate) async {

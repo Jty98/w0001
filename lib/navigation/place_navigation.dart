@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:w0001/navigation/shell_back_navigation.dart';
 
 /// `/place/detail/...` 하위(공지·공정표 등) 경로인지.
 bool isPlaceDetailSubPath(String path) {
@@ -76,24 +77,28 @@ class PlaceRouteBackScope extends StatelessWidget {
     await popPlaceRoute(context);
   }
 
+  Future<void> _handleSystemBack(BuildContext context) async {
+    if (!consumeDedupedBackEvent()) return;
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+      return;
+    }
+    await _pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canPopRoute = GoRouter.of(context).canPop();
-
     return BackButtonListener(
       onBackButtonPressed: () async {
-        if (canPopRoute) {
-          GoRouter.of(context).pop();
-          return true;
-        }
-        await _pop(context);
+        await _handleSystemBack(context);
         return true;
       },
       child: PopScope(
-        canPop: canPopRoute,
+        canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          unawaited(_pop(context));
+          unawaited(_handleSystemBack(context));
         },
         child: child,
       ),

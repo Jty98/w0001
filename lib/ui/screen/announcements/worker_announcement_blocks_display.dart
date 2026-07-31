@@ -7,6 +7,7 @@ import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
 import 'package:w0001/ui/screen/announcements/announcement_image_strip_embed.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_quill_codec.dart';
+import 'package:w0001/ui/screen/announcements/worker_announcement_rich_quill.dart';
 import 'package:w0001/ui/widget/network_image_viewer_sheet.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -17,15 +18,26 @@ class WorkerAnnouncementBlocksDisplay extends StatefulWidget {
     super.key,
     required this.blocks,
     this.textStyle,
+
     /// true면 Quill 단일 이미지 탭 시 복사·저장·확대 메뉴를 띄우지 않음(목록 미리보기용).
     this.suppressInteractiveImageMenu = false,
-    /// Quill 에디터 최대 높이. null이면 화면 비율로 자동.
+
+    /// Quill 에디터 높이. null이면 화면 비율로 자동(최소 높이 보장).
+    this.quillViewportHeight,
+
+    /// [quillViewportHeight]가 null일 때 화면 높이 대비 비율 (기본 0.52).
+    this.quillViewportHeightFactor = 0.52,
+
+    /// deprecated — [quillViewportHeight] 사용 권장.
     this.quillViewportMaxHeight,
   });
 
   final List<WorkerAnnouncementBlock> blocks;
   final TextStyle? textStyle;
   final bool suppressInteractiveImageMenu;
+  final double? quillViewportHeight;
+  final double quillViewportHeightFactor;
+  @Deprecated('Use quillViewportHeight')
   final double? quillViewportMaxHeight;
 
   @override
@@ -40,11 +52,14 @@ class _WorkerAnnouncementBlocksDisplayState
   late final FocusNode _quillReadFocus;
   late QuillEditorConfig _readEditorConfig;
 
-  QuillEditorConfig _buildReadEditorConfig() {
+  QuillEditorConfig _buildReadEditorConfig(BuildContext context) {
     return QuillEditorConfig(
       showCursor: false,
       padding: EdgeInsets.zero,
       scrollable: true,
+      expands: true,
+      customStyles: WorkerAnnouncementRichQuill.quillDefaultStyles(context),
+      textSpanBuilder: WorkerAnnouncementRichQuill.safeTextSpanBuilder(context),
       embedBuilders: announcementQuillEmbedBuilders(
         imageEmbedConfig: QuillEditorImageEmbedConfig(
           onImageClicked: (url) {
@@ -66,8 +81,13 @@ class _WorkerAnnouncementBlocksDisplayState
   void initState() {
     super.initState();
     _quillReadFocus = FocusNode(canRequestFocus: false, skipTraversal: true);
-    _readEditorConfig = _buildReadEditorConfig();
     _syncQuillReader();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _readEditorConfig = _buildReadEditorConfig(context);
   }
 
   @override
@@ -77,7 +97,7 @@ class _WorkerAnnouncementBlocksDisplayState
     final menuChanged = oldWidget.suppressInteractiveImageMenu !=
         widget.suppressInteractiveImageMenu;
     if (menuChanged) {
-      _readEditorConfig = _buildReadEditorConfig();
+      _readEditorConfig = _buildReadEditorConfig(context);
     }
     if (blocksChanged || menuChanged) {
       _disposeQuillReader();
@@ -113,43 +133,71 @@ class _WorkerAnnouncementBlocksDisplayState
     super.dispose();
   }
 
+  double _resolveQuillViewportHeight(
+      BuildContext context, BoxConstraints constraints) {
+    if (widget.quillViewportHeight != null) {
+      return widget.quillViewportHeight!;
+    }
+    if (constraints.maxHeight.isFinite && constraints.maxHeight >= 240) {
+      return constraints.maxHeight;
+    }
+    final screenH = MediaQuery.sizeOf(context).height;
+    final legacyMax = widget.quillViewportMaxHeight;
+    final fromFactor = screenH * widget.quillViewportHeightFactor;
+    final h = legacyMax ?? fromFactor;
+    return h.clamp(280.0, screenH * 0.72);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (WorkerAnnouncementQuillCodec.blocksLookLikeStoredQuill(widget.blocks)) {
-      final ops = WorkerAnnouncementQuillCodec.decodeDeltaOps(widget.blocks);
-      if (ops != null && _deltaHasRichEmbeds(ops)) {
-        return _QuillDeltaBlocksColumn(
-          ops: ops,
-          textStyle: widget.textStyle,
-        );
-      }
-    }
-    if (_quillRead != null && _quillScroll != null) {
-      final clampMax = widget.quillViewportMaxHeight;
-      if (clampMax != null) {
-        final h = clampMax.clamp(120.0, MediaQuery.sizeOf(context).height * 0.92);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewportH = _resolveQuillViewportHeight(context, constraints);
+
+        if (WorkerAnnouncementQuillCodec.blocksLookLikeStoredQuill(
+            widget.blocks)) {
+          final ops =
+              WorkerAnnouncementQuillCodec.decodeDeltaOps(widget.blocks);
+          if (ops != null && _deltaHasRichEmbeds(ops)) {
+            final manual = _QuillDeltaBlocksColumn.tryBuild(
+              context: context,
+              ops: ops,
+              textStyle: widget.textStyle,
+            );
+            if (manual != null) {
+              return SizedBox(
+                height: viewportH,
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: manual,
+                ),
+              );
+            }
+          }
+        }
+        if (_quillRead != null && _quillScroll != null) {
+          return SizedBox(
+            height: viewportH,
+            child: QuillEditor(
+              key: ValueKey<QuillController>(_quillRead!),
+              focusNode: _quillReadFocus,
+              scrollController: _quillScroll!,
+              controller: _quillRead!,
+              config: _readEditorConfig,
+            ),
+          );
+        }
         return SizedBox(
-          height: h,
-          child: QuillEditor(
-            key: ValueKey<QuillController>(_quillRead!),
-            focusNode: _quillReadFocus,
-            scrollController: _quillScroll!,
-            controller: _quillRead!,
-            config: _readEditorConfig,
+          height: viewportH,
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: _LegacyBlocksColumn(
+              blocks: widget.blocks,
+              textStyle: widget.textStyle,
+            ),
           ),
         );
-      }
-      return QuillEditor(
-        key: ValueKey<QuillController>(_quillRead!),
-        focusNode: _quillReadFocus,
-        scrollController: _quillScroll!,
-        controller: _quillRead!,
-        config: _readEditorConfig.copyWith(scrollable: false),
-      );
-    }
-    return _LegacyBlocksColumn(
-      blocks: widget.blocks,
-      textStyle: widget.textStyle,
+      },
     );
   }
 }
@@ -169,7 +217,7 @@ bool _deltaHasRichEmbeds(List<dynamic> ops) {
 
 /// Quill 읽기 전용 에디터 대신 텍스트·콜라주를 직접 그려 회색 빈 줄을 막는다.
 class _QuillDeltaBlocksColumn extends StatelessWidget {
-  const _QuillDeltaBlocksColumn({
+  const _QuillDeltaBlocksColumn._({
     required this.ops,
     this.textStyle,
   });
@@ -177,8 +225,18 @@ class _QuillDeltaBlocksColumn extends StatelessWidget {
   final List<dynamic> ops;
   final TextStyle? textStyle;
 
-  @override
-  Widget build(BuildContext context) {
+  static Widget? tryBuild({
+    required BuildContext context,
+    required List<dynamic> ops,
+    TextStyle? textStyle,
+  }) {
+    final column = _QuillDeltaBlocksColumn._(ops: ops, textStyle: textStyle);
+    final children = column._buildChildren(context);
+    if (children.isEmpty) return null;
+    return column._wrap(context, children);
+  }
+
+  List<Widget> _buildChildren(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final bodyStyle = textStyle ?? tt.bodyLarge;
     final children = <Widget>[];
@@ -187,8 +245,8 @@ class _QuillDeltaBlocksColumn extends StatelessWidget {
       if (op is! Map) continue;
       final ins = op['insert'];
       if (ins is String) {
-        final t = ins.replaceAll('\u200b', '').trim();
-        if (t.isEmpty) continue;
+        final t = ins.replaceAll('\u200b', '');
+        if (t.replaceAll(RegExp(r'\s'), '').isEmpty) continue;
         children.add(SelectableText(t, style: bodyStyle));
         children.add(SizedBox(height: context.rsi(10)));
         continue;
@@ -222,7 +280,10 @@ class _QuillDeltaBlocksColumn extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: AspectRatio(
                   aspectRatio: 16 / 10,
-                  child: Image.network(u, fit: BoxFit.cover),
+                  child: announcementEmbedImage(
+                    u,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
@@ -231,20 +292,24 @@ class _QuillDeltaBlocksColumn extends StatelessWidget {
         }
       }
     }
+    return children;
+  }
 
-    if (children.isEmpty) {
-      return Text(
-        '(내용 없음)',
-        style: bodyStyle?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
+  Widget _wrap(BuildContext context, List<Widget> children) {
     if (children.last is SizedBox) children.removeLast();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final children = _buildChildren(context);
+    if (children.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return _wrap(context, children);
   }
 }
 
@@ -288,44 +353,44 @@ class _LegacyBlocksColumn extends StatelessWidget {
                 initialIndex: 0,
               ),
               child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AspectRatio(
-                aspectRatio: 16 / 10,
-                child: Image.network(
-                  u,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Skeletonizer(
-                      enabled: true,
-                      child: AspectRatio(
-                        aspectRatio: 16 / 10,
-                        child: ColoredBox(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                          child: Center(
-                            child: Text(
-                              '이미지',
-                              style: Theme.of(context).textTheme.labelLarge,
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: announcementEmbedImage(
+                    u,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Skeletonizer(
+                        enabled: true,
+                        child: AspectRatio(
+                          aspectRatio: 16 / 10,
+                          child: ColoredBox(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            child: Center(
+                              child: Text(
+                                '이미지',
+                                style: Theme.of(context).textTheme.labelLarge,
+                              ),
                             ),
                           ),
                         ),
+                      );
+                    },
+                    errorBuilder: (_, __, ___) => Container(
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: Theme.of(context).colorScheme.outline,
                       ),
-                    );
-                  },
-                  errorBuilder: (_, __, ___) => Container(
-                    color:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.broken_image_outlined,
-                      color: Theme.of(context).colorScheme.outline,
                     ),
                   ),
                 ),
               ),
-            ),
             ),
           );
           children.add(SizedBox(height: context.rsi(14)));
@@ -333,6 +398,16 @@ class _LegacyBlocksColumn extends StatelessWidget {
     }
 
     if (children.isEmpty) {
+      if (WorkerAnnouncementQuillCodec.blocksLookLikeStoredQuill(blocks)) {
+        final preview =
+            WorkerAnnouncementQuillCodec.blocksPlainTextPreview(blocks);
+        if (preview.isNotEmpty) {
+          return SelectableText(
+            preview,
+            style: bodyStyle,
+          );
+        }
+      }
       return Text(
         '(내용 없음)',
         style: bodyStyle?.copyWith(

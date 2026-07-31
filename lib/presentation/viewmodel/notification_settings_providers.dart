@@ -18,8 +18,7 @@ final notificationSettingsRepositoryProvider =
 });
 
 /// 알림 설정 Notifier
-class NotificationSettingsNotifier
-    extends AsyncNotifier<NotificationSettings> {
+class NotificationSettingsNotifier extends AsyncNotifier<NotificationSettings> {
   @override
   Future<NotificationSettings> build() async {
     final repo = ref.watch(notificationSettingsRepositoryProvider);
@@ -28,6 +27,7 @@ class NotificationSettingsNotifier
 
   /// 특정 알림 타입 토글
   Future<void> toggle(NotificationType type) async {
+    if (!type.isUserConfigurable) return;
     // 낙관적 업데이트 (즉시 UI 반영)
     state = AsyncValue.data(
       state.value?.toggle(type) ?? NotificationSettings.initial().toggle(type),
@@ -75,6 +75,6 @@ class NotificationSettingsNotifier
 }
 
 /// 알림 설정 Provider
-final notificationSettingsNotifierProvider = AsyncNotifierProvider<
-    NotificationSettingsNotifier,
-    NotificationSettings>(NotificationSettingsNotifier.new);
+final notificationSettingsNotifierProvider =
+    AsyncNotifierProvider<NotificationSettingsNotifier, NotificationSettings>(
+        NotificationSettingsNotifier.new);

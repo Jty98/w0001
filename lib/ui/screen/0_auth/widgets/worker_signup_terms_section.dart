@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/data/model/terms_models.dart';
@@ -30,8 +31,8 @@ class _WorkerSignupTermsSectionState
 
   void _emit(List<TermSummary> terms) {
     final required = terms.where((t) => t.required).toList(growable: false);
-    final requiredOk = required.isEmpty ||
-        required.every((t) => _agreedIds.contains(t.id));
+    final requiredOk =
+        required.isEmpty || required.every((t) => _agreedIds.contains(t.id));
     final agreements = terms
         .where((t) => _agreedIds.contains(t.id))
         .map(
@@ -77,7 +78,8 @@ class _WorkerSignupTermsSectionState
     if (_loadingDetailId == term.id) return;
     setState(() => _loadingDetailId = term.id);
     try {
-      final detail = await ref.read(termsUseCaseProvider).getTermDetail(term.id);
+      final detail =
+          await ref.read(termsUseCaseProvider).getTermDetail(term.id);
       if (!mounted) return;
       await showTermsDetailSheet(context, detail: detail);
     } catch (e) {
@@ -154,10 +156,7 @@ class _WorkerSignupTermsSectionState
                     ? SizedBox(
                         width: context.rs(16),
                         height: context.rs(16),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.primary,
-                        ),
+                        child: const HammerLoadingIndicator(size: 16),
                       )
                     : const Text('전문'),
               ),

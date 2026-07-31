@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
+import 'package:w0001/util/responsive_layout.dart';
 
 import 'process_schedule_dim.dart';
 import 'process_schedule_grid_widgets.dart';
@@ -20,6 +21,8 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
     required this.brushScrollLock,
     this.readOnly = false,
     this.onDateHeaderTap,
+    this.onAddProcess,
+    this.onTaskNameChanged,
     required this.onStickyPointerDown,
     required this.onStickyPointerMove,
     required this.onStickyPointerUp,
@@ -41,6 +44,11 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
 
   /// 관리자: 날짜 헤더 탭 시 (예: 인력 투입 화면으로).
   final void Function(DateTime day)? onDateHeaderTap;
+
+  /// 공정 목록 하단 [+] — null이면 숨김.
+  final VoidCallback? onAddProcess;
+
+  final void Function(int taskIndex, String name)? onTaskNameChanged;
 
   final void Function(PointerDownEvent e) onStickyPointerDown;
   final void Function(PointerMoveEvent e) onStickyPointerMove;
@@ -132,12 +140,30 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
             children: [
               SizedBox(
                 width: ProcessScheduleChartDim.leftColW(context),
-                child: ListView.builder(
-                  controller: vLeft,
-                  physics: const ClampingScrollPhysics(),
-                  itemCount: d.tasks.length,
-                  itemExtent: ProcessScheduleChartDim.cellH(context),
-                  itemBuilder: (ctx, i) => taskLabelCell(context, d.tasks[i]),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        controller: vLeft,
+                        physics: const ClampingScrollPhysics(),
+                        itemCount: d.tasks.length,
+                        itemExtent: ProcessScheduleChartDim.cellH(context),
+                        itemBuilder: (ctx, i) => onTaskNameChanged == null
+                            ? taskLabelCell(context, d.tasks[i])
+                            : EditableTaskLabelCell(
+                                row: d.tasks[i],
+                                readOnly: readOnly,
+                                onNameCommitted: (name) =>
+                                    onTaskNameChanged!(i, name),
+                              ),
+                      ),
+                    ),
+                    if (onAddProcess != null)
+                      _ProcessListAddButton(
+                        onPressed: onAddProcess!,
+                        colorScheme: cs,
+                      ),
+                  ],
                 ),
               ),
               Expanded(
@@ -172,6 +198,37 @@ class ProcessScheduleStickyScrollChart extends StatelessWidget {
   }
 }
 
+class _ProcessListAddButton extends StatelessWidget {
+  const _ProcessListAddButton({
+    required this.onPressed,
+    required this.colorScheme,
+  });
+
+  final VoidCallback onPressed;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final cellH = ProcessScheduleChartDim.cellH(context);
+    return Material(
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+      child: InkWell(
+        onTap: onPressed,
+        child: SizedBox(
+          height: cellH,
+          child: Center(
+            child: Icon(
+              Icons.add_rounded,
+              color: colorScheme.primary,
+              size: context.rsi(26),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 double chartContentW(BuildContext context, ProcessScheduleData d) =>
     ProcessScheduleChartDim.leftColW(context) +
     d.dayCount * ProcessScheduleChartDim.cellW(context);
@@ -190,6 +247,9 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
     required this.labelCentersByRow,
     required this.onCellTap,
     this.onDateHeaderTap,
+    this.readOnly = false,
+    this.onAddProcess,
+    this.onTaskNameChanged,
   });
 
   final ColorScheme cs;
@@ -199,6 +259,9 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
 
   final void Function(int taskIndex, int dayIndex) onCellTap;
   final void Function(DateTime day)? onDateHeaderTap;
+  final bool readOnly;
+  final VoidCallback? onAddProcess;
+  final void Function(int taskIndex, String name)? onTaskNameChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -207,7 +270,7 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
     final cellH = ProcessScheduleChartDim.cellH(context);
     return SizedBox(
       width: chartContentW(context, d),
-      height: chartContentH(context, d),
+      height: chartContentH(context, d) + (onAddProcess != null ? cellH : 0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -240,11 +303,23 @@ class ProcessScheduleOverviewChart extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (final t in d.tasks)
+                    for (var ti = 0; ti < d.tasks.length; ti++)
                       SizedBox(
                         height: cellH,
                         width: ProcessScheduleChartDim.leftColW(context),
-                        child: taskLabelCell(context, t),
+                        child: onTaskNameChanged == null
+                            ? taskLabelCell(context, d.tasks[ti])
+                            : EditableTaskLabelCell(
+                                row: d.tasks[ti],
+                                readOnly: readOnly,
+                                onNameCommitted: (name) =>
+                                    onTaskNameChanged!(ti, name),
+                              ),
+                      ),
+                    if (onAddProcess != null)
+                      _ProcessListAddButton(
+                        onPressed: onAddProcess!,
+                        colorScheme: cs,
                       ),
                   ],
                 ),

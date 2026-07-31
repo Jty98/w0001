@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:736087562902:android:b982dfa4c31832708e40b7",
+        "mobilesdk_app_id": "1:736087562902:android:1b6bf9bd1f45ecfe8e40b7",
         "android_client_info": {
-          "package_name": "com.example.w0001"
+          "package_name": "com.example.interior_work_cost_app"
         }
       },
       "oauth_client": [],

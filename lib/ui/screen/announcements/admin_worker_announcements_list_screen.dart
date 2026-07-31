@@ -1,27 +1,21 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:w0001/data/datasources/remote/http_client.dart';
-import 'package:w0001/data/datasources/remote/place/places_api.dart';
-import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
+import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/worker_announcement_paged_list_notifier.dart';
 import 'package:w0001/presentation/viewmodel/worker_announcement_providers.dart';
-import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/ui/screen/announcements/admin_worker_announcement_edit_screen.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_inbox_layout.dart';
+import 'package:w0001/ui/screen/announcements/worker_announcement_list_filters.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_read_widgets.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcements_inbox_screen.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
+import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
-
-class _AdminManageLoad {
-  const _AdminManageLoad({
-    required this.announcements,
-    required this.placeNameByPid,
-  });
-
-  final List<WorkerAnnouncementRead> announcements;
-  final Map<int, String> placeNameByPid;
-}
 
 /// 관리자: 공지 목록·삭제·편집 진입 (전체 / 현장 구분).
 class AdminWorkerAnnouncementsListScreen extends ConsumerStatefulWidget {
@@ -34,38 +28,61 @@ class AdminWorkerAnnouncementsListScreen extends ConsumerStatefulWidget {
 
 class _AdminWorkerAnnouncementsListScreenState
     extends ConsumerState<AdminWorkerAnnouncementsListScreen> {
-  Future<_AdminManageLoad>? _future;
+  late final ScrollController _scroll;
   var _segment = WorkerAnnouncementInboxSegment.globalOnly;
+  var _placeState = PlaceState.incomplete;
+  int? _filterPlaceId;
+  String? _filterPlaceName;
+  final _placeNames = WorkerAnnouncementPlaceNameResolver();
 
   @override
   void initState() {
     super.initState();
-    _reload();
+    _scroll = ScrollController()..addListener(_onScroll);
   }
 
-  void _reload() {
-    _future = _load();
+  WorkerAnnouncementPagedQuery get _pagedQuery => WorkerAnnouncementPagedQuery(
+        source: WorkerAnnouncementPagedSource.manage,
+        placeId: _segment == WorkerAnnouncementInboxSegment.placeOnly
+            ? _filterPlaceId
+            : null,
+        scopeFilter: scopeFilterForSegment(
+          _segment,
+          source: WorkerAnnouncementPagedSource.manage,
+          placeId: _filterPlaceId,
+        ),
+        placeComplete: placeCompleteForPagedQuery(
+          segment: _segment,
+          placeState: _placeState,
+          placeId: _filterPlaceId,
+        ),
+      );
+
+  Future<void> _syncPlaceNames(List<WorkerAnnouncementRead> items) async {
+    await _placeNames.ensureForAnnouncements(items);
+    if (mounted) setState(() {});
   }
 
-  Future<_AdminManageLoad> _load() async {
-    final uc = ref.read(workerAnnouncementUseCaseProvider);
-    final pair = await Future.wait([
-      uc.manageList(),
-      PlacesRemoteApi(AppHttpClient.I).listMine().catchError(
-        (_) => const <PlaceRead>[],
-      ),
-    ]);
-    final announcements = pair[0] as List<WorkerAnnouncementRead>;
-    final places = pair[1] as List<PlaceRead>;
-    final byPid = <int, String>{
-      for (final p in places)
-        if (p.pid > 0 && p.pname.trim().isNotEmpty) p.pid: p.pname.trim(),
-    };
-    return _AdminManageLoad(
-      announcements: announcements,
-      placeNameByPid: byPid,
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    onPagedScrollNearEnd(
+      _scroll,
+      onLoadMore: () => ref
+          .read(workerAnnouncementPagedListProvider(_pagedQuery).notifier)
+          .loadMore(),
     );
   }
+
+  Future<void> _reloadPaged({bool silent = false}) => ref
+      .read(workerAnnouncementPagedListProvider(_pagedQuery).notifier)
+      .reload(silent: silent);
+
+  void _refreshFromCache() => unawaited(_reloadPaged(silent: true));
 
   Future<void> _confirmDelete(WorkerAnnouncementRead a) async {
     final ok = await showDialog<bool>(
@@ -93,7 +110,7 @@ class _AdminWorkerAnnouncementsListScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('삭제했습니다.')),
         );
-        setState(_reload);
+        _refreshFromCache();
       }
     } catch (e) {
       if (mounted) {
@@ -121,7 +138,7 @@ class _AdminWorkerAnnouncementsListScreenState
           );
         }
       }
-      setState(_reload);
+      _reloadPaged(silent: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -131,6 +148,21 @@ class _AdminWorkerAnnouncementsListScreenState
     }
   }
 
+  AdminWorkerAnnouncementEditExtra _editExtra(WorkerAnnouncementRead a) {
+    if (a.isGlobal) return AdminWorkerAnnouncementEditExtra(existing: a);
+    final pid = a.pid;
+    if (pid == null || pid <= 0) {
+      return AdminWorkerAnnouncementEditExtra(existing: a);
+    }
+    return AdminWorkerAnnouncementEditExtra(
+      existing: a,
+      placeAnchor: PlaceAnnouncementEditAnchor(
+        pid: pid,
+        displayName: _placeNames.labelFor(pid),
+      ),
+    );
+  }
+
   Widget _announcementTile(
     BuildContext context,
     WorkerAnnouncementRead a, {
@@ -138,95 +170,56 @@ class _AdminWorkerAnnouncementsListScreenState
   }) {
     final cs = Theme.of(context).colorScheme;
 
-    return Stack(
-      children: [
-        WorkerAnnouncementReadListCard(
-          item: a,
-          showEndChevron: false,
-          showPreview: false,
-          placeName: placeNameOnCard,
-          trailing: PopupMenuButton<String>(
-            icon: Icon(
-              Icons.more_vert_rounded,
-              color: cs.onSurfaceVariant,
-            ),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'pin',
-                child: Text(a.isPinned ? '최상단고정 해제' : '최상단고정'),
-              ),
-              const PopupMenuItem(
-                value: 'edit',
-                child: Text('수정'),
-              ),
-              const PopupMenuItem(
-                value: 'del',
-                child: Text('삭제'),
-              ),
-            ],
-            onSelected: (v) async {
-              if (v == 'pin') {
-                await _togglePin(a);
-              } else if (v == 'edit') {
-                await context.push<dynamic>(
-                  '/dashboard/worker-announcements/edit',
-                  extra: a,
-                );
-                if (mounted) setState(_reload);
-              } else if (v == 'del') {
-                await _confirmDelete(a);
-              }
-            },
-          ),
-          onTap: () async {
-            await context.push<dynamic>(
-              '/dashboard/worker-announcements/edit',
-              extra: a,
-            );
-            if (mounted) setState(_reload);
-          },
+    return WorkerAnnouncementReadListCard(
+      item: a,
+      previewMaxLen: 64,
+      placeName: placeNameOnCard,
+      trailing: PopupMenuButton<String>(
+        icon: Icon(
+          Icons.more_vert_rounded,
+          color: cs.onSurfaceVariant,
         ),
-        if (a.isPinned)
-          Positioned(
-            right: context.rsi(12),
-            bottom: context.rsi(10),
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.rsi(6),
-                vertical: context.rsi(2),
-              ),
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.push_pin,
-                    size: context.rs(13),
-                    color: cs.onPrimaryContainer,
-                  ),
-                  SizedBox(width: context.rsi(3)),
-                  Text(
-                    '최상단고정',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: cs.onPrimaryContainer,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                ],
-              ),
-            ),
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: 'pin',
+            child: Text(a.isPinned ? '최상단고정 해제' : '최상단고정'),
           ),
-      ],
+          const PopupMenuItem(
+            value: 'edit',
+            child: Text('수정'),
+          ),
+          const PopupMenuItem(
+            value: 'del',
+            child: Text('삭제'),
+          ),
+        ],
+        onSelected: (v) async {
+          if (v == 'pin') {
+            await _togglePin(a);
+          } else if (v == 'edit') {
+            final changed = await context.push<bool>(
+              '/dashboard/worker-announcements/edit',
+              extra: _editExtra(a),
+            );
+            if (mounted && changed == true) _refreshFromCache();
+          } else if (v == 'del') {
+            await _confirmDelete(a);
+          }
+        },
+      ),
+      onTap: () async {
+        final changed = await context.push<bool>(
+          '/dashboard/worker-announcements/edit',
+          extra: _editExtra(a),
+        );
+        if (mounted && changed == true) _refreshFromCache();
+      },
     );
   }
 
   List<Widget> _buildSectionedList(
     BuildContext context,
     List<WorkerAnnouncementListSection> sections,
-    Map<int, String> placeNameByPid,
   ) {
     final children = <Widget>[];
     for (var s = 0; s < sections.length; s++) {
@@ -237,7 +230,6 @@ class _AdminWorkerAnnouncementsListScreenState
             context,
             title: section.headerTitle!,
             itemCount: section.items.length,
-            icon: section.headerIcon ?? Icons.folder_outlined,
           ),
         );
       }
@@ -247,9 +239,8 @@ class _AdminWorkerAnnouncementsListScreenState
             !a.isGlobal &&
             a.pid != null &&
             a.pid! > 0;
-        final placeLabel = showPlaceChip
-            ? (placeNameByPid[a.pid!] ?? '현장 #${a.pid}')
-            : null;
+        final placeLabel =
+            showPlaceChip ? (_placeNames.labelFor(a.pid!)) : null;
         if (children.isNotEmpty) {
           children.add(SizedBox(height: context.rsi(12)));
         }
@@ -265,13 +256,33 @@ class _AdminWorkerAnnouncementsListScreenState
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final paged = ref.watch(workerAnnouncementPagedListProvider(_pagedQuery));
+    if (paged.items.isNotEmpty) {
+      unawaited(_syncPlaceNames(paged.items));
+    }
+    final announcements = filterAnnouncementsForPlaceTab(
+      items: paged.items,
+      segment: _segment,
+      placeState: _placeState,
+      resolver: _placeNames,
+    );
+    final sections = buildWorkerAnnouncementListSections(
+      announcements: announcements,
+      placeNameByPid: _placeNames.names,
+      segment: _segment,
+      groupByPlace: _filterPlaceId == null,
+    );
+    final blocking =
+        paged.initialLoading && paged.items.isEmpty && paged.error == null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('작업자 공지 관리')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          await context.push<dynamic>('/dashboard/worker-announcements/edit');
-          if (mounted) setState(_reload);
+          final changed = await context.push<bool>(
+            '/dashboard/worker-announcements/edit',
+          );
+          if (mounted && changed == true) _refreshFromCache();
         },
         icon: const Icon(Icons.edit_notifications_outlined),
         label: const Text('새 공지'),
@@ -279,78 +290,51 @@ class _AdminWorkerAnnouncementsListScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.rsi(16),
-              context.rsi(12),
-              context.rsi(16),
-              context.rsi(4),
-            ),
-            child: SegmentedButton<WorkerAnnouncementInboxSegment>(
-              showSelectedIcon: false,
-              style: AppSegmentedButton.styleFrom(
-                textStyle: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              segments: [
-                ButtonSegment(
-                  value: WorkerAnnouncementInboxSegment.globalOnly,
-                  label: AppSegmentedButton.segmentLabel('전체공지'),
-                  tooltip: '전체 공지',
-                ),
-                ButtonSegment(
-                  value: WorkerAnnouncementInboxSegment.placeOnly,
-                  label: AppSegmentedButton.segmentLabel('현장공지'),
-                  tooltip: '현장 공지',
-                ),
-              ],
-              selected: {_segment},
-              onSelectionChanged: (next) {
-                setState(() => _segment = next.first);
+          WorkerAnnouncementInboxScopeSegment(
+            value: _segment,
+            onChanged: (next) {
+              setState(() {
+                _segment = next;
+                if (_segment == WorkerAnnouncementInboxSegment.globalOnly) {
+                  _filterPlaceId = null;
+                  _filterPlaceName = null;
+                }
+              });
+            },
+          ),
+          if (_segment == WorkerAnnouncementInboxSegment.placeOnly) ...[
+            WorkerAnnouncementPlaceCompleteSegment(
+              value: _placeState,
+              onChanged: (next) {
+                setState(() {
+                  _placeState = next;
+                  _filterPlaceId = null;
+                  _filterPlaceName = null;
+                });
               },
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.rsi(16),
-              context.rsi(8),
-              context.rsi(16),
-              context.rsi(8),
+            WorkerAnnouncementPlaceSearchBar(
+              selectedPlaceId: _filterPlaceId,
+              selectedPlaceName: _filterPlaceName,
+              placeState: _placeState,
+              onChanged: (placeId, placeName, placePcomplete) {
+                setState(() {
+                  _filterPlaceId = placeId;
+                  _filterPlaceName = placeName;
+                  if (placeId != null && placeName != null) {
+                    _placeNames.remember(
+                      placeId,
+                      placeName,
+                      pcomplete: placePcomplete,
+                    );
+                  }
+                });
+              },
             ),
-            child: Material(
-              color: cs.surfaceContainerLow.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.rsi(14),
-                  vertical: context.rsi(11),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline_rounded,
-                        color: cs.primary, size: context.rs(20)),
-                    SizedBox(width: context.rsi(10)),
-                    Expanded(
-                      child: Text(
-                        workerAnnouncementSegmentHint(_segment),
-                        style: tt.bodySmall?.copyWith(
-                          height: 1.4,
-                          color: cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          ],
           Expanded(
-            child: FutureBuilder<_AdminManageLoad>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return Skeletonizer(
+            child: blocking
+                ? Skeletonizer(
                     enabled: true,
                     child: ListView(
                       padding: EdgeInsets.fromLTRB(
@@ -364,7 +348,6 @@ class _AdminWorkerAnnouncementsListScreenState
                           context,
                           title: '○○ 현장',
                           itemCount: 2,
-                          icon: Icons.apartment_rounded,
                         ),
                         SizedBox(height: context.rsi(12)),
                         for (var i = 0; i < 3; i++) ...[
@@ -387,80 +370,74 @@ class _AdminWorkerAnnouncementsListScreenState
                         ],
                       ],
                     ),
-                  );
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(context.rsi(24)),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(snap.error.toString(), textAlign: TextAlign.center),
-                          SizedBox(height: context.rsi(16)),
-                          FilledButton(
-                            onPressed: () => setState(_reload),
-                            child: const Text('다시 시도'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                final data = snap.data;
-                final announcements =
-                    data?.announcements ?? const <WorkerAnnouncementRead>[];
-                final placeNameByPid = data?.placeNameByPid ?? const <int, String>{};
-                final sections = buildWorkerAnnouncementListSections(
-                  announcements: announcements,
-                  placeNameByPid: placeNameByPid,
-                  segment: _segment,
-                );
-
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    final f = _load();
-                    setState(() => _future = f);
-                    await f;
-                  },
-                  child: sections.isEmpty
-                      ? CustomScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          slivers: [
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(context.rsi(24)),
-                                  child: Text(
-                                    workerAnnouncementEmptyMessage(_segment),
-                                    textAlign: TextAlign.center,
-                                    style: tt.bodyLarge?.copyWith(
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
+                  )
+                : paged.error != null && announcements.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(context.rsi(24)),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                paged.error.toString(),
+                                textAlign: TextAlign.center,
                               ),
-                            ),
-                          ],
-                        )
-                      : ListView(
-                          padding: EdgeInsets.fromLTRB(
-                            context.rsi(16),
-                            context.rsi(4),
-                            context.rsi(16),
-                            context.rsi(100),
-                          ),
-                          children: _buildSectionedList(
-                            context,
-                            sections,
-                            placeNameByPid,
+                              SizedBox(height: context.rsi(16)),
+                              FilledButton(
+                                onPressed: () => _reloadPaged(),
+                                child: const Text('다시 시도'),
+                              ),
+                            ],
                           ),
                         ),
-                );
-              },
-            ),
+                      )
+                    : AppRefreshIndicator(
+                        onRefresh: () => _reloadPaged(),
+                        child: sections.isEmpty
+                            ? CustomScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                slivers: [
+                                  SliverFillRemaining(
+                                    hasScrollBody: false,
+                                    child: Center(
+                                      child: Padding(
+                                        padding:
+                                            EdgeInsets.all(context.rsi(24)),
+                                        child: Text(
+                                          workerAnnouncementEmptyMessage(
+                                            _segment,
+                                            placeState: _placeState,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          style: tt.bodyLarge?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView(
+                                controller: _scroll,
+                                padding: EdgeInsets.fromLTRB(
+                                  context.rsi(16),
+                                  context.rsi(4),
+                                  context.rsi(16),
+                                  context.rsi(100),
+                                ),
+                                children: [
+                                  ..._buildSectionedList(
+                                    context,
+                                    sections,
+                                  ),
+                                  PagedListFooter(
+                                    isLoading: paged.isLoadingMore,
+                                    hasMore: paged.hasMore,
+                                  ),
+                                ],
+                              ),
+                      ),
           ),
         ],
       ),

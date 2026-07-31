@@ -203,8 +203,10 @@ class WorkerPersonalDashboardNotifier
     );
   }
 
-  Future<void> reload() async {
-    state = const AsyncLoading();
+  Future<void> reload({bool silent = false}) async {
+    if (!silent && state.asData?.value == null) {
+      state = const AsyncLoading();
+    }
     state = await AsyncValue.guard(() async => build());
   }
 }

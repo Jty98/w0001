@@ -11,9 +11,11 @@ class ProfilePhoneInfoEntry extends ConsumerWidget {
   const ProfilePhoneInfoEntry({
     super.key,
     this.phoneSettingRoute = '/profile/phone-setting',
+    this.embedded = false,
   });
 
   final String phoneSettingRoute;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,7 +26,13 @@ class ProfilePhoneInfoEntry extends ConsumerWidget {
     return accountAsync.when(
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
-      loading: () => const ProfilePhoneEntrySkeleton(),
+      loading: () => embedded
+          ? const ListTile(
+              leading: Icon(Icons.phone_outlined),
+              title: Text('전화번호'),
+              subtitle: Text('불러오는 중'),
+            )
+          : const ProfilePhoneEntrySkeleton(),
       error: (e, _) => ProfileInsetPanel(
         padding: EdgeInsets.all(context.rsi(16)),
         child: Text(
@@ -49,49 +57,53 @@ class ProfilePhoneInfoEntry extends ConsumerWidget {
             ? (account.phoneVerified ? '$phone · 인증됨' : '$phone · 미인증')
             : '등록된 전화번호가 없습니다';
 
-        return ProfileInsetPanel(
-          padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
-          child: ListTile(
-            leading: Icon(
-              Icons.phone_outlined,
-              color: cs.primary,
-              size: context.rsi(22),
-            ),
-            title: Text(
-              '전화번호',
-              style: TextStyle(fontSize: context.rs(14)),
-            ),
-            subtitle: Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: context.rs(12),
-                color: hasPhone && !account.phoneVerified
-                    ? cs.error.withValues(alpha: 0.85)
-                    : null,
-              ),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (hasPhone)
-                  Icon(
-                    account.phoneVerified
-                        ? Icons.verified_rounded
-                        : Icons.warning_amber_rounded,
-                    size: context.rsi(18),
-                    color: account.phoneVerified
-                        ? cs.primary
-                        : cs.error.withValues(alpha: 0.75),
-                  ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: context.rsi(20),
-                ),
-              ],
-            ),
-            onTap: () => context.push(phoneSettingRoute),
+        final tile = ListTile(
+          leading: Icon(
+            Icons.phone_outlined,
+            color: cs.primary,
+            size: context.rsi(22),
           ),
+          title: Text(
+            '전화번호',
+            style: TextStyle(fontSize: context.rs(14)),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: context.rs(12),
+              color: hasPhone && !account.phoneVerified
+                  ? cs.error.withValues(alpha: 0.85)
+                  : null,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (hasPhone)
+                Icon(
+                  account.phoneVerified
+                      ? Icons.verified_rounded
+                      : Icons.warning_amber_rounded,
+                  size: context.rsi(18),
+                  color: account.phoneVerified
+                      ? cs.primary
+                      : cs.error.withValues(alpha: 0.75),
+                ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: context.rsi(20),
+              ),
+            ],
+          ),
+          onTap: () => context.push(phoneSettingRoute),
         );
+
+        return embedded
+            ? tile
+            : ProfileInsetPanel(
+                padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
+                child: tile,
+              );
       },
     );
   }

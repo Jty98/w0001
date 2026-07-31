@@ -13,6 +13,31 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
+// home_widget 등 플러그인이 기본 JVM 1.8로 컴파일되면
+// JVM 11+ 바이트코드를 inline할 수 없어 :home_widget:compileReleaseKotlin이 실패한다.
+// evaluationDependsOn(':app') 때문에 일부 서브프로젝트는 이미 evaluated 상태일 수 있다.
+subprojects { subproject ->
+    def configureJvm17 = {
+        def androidExt = subproject.extensions.findByName('android')
+        if (androidExt != null) {
+            androidExt.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+        subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = JavaVersion.VERSION_17.toString()
+            }
+        }
+    }
+    if (subproject.state.executed) {
+        configureJvm17()
+    } else {
+        subproject.afterEvaluate(configureJvm17)
+    }
+}
+
 // home_widget가 `androidx.glance:glance-appwidget:1.+`를 쓰면 최신 알파(1.3.x)가 resolve 되며
 // compileSdk 37·AGP 9.1을 요구해 릴리즈 checkReleaseAarMetadata가 실패한다.
 subprojects { subproject ->

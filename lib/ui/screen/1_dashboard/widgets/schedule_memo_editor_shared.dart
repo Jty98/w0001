@@ -110,12 +110,9 @@ Future<TimeOfDay?> pickScheduleMemoTaskTime(
                                   : Colors.transparent,
                               foregroundColor: selected.minute == 0
                                   ? Theme.of(ctx).colorScheme.onPrimary
-                                  : Theme.of(ctx)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                  : Theme.of(ctx).colorScheme.onSurfaceVariant,
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(ctx.rs(10)),
+                                borderRadius: BorderRadius.circular(ctx.rs(10)),
                               ),
                             ),
                             child: const Text('정각'),
@@ -132,12 +129,9 @@ Future<TimeOfDay?> pickScheduleMemoTaskTime(
                                   : Colors.transparent,
                               foregroundColor: selected.minute == 30
                                   ? Theme.of(ctx).colorScheme.onPrimary
-                                  : Theme.of(ctx)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                  : Theme.of(ctx).colorScheme.onSurfaceVariant,
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(ctx.rs(10)),
+                                borderRadius: BorderRadius.circular(ctx.rs(10)),
                               ),
                             ),
                             child: const Text('반'),

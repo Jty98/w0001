@@ -100,6 +100,97 @@ class ProcessScheduleEditor {
     return out;
   }
 
+  /// 이름·일정 없는 빈 행 — 구분 열에서 이름을 직접 입력한다.
+  static ProcessScheduleData addEmptyTask(
+    ProcessScheduleData d, {
+    bool sortRows = false,
+  }) {
+    if (d.dayCount < 1) return d;
+    final tasks = [
+      ...d.tasks,
+      ProcessScheduleTask(
+        serverId: null,
+        name: '',
+        scheduledDayIndices: const [],
+        paletteIndex: 0,
+      ),
+    ];
+    var out = d.copyWith(tasks: tasks);
+    if (sortRows) {
+      out = sortByEarliestStart(out);
+    }
+    return out;
+  }
+
+  static ProcessScheduleData setTaskName(
+    ProcessScheduleData d,
+    int taskIndex,
+    String name, {
+    bool sortRows = false,
+  }) {
+    if (taskIndex < 0 || taskIndex >= d.tasks.length) return d;
+    final tasks = [...d.tasks];
+    tasks[taskIndex] = tasks[taskIndex].copyWith(name: name.trim());
+    var out = d.copyWith(tasks: tasks);
+    if (sortRows) {
+      out = sortByEarliestStart(out);
+    }
+    return out;
+  }
+
+  /// 저장 전 — 이름이 비어 있는 행은 제외한다.
+  static ProcessScheduleData withoutUnnamedTasks(ProcessScheduleData d) {
+    final tasks =
+        d.tasks.where((t) => t.name.trim().isNotEmpty).toList(growable: false);
+    if (tasks.length == d.tasks.length) return d;
+    return d.copyWith(tasks: tasks);
+  }
+
+  /// UI 기본값으로만 쓰이던 플레이스홀더 — 실제 공정으로 저장하지 않는다.
+  static const placeholderProcessTaskName = '추가 공정';
+
+  static ProcessScheduleData withoutPlaceholderTasks(ProcessScheduleData d) {
+    final tasks = d.tasks
+        .where((t) => t.name.trim() != placeholderProcessTaskName)
+        .toList(growable: false);
+    if (tasks.length == d.tasks.length) return d;
+    return d.copyWith(tasks: tasks);
+  }
+
+  /// 같은 이름 공정이 있으면 일정만 합치고, 없을 때만 새 행을 추가한다.
+  static ProcessScheduleData upsertTaskRange(
+    ProcessScheduleData d,
+    String name,
+    int startIdx,
+    int endIdx, {
+    bool sortRows = true,
+  }) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || d.dayCount < 1) return d;
+
+    final lo = startIdx.clamp(0, d.dayCount - 1);
+    var hi = endIdx.clamp(0, d.dayCount - 1);
+    if (hi < lo) hi = lo;
+    final span = {for (var i = lo; i <= hi; i++) i};
+
+    for (var ti = 0; ti < d.tasks.length; ti++) {
+      if (d.tasks[ti].name.trim() != trimmed) continue;
+      final t = d.tasks[ti];
+      final next = t.scheduledDayIndices.toSet()..addAll(span);
+      final tasks = [...d.tasks];
+      tasks[ti] = t.copyWith(
+        scheduledDayIndices: (next.toList()..sort()),
+      );
+      var out = d.copyWith(tasks: tasks);
+      if (sortRows) {
+        out = sortByEarliestStart(out);
+      }
+      return out;
+    }
+
+    return addTaskRange(d, trimmed, lo, hi, sortRows: sortRows);
+  }
+
   /// 공사 시작(최소 일 인덱스)이 빠른 순. 일정 없음은 맨 아래.
   static ProcessScheduleData sortByEarliestStart(ProcessScheduleData d) {
     final n = d.tasks.length;
@@ -198,6 +289,46 @@ class ProcessScheduleEditor {
     newDayCount = newDayCount.clamp(1, 731);
     if (newStart == g0 && newDayCount == d.dayCount) return d;
     return remapToNewGrid(d, newStart, newDayCount, sortRows: true);
+  }
+
+  /// 선택 공정의 [scheduledDayIndices]를 [rangeStart]~[rangeEndInclusive] 달력 구간까지 확장.
+  static ProcessScheduleData extendTaskToCoverCalendarRange(
+    ProcessScheduleData d,
+    int taskIndex,
+    DateTime rangeStart,
+    DateTime rangeEndInclusive, {
+    bool sortRows = true,
+  }) {
+    if (taskIndex < 0 || taskIndex >= d.tasks.length) return d;
+    var s = _calendarDay(rangeStart);
+    var e = _calendarDay(rangeEndInclusive);
+    if (e.isBefore(s)) {
+      final t = s;
+      s = e;
+      e = t;
+    }
+
+    var data = expandGridToIncludeCalendarDay(d, s);
+    data = expandGridToIncludeCalendarDay(data, e);
+
+    final task = data.tasks[taskIndex];
+    final next = task.scheduledDayIndices.toSet();
+    var cur = s;
+    while (!cur.isAfter(e)) {
+      final idx = gridIndexForCalendarDay(data, cur);
+      if (idx != null) next.add(idx);
+      cur = DateTime(cur.year, cur.month, cur.day + 1);
+    }
+
+    final tasks = [...data.tasks];
+    tasks[taskIndex] = task.copyWith(
+      scheduledDayIndices: (next.toList()..sort()),
+    );
+    var out = data.copyWith(tasks: tasks);
+    if (sortRows) {
+      out = sortByEarliestStart(out);
+    }
+    return out;
   }
 
   /// 새 시작일·열 개수로 바꾸면서, 각 공정의 선택 칸을 **달력 날짜** 기준으로 옮김.

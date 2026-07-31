@@ -1,8 +1,13 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -33,24 +38,45 @@ class _DashboardPlaceListSheetBody extends ConsumerStatefulWidget {
 
 class _DashboardPlaceListSheetBodyState
     extends ConsumerState<_DashboardPlaceListSheetBody> {
+  List<PlaceInfoModel> _allPlaces = const [];
+  bool _loading = true;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(placeListProvider.notifier).fetchAllPlace();
+      if (mounted) unawaited(_loadPlaces());
     });
+  }
+
+  Future<void> _loadPlaces() async {
+    final user = ref.read(authSessionProvider).asData?.value;
+    if (user == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final all = await ref.read(placeUseCaseProvider).getAllPlaces(
+            managementPlacesInfoFirst: user.isManagementRole,
+            role: user.role,
+          );
+      if (!mounted) return;
+      setState(() {
+        _allPlaces = all;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final placeState = ref.watch(placeListProvider);
     final wantComplete = widget.filter == PlaceState.complete;
-    final list = placeState.placeList
-        .where((p) => p.pcomplete == (wantComplete ? 1 : 0))
-        .toList();
+    final list =
+        _allPlaces.where((p) => p.pcomplete == (wantComplete ? 1 : 0)).toList();
 
     final title = wantComplete ? '완료 현장' : '진행 중 현장';
     final emptyLabel = wantComplete ? '완료된 현장이 없습니다.' : '진행 중인 현장이 없습니다.';
@@ -81,27 +107,29 @@ class _DashboardPlaceListSheetBodyState
           SizedBox(height: context.rsi(12)),
           SizedBox(
             height: maxH,
-            child: list.isEmpty
-                ? Center(
-                    child: Text(
-                      emptyLabel,
-                      style: tt.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
+            child: _loading
+                ? const AppLoadingIndicator()
+                : list.isEmpty
+                    ? Center(
+                        child: Text(
+                          emptyLabel,
+                          style: tt.bodyMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: list.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          color: cs.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                        itemBuilder: (ctx, i) {
+                          final p = list[i];
+                          return _PlaceSheetTile(place: p);
+                        },
                       ),
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) => Divider(
-                      height: 1,
-                      color: cs.outlineVariant.withValues(alpha: 0.4),
-                    ),
-                    itemBuilder: (ctx, i) {
-                      final p = list[i];
-                      return _PlaceSheetTile(place: p);
-                    },
-                  ),
           ),
         ],
       ),

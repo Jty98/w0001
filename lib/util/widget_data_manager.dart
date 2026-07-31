@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:home_widget/home_widget.dart';
+import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 
 class WidgetDataManager {
@@ -19,32 +20,66 @@ class WidgetDataManager {
     _isInitialized = true;
   }
 
+  static Map<String, dynamic> _memoModelToJson(ScheduleMemoModel m) => {
+        'sid': m.sid,
+        'title': m.title,
+        'memo': m.memo,
+        'taskDate': m.taskDate,
+        'taskTime': m.taskTime,
+        'done': m.done,
+        'sourceType': 'manual',
+        'workrole': '',
+      };
+
+  static Map<String, dynamic> _memoReadToJson(ScheduleMemoRead m) {
+    final date =
+        m.taskdate.length >= 10 ? m.taskdate.substring(0, 10) : m.taskdate;
+    return {
+      'sid': m.sid,
+      'title': m.title,
+      'memo': m.memo,
+      'taskDate': date,
+      'taskTime': m.tasktime,
+      'done': m.done,
+      'sourceType': m.sourceType,
+      'workrole': m.workrole,
+    };
+  }
+
+  static Future<void> _saveAndRefresh({
+    required List<Map<String, dynamic>> weekly,
+    required List<Map<String, dynamic>> pool,
+  }) async {
+    await _ensureInitialized();
+    await HomeWidget.saveWidgetData<String>(
+      _widgetSchedulePoolKey,
+      jsonEncode(pool),
+    );
+    await HomeWidget.saveWidgetData<String>(
+      'weekly_schedule',
+      jsonEncode(weekly),
+    );
+    await HomeWidget.saveWidgetData<int>(_widgetWeekOffsetKey, 0);
+    await HomeWidget.updateWidget(
+      qualifiedAndroidName:
+          'com.example.interior_work_cost_app.ScheduleWidgetProvider',
+      name: _androidWidgetName,
+      androidName: _androidWidgetName,
+      iOSName: 'ScheduleWidget',
+    );
+  }
+
   static Future<void> updateScheduleWidget(
       List<ScheduleMemoModel> weeklyMemos) async {
     try {
       await _ensureInitialized();
-      // 1주일치 데이터를 JSON으로 변환
-      final data = weeklyMemos
-          .map((m) => {
-                'sid': m.sid,
-                'title': m.title,
-                'memo': m.memo,
-                'taskDate': m.taskDate,
-                'taskTime': m.taskTime,
-                'done': m.done,
-              })
-          .toList();
-
-      final jsonString = jsonEncode(data);
-
-      // 데이터 저장
-      await HomeWidget.saveWidgetData<String>('weekly_schedule', jsonString);
-      // 위젯 최초 진입 기준은 항상 이번 주로 맞춘다.
+      final data = weeklyMemos.map(_memoModelToJson).toList();
+      await HomeWidget.saveWidgetData<String>(
+          'weekly_schedule', jsonEncode(data));
       await HomeWidget.saveWidgetData<int>(_widgetWeekOffsetKey, 0);
-
-      // 위젯 업데이트 요청
       await HomeWidget.updateWidget(
-        qualifiedAndroidName: 'com.example.w0001.ScheduleWidgetProvider',
+        qualifiedAndroidName:
+            'com.example.interior_work_cost_app.ScheduleWidgetProvider',
         name: _androidWidgetName,
         androidName: _androidWidgetName,
         iOSName: 'ScheduleWidget',
@@ -57,24 +92,47 @@ class WidgetDataManager {
   static Future<void> saveSchedulePool(List<ScheduleMemoModel> memos) async {
     try {
       await _ensureInitialized();
-      final data = memos
-          .map(
-            (m) => {
-              'sid': m.sid,
-              'title': m.title,
-              'memo': m.memo,
-              'taskDate': m.taskDate,
-              'taskTime': m.taskTime,
-              'done': m.done,
-            },
-          )
-          .toList();
+      final data = memos.map(_memoModelToJson).toList();
       await HomeWidget.saveWidgetData<String>(
         _widgetSchedulePoolKey,
         jsonEncode(data),
       );
     } catch (e) {
       print('Widget schedule pool save error: $e');
+    }
+  }
+
+  /// 작업자 「내 일정」+ 현장투입 행을 위젯에 반영.
+  static Future<void> syncWorkerScheduleReads(
+    List<ScheduleMemoRead> all, {
+    required DateTime weekMonday,
+    int weekRadius = 4,
+  }) async {
+    try {
+      final mon = DateTime(weekMonday.year, weekMonday.month, weekMonday.day);
+      final weekEnd = mon.add(const Duration(days: 6));
+      final poolFrom = mon.subtract(Duration(days: 7 * weekRadius));
+      final poolTo = mon.add(Duration(days: 7 * weekRadius + 6));
+
+      bool inRange(String raw, DateTime from, DateTime to) {
+        final key = raw.length >= 10 ? raw.substring(0, 10) : raw;
+        final d = DateTime.tryParse(key);
+        if (d == null) return false;
+        final day = DateTime(d.year, d.month, d.day);
+        return !day.isBefore(from) && !day.isAfter(to);
+      }
+
+      final pool = all
+          .where((m) => inRange(m.taskdate, poolFrom, poolTo))
+          .map(_memoReadToJson)
+          .toList();
+      final weekly = all
+          .where((m) => inRange(m.taskdate, mon, weekEnd))
+          .map(_memoReadToJson)
+          .toList();
+      await _saveAndRefresh(weekly: weekly, pool: pool);
+    } catch (e) {
+      print('Widget worker schedule sync error: $e');
     }
   }
 
@@ -120,7 +178,7 @@ class WidgetDataManager {
       final updates = decoded
           .whereType<Map>()
           .map((e) => WidgetDoneUpdate.fromMap(e.cast<String, dynamic>()))
-          .where((e) => e.sid != null)
+          .where((e) => e.sid != null && e.sid! > 0)
           .toList();
       await HomeWidget.saveWidgetData<String>(
           _widgetPendingDoneUpdatesKey, '[]');

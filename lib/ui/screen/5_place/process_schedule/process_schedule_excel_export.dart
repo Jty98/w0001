@@ -6,6 +6,7 @@ import 'package:w0001/domain/process_schedule/process_schedule_editor.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_models.dart';
 import 'package:w0001/domain/process_schedule/process_schedule_palette.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_helpers.dart';
+import 'package:w0001/util/xlsx_freeze_panes_patch.dart';
 
 /// `excel` 패키지 저장 시 [Save]는 `fgColor` 문자열이 **`FF`로 시작**(불투명 ARGB)할 때만
 /// solid fill 블록을 씁니다. 알파만 `EB…`인 8자(hex)는 패턴이 빠져 배경이 전혀 안 나옵니다.
@@ -248,5 +249,13 @@ Uint8List? buildProcessScheduleExcelBytes({
   sheet.setRowHeight(headerRow, 24);
 
   final raw = excel.encode();
-  return raw != null ? Uint8List.fromList(raw) : null;
+  if (raw == null) return null;
+
+  // A열(구분) + 5행(날짜 헤더) 고정 — 가로·세로 스크롤 시에도 기준선 유지.
+  const frozenRows = headerRow + 1; // Excel 1-based: 5행까지
+  return applyXlsxFreezePanes(
+    Uint8List.fromList(raw),
+    frozenRows: frozenRows,
+    frozenColumns: 1,
+  );
 }

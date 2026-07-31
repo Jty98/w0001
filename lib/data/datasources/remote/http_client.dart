@@ -9,6 +9,7 @@ import 'package:w0001/data/datasources/remote/auth_token_storage.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/util/api_endpoint.dart';
 import 'package:w0001/util/auth_api_user_messages.dart';
+import 'package:w0001/util/auth_debug_log.dart';
 import 'package:w0001/util/auth_forced_sign_out.dart';
 
 // ---------------------------------------------------------------------------
@@ -225,8 +226,8 @@ final class AppHttpClient {
 
     final structured = tryParseAuthStructuredDetail(err.response?.data);
     if (structured != null &&
-        AuthApiErrorCodes.isInterceptorSessionSuperseded(structured.code)) {
-      unawaited(_handleSessionSuperseded401(err, handler));
+        AuthApiErrorCodes.isInterceptorForceReauth(structured)) {
+      unawaited(_handleForceReauth401(err, handler, structured));
       return;
     }
     if (structured != null &&
@@ -238,17 +239,20 @@ final class AppHttpClient {
     unawaited(_refreshAndRetry(err, handler));
   }
 
-  Future<void> _handleSessionSuperseded401(
+  Future<void> _handleForceReauth401(
     DioException err,
     ErrorInterceptorHandler handler,
+    AuthStructuredDetail structured,
   ) async {
-    await performAuthForcedSignOut(authSessionSupersededMessageKo);
+    authDebugLog('access 401, code=${structured.code} → force reauth');
+    final msg = resolveForceReauthUserMessage(responseData: err.response?.data);
+    await performAuthForcedSignOut(msg);
     handler.next(
       DioException(
         requestOptions: err.requestOptions,
         type: DioExceptionType.badResponse,
         error: HttpAuthException(
-          authSessionSupersededMessageKo,
+          msg,
           statusCode: 401,
           uiMessageAlreadyShown: true,
         ),
@@ -261,7 +265,13 @@ final class AppHttpClient {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    await AuthTokenStorage.I.clear();
+    final msg = localizedAuthDetailMessage(
+      httpStatusCode: err.response?.statusCode,
+      responseData: err.response?.data,
+    );
+    await performAuthForcedSignOut(
+      msg.trim().isNotEmpty ? msg : '계정 이용이 제한되었습니다.',
+    );
     handler.next(_mapDioToClientException(err));
   }
 
@@ -272,14 +282,18 @@ final class AppHttpClient {
     final failed = err.requestOptions;
     final refreshToken = await AuthTokenStorage.I.readRefresh();
     if (refreshToken == null || refreshToken.isEmpty) {
-      await AuthTokenStorage.I.clear();
+      authDebugLog('refresh skipped: no stored refresh_token');
+      final msg =
+          resolveForceReauthUserMessage(responseData: err.response?.data);
+      await performAuthForcedSignOut(msg);
       return handler.next(
         DioException(
           requestOptions: failed,
           type: DioExceptionType.badResponse,
           error: HttpAuthException(
-            authTokenSessionUnifiedMessageKo,
+            msg,
             statusCode: 401,
+            uiMessageAlreadyShown: true,
           ),
           response: err.response,
         ),
@@ -338,6 +352,7 @@ final class AppHttpClient {
   }
 
   Future<void> _refreshTokensOnce(String refreshToken) async {
+    authDebugLogRefreshStart();
     final plain = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
@@ -356,28 +371,9 @@ final class AppHttpClient {
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       if (code == 401) {
-        await AuthTokenStorage.I.clear();
-        final structured = tryParseAuthStructuredDetail(e.response?.data);
-        if (structured != null &&
-            AuthApiErrorCodes.isInterceptorSessionSuperseded(
-              structured.code,
-            )) {
-          await performAuthForcedSignOut(authSessionSupersededMessageKo);
-          throw HttpAuthException(
-            authSessionSupersededMessageKo,
-            statusCode: 401,
-            cause: e,
-            uiMessageAlreadyShown: true,
-          );
-        }
-        final msg = resolveAuthRelatedUserLine(
-          httpStatusCode: 401,
+        authDebugLogRefreshFail(responseData: e.response?.data);
+        throw await _refreshFailureSignOut(
           responseData: e.response?.data,
-          fallbackMessage: authTokenSessionUnifiedMessageKo,
-        );
-        throw HttpAuthException(
-          msg,
-          statusCode: 401,
           cause: e,
         );
       }
@@ -400,29 +396,61 @@ final class AppHttpClient {
       );
     }
     if (res.statusCode != 200 && res.statusCode != 201) {
-      await AuthTokenStorage.I.clear();
-      throw HttpStatusException(
-        '토큰 갱신에 실패했습니다.',
-        statusCode: res.statusCode,
-        body: res.data,
+      authDebugLogRefreshFail(responseData: res.data);
+      throw await _refreshFailureSignOut(
+        responseData: res.data,
+        cause: res,
       );
     }
     final data = res.data;
     if (data is! Map) {
-      await AuthTokenStorage.I.clear();
-      throw const HttpParseException('토큰 응답 형식이 올바르지 않습니다.');
+      authDebugLogRefreshFail(responseData: data);
+      throw await _refreshFailureSignOut(
+        responseData: data,
+        cause: const FormatException('토큰 응답 형식이 올바르지 않습니다.'),
+      );
     }
     AuthTokenPayload p;
     try {
       p = AuthTokenPayload.fromJson(Map<String, dynamic>.from(data));
     } on FormatException catch (e) {
-      await AuthTokenStorage.I.clear();
-      throw HttpParseException(e.message, cause: e);
+      authDebugLogRefreshFail(responseData: data);
+      throw await _refreshFailureSignOut(
+        responseData: data,
+        cause: e,
+      );
     }
-    final rs = (p.refreshToken != null && p.refreshToken!.isNotEmpty)
-        ? p.refreshToken!
-        : refreshToken;
-    await AuthTokenStorage.I.write(access: p.accessToken, refresh: rs);
+    if (p.refreshToken == null || p.refreshToken!.isEmpty) {
+      authDebugLog('refresh ok but refresh_token missing in response');
+      throw await _refreshFailureSignOut(
+        responseData: data,
+        cause: const FormatException('갱신 응답에 refresh_token 이 없습니다.'),
+      );
+    }
+    await AuthTokenStorage.I.write(
+      access: p.accessToken,
+      refresh: p.refreshToken!,
+    );
+    authDebugLogRefreshOk(
+      access: p.accessToken,
+      refresh: p.refreshToken!,
+    );
+  }
+
+  /// refresh 실패·응답 불완전 시 토큰 삭제 후 로그인 화면으로 보낸다.
+  Future<HttpAuthException> _refreshFailureSignOut({
+    required Object? responseData,
+    required Object cause,
+  }) async {
+    await AuthTokenStorage.I.clear();
+    final msg = resolveForceReauthUserMessage(responseData: responseData);
+    await performAuthForcedSignOut(msg);
+    return HttpAuthException(
+      msg,
+      statusCode: 401,
+      cause: cause,
+      uiMessageAlreadyShown: true,
+    );
   }
 
   // --- CRUD ---
@@ -534,6 +562,11 @@ final class AppHttpClient {
 
   /// 로그인 API 성공 후: [AuthTokenStorage]에 저장(또는 직접 [AuthTokenStorage.I.write] 호출).
   Future<void> setTokens({required String access, required String refresh}) {
+    authDebugLogTokensSaved(
+      event: 'setTokens',
+      access: access,
+      refresh: refresh,
+    );
     return AuthTokenStorage.I.write(access: access, refresh: refresh);
   }
 

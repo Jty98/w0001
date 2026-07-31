@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/theme/app_input_styles.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 인력 관리·현장 초대 등에서 공통으로 쓰는 검색바 + 찾기 버튼.
 class HumanWorkerSearchBar extends StatelessWidget {
@@ -25,7 +27,6 @@ class HumanWorkerSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
     return Padding(
       padding: padding ??
           EdgeInsets.fromLTRB(
@@ -37,7 +38,7 @@ class HumanWorkerSearchBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: searchController,
               onChanged: onChanged,
               textInputAction: TextInputAction.search,
@@ -72,7 +73,7 @@ class HumanWorkerSearchBar extends StatelessWidget {
                       BorderSide(color: cs.primary.withValues(alpha: 0.55)),
                 ),
               ),
-              style: tt.bodyMedium,
+              style: AppInputStyles.fieldText(context),
             ),
           ),
           SizedBox(width: context.rsi(8)),

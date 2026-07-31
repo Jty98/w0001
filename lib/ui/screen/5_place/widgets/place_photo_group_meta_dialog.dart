@@ -3,8 +3,9 @@ import 'package:w0001/data/model/place_photo_group_model.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
-/// 묶음 `title` · `작업일` 수정 후 [onSubmit] 결과로 스낵바 등 처리.
+/// 묶음 `title` · `업로드일` 수정 후 [onSubmit] 결과로 스낵바 등 처리.
 Future<void> showPlacePhotoGroupMetaEditDialog({
   required BuildContext context,
   required PlacePhotoGroupModel group,
@@ -37,10 +38,12 @@ Future<void> showPlacePhotoGroupMetaEditDialog({
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: calendarCtx.rsi(10)),
+                    padding:
+                        EdgeInsets.symmetric(vertical: calendarCtx.rsi(10)),
                     child: Text(
                       '작업일 선택',
-                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                   ScrollableCalendarWidget(
@@ -97,7 +100,7 @@ Future<void> showPlacePhotoGroupMetaEditDialog({
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
+                AppTextField(
                   controller: titleCtrl,
                   decoration: const InputDecoration(
                     labelText: '작업명',
@@ -115,7 +118,7 @@ Future<void> showPlacePhotoGroupMetaEditDialog({
                 OutlinedButton.icon(
                   onPressed: () => pickDay(dialogCtx, setS),
                   icon: const Icon(Icons.calendar_month_outlined),
-                  label: Text('작업일: ${dateLabel(dialogCtx)}'),
+                  label: Text('업로드일: ${dateLabel(dialogCtx)}'),
                 ),
               ],
             ),

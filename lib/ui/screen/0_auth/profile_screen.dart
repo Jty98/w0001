@@ -32,9 +32,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _loggingOut = true);
     final uid = ref.read(authSessionProvider).asData?.value?.uid;
     try {
-      await ref
-          .read(authUseCaseProvider)
-          .logout(allDevices: choice.allDevices);
+      await ref.read(authUseCaseProvider).logout(allDevices: choice.allDevices);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -50,7 +48,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       // 모든 사용자별 상태 초기화
       _clearAllUserSpecificProviders();
-      
+
       ref.read(authSessionProvider.notifier).clearSession();
       if (mounted) {
         setState(() => _loggingOut = false);
@@ -113,29 +111,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return PopScope(
       canPop: canPop,
       child: Scaffold(
-      appBar: AppBar(
-        title: const Text('프로필'),
-        automaticallyImplyLeading: canPop,
-        actions: _logoutAppBarActions(session, cs),
-      ),
-      body: session.when(
-        skipLoadingOnReload: true,
-        skipLoadingOnRefresh: true,
-        data: (user) {
-          if (user == null) {
-            return ProfileMissingSessionBody(
-              onRetryLoad: () => unawaited(sessionVm.loadCurrentUser()),
-            );
-          }
-          return ProfileSignedInBody(user: user);
-        },
-        error: (e, _) => ProfileSessionErrorBody(
-          message: e.toString(),
-          onRetryLoad: () => unawaited(sessionVm.loadCurrentUser()),
+        appBar: AppBar(
+          title: const Text('프로필'),
+          automaticallyImplyLeading: canPop,
+          actions: _logoutAppBarActions(session, cs),
         ),
-        loading: () => const ProfileSessionLoadingBody(),
+        body: session.when(
+          skipLoadingOnReload: true,
+          skipLoadingOnRefresh: true,
+          data: (user) {
+            if (user == null) {
+              return ProfileMissingSessionBody(
+                onRetryLoad: () => unawaited(sessionVm.loadCurrentUser()),
+              );
+            }
+            return ProfileSignedInBody(user: user);
+          },
+          error: (e, _) => ProfileSessionErrorBody(
+            message: e.toString(),
+            onRetryLoad: () => unawaited(sessionVm.loadCurrentUser()),
+          ),
+          loading: () => const ProfileSessionLoadingBody(),
+        ),
       ),
-    ),
     );
   }
 }

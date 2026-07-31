@@ -28,8 +28,8 @@ abstract class AuthRepository {
 
   Future<PhoneMoVerifyResponse> verifyPhone({required String phone});
 
-  /// `POST /auth/signup` (role 없음, 승인 전까지 로그인 불가)
-  Future<void> signup({
+  /// `POST /auth/signup` — JWT 발급 + 승인 대기 세션 시작.
+  Future<SignupResponse> signup({
     required String uid,
     required String upw,
     required String uname,

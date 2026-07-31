@@ -12,6 +12,7 @@ import 'package:w0001/ui/screen/0_auth/widgets/profile_worker_skills_section.dar
 import 'package:w0001/presentation/viewmodel/terms_providers.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/worker_private_info_entry.dart';
 import 'package:w0001/presentation/viewmodel/user_private_providers.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 /// 로그인 사용자 프로필 본문.
@@ -77,14 +78,14 @@ class _ProfileSignedInBodyState extends ConsumerState<ProfileSignedInBody> {
           const ProfileSectionTitle('내 정보'),
           SizedBox(height: context.rsi(workerOnlyLayout ? 8 : 12)),
           ProfileAccountInfoCard(user: user),
-          if (user.isWorker && !workerOnlyLayout) ...[
-            SizedBox(height: context.rsi(28)),
-            const ProfileSectionTitle('세무·정산'),
-            SizedBox(height: context.rsi(12)),
+          if (user.isWorker) ...[
+            SizedBox(height: context.rsi(8)),
             ProfileInsetPanel(
-              padding: EdgeInsets.all(context.rsi(16)),
-              child: const WorkerPrivateInfoEntry(),
+              padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
+              child: const WorkerPrivateInfoEntry(embedded: true),
             ),
+          ],
+          if (user.isWorker && !workerOnlyLayout) ...[
             SizedBox(height: context.rsi(28)),
             const ProfileSectionTitle('현장 역할·경력'),
             SizedBox(height: context.rsi(12)),
@@ -105,7 +106,7 @@ class _ProfileSignedInBodyState extends ConsumerState<ProfileSignedInBody> {
       ),
     );
 
-    final scrollChild = RefreshIndicator(
+    final scrollChild = AppRefreshIndicator(
       onRefresh: () async {
         if (user.isWorker) {
           await ref.read(workerProfileProvider.notifier).reload();

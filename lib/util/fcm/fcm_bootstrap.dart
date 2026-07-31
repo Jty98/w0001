@@ -10,9 +10,10 @@ import 'package:w0001/data/datasources/remote/auth/users_api.dart';
 import 'package:w0001/data/datasources/remote/auth_token_storage.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/model/user_notification_models.dart';
 import 'package:w0001/navigation/app_router.dart';
-import 'package:w0001/navigation/app_scaffold_messenger.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
+import 'package:w0001/util/app_toast.dart';
 import 'package:w0001/util/fcm/fcm_inbox_sync.dart';
 import 'package:w0001/util/fcm/fcm_message_payload.dart';
 import 'package:w0001/util/fcm/fcm_push_router.dart';
@@ -27,39 +28,70 @@ String _fcmPlatformWire() {
   return Platform.operatingSystem;
 }
 
-Future<void> _upsertFcmTokenOnServer(String token) async {
+Future<bool> _upsertFcmTokenOnServer(String token) async {
   try {
     await UsersRemoteApi(AppHttpClient.I).putMyFcmDevice(
       fcmToken: token,
       platform: _fcmPlatformWire(),
       deviceId: '',
     );
+    return true;
   } catch (e, st) {
     debugPrint('PUT /users/me/fcm-device failed: $e\n$st');
+    return false;
   }
 }
 
-Future<void> _registerFcmTokenIfLoggedIn(
+Future<void> _logFcmDeviceStatus() async {
+  try {
+    final status = await UsersRemoteApi(AppHttpClient.I).getMyFcmDeviceStatus();
+    debugPrint(
+      'FCM device status: registered=${status.registered}, '
+      'active_device_count=${status.activeDeviceCount}',
+    );
+  } catch (e, st) {
+    debugPrint('GET /users/me/fcm-device/status failed: $e\n$st');
+  }
+}
+
+Future<bool> _registerFcmTokenIfLoggedIn(
   ProviderContainer container,
   String fcmToken, {
   bool force = false,
 }) async {
-  if (kIsWeb) return;
+  if (kIsWeb) return false;
   final t = fcmToken.trim();
-  if (t.isEmpty) return;
+  if (t.isEmpty) {
+    debugPrint('FCM register skipped: empty token');
+    return false;
+  }
   final user = container.read(authSessionProvider).asData?.value;
-  if (user == null) return;
+  if (user == null) {
+    debugPrint('FCM register skipped: no auth session');
+    return false;
+  }
   final at = await AuthTokenStorage.I.readAccess();
   final rt = await AuthTokenStorage.I.readRefresh();
   final hasCred =
       (at != null && at.isNotEmpty) || (rt != null && rt.isNotEmpty);
-  if (!hasCred) return;
+  if (!hasCred) {
+    debugPrint('FCM register skipped: no JWT');
+    return false;
+  }
   if (!force &&
       await FcmTokenRegistrationCache.isAlreadyRegistered(user.uid, t)) {
-    return;
+    if (kDebugMode) {
+      debugPrint('FCM register skipped: cache hit uid=${user.uid}');
+    }
+    return true;
   }
-  await _upsertFcmTokenOnServer(t);
+  final ok = await _upsertFcmTokenOnServer(t);
+  if (!ok) return false;
   await FcmTokenRegistrationCache.markRegistered(user.uid, t);
+  if (kDebugMode) {
+    await _logFcmDeviceStatus();
+  }
+  return true;
 }
 
 /// iOS·Android 공통: 포그라운드 표시 옵션, 알림 권한 요청, 로그인 시 토큰 서버 등록.
@@ -96,16 +128,76 @@ Future<void> _runFcmMobileSetup(ProviderContainer container) async {
   await _registerFcmTokenIfLoggedIn(
     container,
     (await FirebaseMessaging.instance.getToken()) ?? '',
+    force: true,
   );
 }
 
 /// 현재 FCM 디바이스 토큰을 읽어, 로그인·JWT 가 있을 때만 서버에 등록한다.
 Future<void> _registerCurrentTokenToServerIfLoggedIn(
-  ProviderContainer container,
-) async {
+  ProviderContainer container, {
+  bool force = false,
+}) async {
   if (kIsWeb) return;
   final token = await FirebaseMessaging.instance.getToken();
-  await _registerFcmTokenIfLoggedIn(container, token ?? '');
+  await _registerFcmTokenIfLoggedIn(
+    container,
+    token ?? '',
+    force: force,
+  );
+}
+
+/// 로그인·가입·승인 대기 진입 시 FCM 토큰을 서버에 등록한다.
+///
+/// 성공 시 true. 실패 시 false (캐시에 성공으로 기록하지 않음).
+Future<bool> registerFcmTokenForLoggedInUser(
+  ProviderContainer container, {
+  bool force = false,
+}) async {
+  if (kIsWeb) return false;
+  final token = await FirebaseMessaging.instance.getToken();
+  return _registerFcmTokenIfLoggedIn(
+    container,
+    token ?? '',
+    force: force,
+  );
+}
+
+void _showForegroundFcmSnackBar(
+  ProviderContainer container,
+  RemoteMessage message,
+  Map<String, dynamic> data,
+) {
+  final c = resolveFcmProviderContainer(container);
+  if (c == null) return;
+  final type = fcmResolvedPushType(data);
+  final pw = type != null
+      ? UserNotificationItem.placeWorkDayDisplayCopy(type, data)
+      : null;
+  final String text;
+  if (pw != null) {
+    text = '${pw.title}\n${pw.body}';
+  } else {
+    final n = message.notification;
+    final parts = <String>[];
+    final title = n?.title?.trim();
+    if (title != null && title.isNotEmpty) parts.add(title);
+    final body = n?.body?.trim();
+    if (body != null && body.isNotEmpty) parts.add(body);
+    text = parts.isEmpty ? '새 알림이 도착했습니다.' : parts.join('\n');
+  }
+  final canOpen = fcmPayloadCanNavigate(data);
+  AppToast.show(
+    canOpen ? '$text\n탭하여 열기' : '$text\n탭하여 알림함',
+    duration: const Duration(seconds: 8),
+    dismissOnTap: false,
+    onTap: canOpen
+        ? () => openFcmNotificationPayload(c, data)
+        : () {
+            final ctx = rootNavigatorKey.currentContext;
+            if (ctx == null || !ctx.mounted) return;
+            GoRouter.of(ctx).push('/dashboard/notifications');
+          },
+  );
 }
 
 /// FCM 권한·토큰 서버 등록·리스너 연결. [MyApp]에서 한 번 호출한다.
@@ -152,6 +244,23 @@ ProviderSubscription<AsyncValue<UserRead?>> attachFirebaseMessaging(
     final data = fcmNavigationPayloadFromMessage(m);
     final type = fcmResolvedPushType(data);
     final user = c.read(authSessionProvider).asData?.value;
+    final isAccount = type != null && fcmIsAccountPushType(type);
+
+    applyFcmRefreshSideEffects(c, data);
+
+    if (isAccount) {
+      unawaited(syncFcmToNotificationInbox(c, m));
+      if (!showForegroundBanner) {
+        openFcmNotificationPayload(c, data);
+        return;
+      }
+      _showForegroundFcmSnackBar(container, m, data);
+      if (fcmAccountPushShouldAutoOpen(data)) {
+        openFcmNotificationPayload(c, data);
+      }
+      return;
+    }
+
     final deliverToInbox = user == null ||
         type == null ||
         type.isEmpty ||
@@ -165,42 +274,7 @@ ProviderSubscription<AsyncValue<UserRead?>> attachFirebaseMessaging(
       return;
     }
     if (!deliverToInbox) return;
-    final n = m.notification;
-    final parts = <String>[];
-    final title = n?.title?.trim();
-    if (title != null && title.isNotEmpty) parts.add(title);
-    final body = n?.body?.trim();
-    if (body != null && body.isNotEmpty) parts.add(body);
-    final text =
-        parts.isEmpty ? '새 알림이 도착했습니다.' : parts.join('\n');
-    final canOpen = fcmPayloadCanNavigate(data);
-    appScaffoldMessengerKey.currentState?.showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 8),
-        behavior: SnackBarBehavior.floating,
-        content: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: canOpen ? () => openFcmNotificationPayload(c, data) : null,
-          child: Text(text, maxLines: 4, overflow: TextOverflow.ellipsis),
-        ),
-        action: canOpen
-            ? SnackBarAction(
-                label: '열기',
-                onPressed: () => openFcmNotificationPayload(c, data),
-              )
-            : SnackBarAction(
-                label: '목록',
-                onPressed: () {
-                  final ctx = rootNavigatorKey.currentContext;
-                  if (ctx == null || !ctx.mounted) return;
-                  GoRouter.of(ctx).push('/dashboard/notifications');
-                },
-              ),
-      ),
-    );
-    if (fcmAccountPushShouldAutoOpen(data)) {
-      openFcmNotificationPayload(c, data);
-    }
+    _showForegroundFcmSnackBar(container, m, data);
   }
 
   FirebaseMessaging.onMessage.listen((RemoteMessage m) {
@@ -240,9 +314,12 @@ ProviderSubscription<AsyncValue<UserRead?>> attachFirebaseMessaging(
       final prevUid = prev?.asData?.value?.uid;
       final nextUid = next.asData?.value?.uid;
       if (nextUid == null) return;
-      // 동일 계정 재조회(loadCurrentUser)마다 PUT 하지 않음
-      if (prevUid == nextUid && prev?.asData?.value != null) return;
-      unawaited(_registerCurrentTokenToServerIfLoggedIn(container));
+      // 로그인·가입·계정 전환 시 서버에 반드시 PUT (캐시 무시)
+      if (prevUid != nextUid) {
+        unawaited(
+          _registerCurrentTokenToServerIfLoggedIn(container, force: true),
+        );
+      }
     },
     fireImmediately: true,
   );

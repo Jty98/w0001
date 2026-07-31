@@ -34,26 +34,6 @@ class ProfileAccountSectionSkeleton extends StatelessWidget {
                 ListTile(
                   dense: true,
                   leading: Icon(
-                    Icons.edit_outlined,
-                    size: context.rsi(22),
-                  ),
-                  title: Text(
-                    '이름 수정',
-                    style: TextStyle(fontSize: context.rs(14)),
-                  ),
-                  subtitle: Text(
-                    '현재: 사용자 이름',
-                    style: TextStyle(fontSize: context.rs(12)),
-                  ),
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    size: context.rsi(20),
-                  ),
-                ),
-                const Divider(height: 1, indent: 56),
-                ListTile(
-                  dense: true,
-                  leading: Icon(
                     Icons.lock_outline_rounded,
                     size: context.rsi(22),
                   ),

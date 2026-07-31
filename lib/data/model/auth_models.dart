@@ -1,5 +1,6 @@
 import 'package:w0001/data/model/terms_models.dart';
 import 'package:w0001/data/model/worker_profile_model.dart';
+import 'package:w0001/util/career_input.dart';
 import 'package:w0001/util/phone_number_format.dart';
 import 'package:w0001/util/resident_registration_format.dart';
 import 'package:w0001/util/worker_skills_parse.dart';
@@ -41,7 +42,7 @@ enum UserRole {
 /// 로그인·`POST /auth/refresh` 응답 본문에서 토큰 추출.
 ///
 /// * snake_case / camelCase / 최상위 `data` 래핑 모두 처리
-/// * 갱신 응답에서 `refresh`를 생략하면 [refreshToken]은 null (회전 없이 access만 교체)
+/// * refresh 성공 시에도 서버가 새 `refresh_token`을 반드시 내려줘야 한다 (회전).
 class AuthTokenPayload {
   const AuthTokenPayload({
     required this.accessToken,
@@ -102,8 +103,7 @@ class LoginResponse {
   /// 기본 `"bearer"`
   final String tokenType;
 
-  /// [requireRefreshTokenInResponse]가 true일 때(로그인) 응답에 refresh가 없으면 [FormatException].
-  /// 갱신 API는 access만 내려줄 수 있어 false가 기본값.
+  /// [requireRefreshTokenInResponse]가 true일 때(로그인·갱신) 응답에 refresh가 없으면 [FormatException].
   factory LoginResponse.fromJson(
     Map<String, dynamic> json, {
     bool requireRefreshTokenInResponse = false,
@@ -112,13 +112,41 @@ class LoginResponse {
     if (requireRefreshTokenInResponse &&
         (p.refreshToken == null || p.refreshToken!.isEmpty)) {
       throw const FormatException(
-        '로그인 응답에 refresh_token 이 없거나 비었습니다.',
+        '인증 응답에 refresh_token 이 없거나 비었습니다.',
       );
     }
     return LoginResponse(
       accessToken: p.accessToken,
       refreshToken: p.refreshToken ?? '',
       tokenType: p.tokenType ?? 'bearer',
+    );
+  }
+}
+
+/// `POST /auth/signup` 응답 — JWT + 계정 상태.
+class SignupResponse {
+  const SignupResponse({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.user,
+    this.tokenType = 'bearer',
+  });
+
+  final String accessToken;
+  final String refreshToken;
+  final String tokenType;
+  final UserRead user;
+
+  factory SignupResponse.fromJson(Map<String, dynamic> json) {
+    final tokens = LoginResponse.fromJson(
+      json,
+      requireRefreshTokenInResponse: true,
+    );
+    return SignupResponse(
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      tokenType: tokens.tokenType,
+      user: UserRead.fromJson(json),
     );
   }
 }
@@ -234,10 +262,10 @@ class UserRead {
   /// `GET /auth/me` — 워커 프로필과 동기화.
   final String workerRank;
   final String career;
-  
+
   /// 전화번호 (마스킹된 형태)
   final String? phoneMasked;
-  
+
   /// 전화번호 인증 여부
   final bool phoneVerified;
 
@@ -273,17 +301,22 @@ class UserRead {
       return null;
     }
 
-    final approvalRaw = json['approval_status'] ?? json['approvalStatus'];
+    final approvalRaw = json['approval_status'] ??
+        json['approvalStatus'] ??
+        json['account_status'] ??
+        json['accountStatus'];
     final activeRaw = json['is_active'] ?? json['isActive'];
     final hasApprovalKey = json.containsKey('approval_status') ||
-        json.containsKey('approvalStatus');
+        json.containsKey('approvalStatus') ||
+        json.containsKey('account_status') ||
+        json.containsKey('accountStatus');
     final hasActiveKey =
         json.containsKey('is_active') || json.containsKey('isActive');
 
     final approvalWire =
         approvalRaw is String ? approvalRaw : approvalRaw?.toString();
 
-    final skills = parseWorkerSkillsFromMap(json);
+    final primarySpecialty = parseWorkerPrimarySpecialtyFromMap(json);
     final rankRaw = json['worker_rank'] ?? json['workerRank'];
     final careerRaw = json['career'];
     final phoneMaskedRaw = json['phone_masked'] ?? json['phoneMasked'];
@@ -298,12 +331,49 @@ class UserRead {
           : UserApprovalStatus.approved,
       isActive: hasActiveKey ? parseActive(activeRaw) : true,
       workerHid: parseWorkerHid(),
-      primarySpecialty: skills.primary,
-      specialties: skills.specialties,
+      primarySpecialty: primarySpecialty,
+      specialties: const [],
       workerRank: rankRaw is String ? rankRaw.trim() : '',
-      career: careerRaw is String ? careerRaw.trim() : '',
+      career: CareerInputUtils.parseWireField(careerRaw),
       phoneMasked: phoneMaskedRaw is String ? phoneMaskedRaw.trim() : null,
       phoneVerified: phoneVerifiedRaw == true,
+    );
+  }
+}
+
+/// `GET /users/me/fcm-device/status`
+class FcmDeviceStatusRead {
+  const FcmDeviceStatusRead({
+    required this.registered,
+    required this.activeDeviceCount,
+  });
+
+  final bool registered;
+  final int activeDeviceCount;
+
+  factory FcmDeviceStatusRead.fromJson(Map<String, dynamic> json) {
+    bool parseBool(Object? v) {
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      if (v is String) {
+        final s = v.toLowerCase();
+        return s == 'true' || s == '1';
+      }
+      return false;
+    }
+
+    int parseCount(Object? v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v.trim()) ?? 0;
+      return 0;
+    }
+
+    return FcmDeviceStatusRead(
+      registered: parseBool(json['registered']),
+      activeDeviceCount: parseCount(
+        json['active_device_count'] ?? json['activeDeviceCount'],
+      ),
     );
   }
 }
@@ -315,7 +385,7 @@ Map<String, dynamic> loginRequestBody(String uid, String upw) =>
     };
 
 /// `POST /auth/signup` — role 없음 (서버에서 worker·pending 처리).
-/// 작업자 스킬은 [workerProfile] 로 함께 전달(서버가 `primary_specialty`·`specialties` 저장).
+/// 작업자 스킬은 [workerProfile] 로 함께 전달(서버는 `primary_specialty`만 저장).
 Map<String, dynamic> signupRequestBody({
   required String uid,
   required String upw,
@@ -344,9 +414,8 @@ Map<String, dynamic> signupRequestBody({
   if (token.isNotEmpty) {
     body['phone_verification_token'] = token;
   }
-  final hnum = hnumber == null
-      ? ''
-      : formatResidentRegistrationDisplay(hnumber).trim();
+  final hnum =
+      hnumber == null ? '' : formatResidentRegistrationDisplay(hnumber).trim();
   if (hnum.isNotEmpty) {
     body['hnumber'] = hnum;
   }

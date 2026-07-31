@@ -1,8 +1,14 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/data/model/dashboard_models.dart';
 import 'package:w0001/data/model/monthly_summary_model.dart';
+import 'package:w0001/access/user_role_access.dart';
+import 'package:w0001/data/model/place_info_model.dart';
+import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_legend.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_line_charts.dart';
@@ -85,11 +91,71 @@ class _DashboardMetricChartSheetBodyState
     extends ConsumerState<_DashboardMetricChartSheetBody> {
   _SheetPeriod _period = _SheetPeriod.monthly;
   late DashboardPlaceBreakdownFilter _placeFilter;
+  final Map<int, int> _placeCompleteByPid = {};
+  final Map<int, PlaceInfoModel> _placeByPid = {};
+  bool _placeMetaReady = false;
 
   @override
   void initState() {
     super.initState();
     _placeFilter = widget.initialPlaceFilter;
+    _seedPlaceMetaFromBundle();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadPlaceMeta());
+    });
+  }
+
+  void _seedPlaceMetaFromBundle() {
+    for (final row in widget.places) {
+      if (row.pcomplete == 0 || row.pcomplete == 1) {
+        _placeCompleteByPid[row.pid] = row.pcomplete;
+      }
+    }
+  }
+
+  Future<void> _loadPlaceMeta() async {
+    final user = ref.read(authSessionProvider).asData?.value;
+    if (user == null) {
+      if (mounted) setState(() => _placeMetaReady = true);
+      return;
+    }
+    try {
+      final all = await ref.read(placeUseCaseProvider).getAllPlaces(
+            managementPlacesInfoFirst: user.isManagementRole,
+            role: user.role,
+          );
+      if (!mounted) return;
+      setState(() {
+        for (final p in all) {
+          final pid = p.pid;
+          if (pid == null) continue;
+          _placeByPid[pid] = p;
+          _placeCompleteByPid[pid] = p.pcomplete;
+        }
+        _placeMetaReady = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _placeMetaReady = true);
+    }
+  }
+
+  int? _completeFor(DashboardPlaceRow row) {
+    final fromMap = _placeCompleteByPid[row.pid];
+    if (fromMap == 0 || fromMap == 1) return fromMap;
+    if (row.pcomplete == 0 || row.pcomplete == 1) return row.pcomplete;
+    return null;
+  }
+
+  bool _matchesPlaceFilter(DashboardPlaceRow row) {
+    final complete = _completeFor(row);
+    switch (_placeFilter) {
+      case DashboardPlaceBreakdownFilter.all:
+        return true;
+      case DashboardPlaceBreakdownFilter.inProgress:
+        return complete == 0;
+      case DashboardPlaceBreakdownFilter.completed:
+        return complete == 1;
+    }
   }
 
   double _chartHeight(BuildContext context) {
@@ -415,37 +481,16 @@ class _DashboardMetricChartSheetBodyState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final placeState = ref.watch(placeListProvider);
-    final placeByPid = <int, dynamic>{};
-    for (final p in placeState.placeList) {
-      if (p.pid != null) {
-        placeByPid[p.pid!] = p;
-      }
-    }
-    final placeCompleteByPid = <int, int>{};
-    for (final p in placeState.placeList) {
-      if (p.pid != null) {
-        placeCompleteByPid[p.pid!] = p.pcomplete;
-      }
-    }
-    final visibleRows = widget.places.where((row) {
-      final complete = placeCompleteByPid[row.pid] ?? 0;
-      switch (_placeFilter) {
-        case DashboardPlaceBreakdownFilter.all:
-          return true;
-        case DashboardPlaceBreakdownFilter.inProgress:
-          return complete == 0;
-        case DashboardPlaceBreakdownFilter.completed:
-          return complete == 1;
-      }
-    }).toList()
+    final visibleRows = widget.places.where(_matchesPlaceFilter).toList()
       ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
-    final inProgressRows = visibleRows
-        .where((r) => (placeCompleteByPid[r.pid] ?? 0) == 0)
-        .toList();
-    final completedRows = visibleRows
-        .where((r) => (placeCompleteByPid[r.pid] ?? 0) == 1)
-        .toList();
+    final inProgressRows = widget.places
+        .where((r) => _completeFor(r) == 0)
+        .toList()
+      ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
+    final completedRows = widget.places
+        .where((r) => _completeFor(r) == 1)
+        .toList()
+      ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
     final yearLabels = widget.yearly.map((e) => '${e.year}').toList();
     final periodNote = _period == _SheetPeriod.monthly
         ? '${widget.selectedYear}년 월별'
@@ -534,7 +579,12 @@ class _DashboardMetricChartSheetBodyState
               },
             ),
             const SizedBox(height: 8),
-            if (visibleRows.isEmpty)
+            if (!_placeMetaReady)
+              Padding(
+                padding: ResponsiveLayout.symmetric(context, vertical: 12),
+                child: const AppLoadingIndicator(),
+              )
+            else if (visibleRows.isEmpty)
               Padding(
                 padding: ResponsiveLayout.symmetric(context, vertical: 12),
                 child: Text(
@@ -552,7 +602,6 @@ class _DashboardMetricChartSheetBodyState
                     context,
                     title: '진행중',
                     rows: inProgressRows,
-                    placeByPid: placeByPid,
                   ),
                 if (inProgressRows.isNotEmpty && completedRows.isNotEmpty)
                   const SizedBox(height: 10),
@@ -561,7 +610,6 @@ class _DashboardMetricChartSheetBodyState
                     context,
                     title: '완료',
                     rows: completedRows,
-                    placeByPid: placeByPid,
                   ),
               ] else
                 _buildPlaceSection(
@@ -571,7 +619,6 @@ class _DashboardMetricChartSheetBodyState
                           ? '진행중'
                           : '완료',
                   rows: visibleRows,
-                  placeByPid: placeByPid,
                 ),
             ],
           ],
@@ -650,7 +697,8 @@ class _DashboardMetricChartSheetBodyState
 
       return Container(
         width: double.infinity,
-        padding: ResponsiveLayout.symmetric(context, horizontal: 8, vertical: 6),
+        padding:
+            ResponsiveLayout.symmetric(context, horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(8),
@@ -677,9 +725,9 @@ class _DashboardMetricChartSheetBodyState
                     child: Text(
                       text,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurfaceVariant,
-                      ),
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurfaceVariant,
+                          ),
                     ),
                   ),
                 ],
@@ -709,10 +757,11 @@ class _DashboardMetricChartSheetBodyState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _summaryStatTile(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < context.rs(340);
+            final tiles = [
+              _summaryStatTile(
                 context,
                 cs,
                 label: '공사원금',
@@ -721,10 +770,7 @@ class _DashboardMetricChartSheetBodyState
                 labelColor: Colors.indigo[800],
                 valueColor: Colors.indigo[900],
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _summaryStatTile(
+              _summaryStatTile(
                 context,
                 cs,
                 label: '선수금',
@@ -733,10 +779,7 @@ class _DashboardMetricChartSheetBodyState
                 labelColor: Colors.teal[800],
                 valueColor: Colors.teal[900],
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _summaryStatTile(
+              _summaryStatTile(
                 context,
                 cs,
                 label: '미수금',
@@ -745,14 +788,34 @@ class _DashboardMetricChartSheetBodyState
                 labelColor: Colors.deepOrange[800],
                 valueColor: Colors.deepOrange[900],
               ),
-            ),
-          ],
+            ];
+            if (narrow) {
+              return Column(
+                children: [
+                  for (var i = 0; i < tiles.length; i++) ...[
+                    if (i > 0) SizedBox(height: context.rs(6)),
+                    tiles[i],
+                  ],
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: tiles[0]),
+                SizedBox(width: context.rs(6)),
+                Expanded(child: tiles[1]),
+                SizedBox(width: context.rs(6)),
+                Expanded(child: tiles[2]),
+              ],
+            );
+          },
         ),
         rsV(context, 8),
         if (detailRows.isEmpty)
           Container(
             width: double.infinity,
-            padding: ResponsiveLayout.symmetric(context, horizontal: 10, vertical: 8),
+            padding: ResponsiveLayout.symmetric(context,
+                horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(context.rs(8)),
@@ -760,15 +823,16 @@ class _DashboardMetricChartSheetBodyState
             child: Text(
               '잔금 내역 없음',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: cs.onSurfaceVariant,
-              ),
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurfaceVariant,
+                  ),
             ),
           )
         else
           Container(
             width: double.infinity,
-            padding: ResponsiveLayout.symmetric(context, horizontal: 10, vertical: 8),
+            padding: ResponsiveLayout.symmetric(context,
+                horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(context.rs(8)),
@@ -786,7 +850,7 @@ class _DashboardMetricChartSheetBodyState
                   child: Row(
                     children: [
                       SizedBox(
-                        width: context.rs(34),
+                        width: context.rs(30),
                         child: Text(
                           '${i + 1}차',
                           style: tt.labelSmall?.copyWith(
@@ -796,19 +860,32 @@ class _DashboardMetricChartSheetBodyState
                         ),
                       ),
                       Expanded(
+                        flex: 3,
                         child: Text(
                           _formatMonthDay(d.date),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: tt.labelSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: cs.onSurfaceVariant,
                           ),
                         ),
                       ),
-                      Text(
-                        getPrice(price: d.amount),
-                        style: tt.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: cs.onSurface,
+                      SizedBox(width: context.rs(6)),
+                      Flexible(
+                        flex: 4,
+                        fit: FlexFit.loose,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            getPrice(price: d.amount),
+                            maxLines: 1,
+                            style: tt.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: cs.onSurface,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -849,13 +926,20 @@ class _DashboardMetricChartSheetBodyState
             ),
           ),
           rsV(context, 2),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tt.labelSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: valueColor ?? cs.onSecondaryContainer,
+          SizedBox(
+            height: context.rs(16),
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: tt.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: valueColor ?? cs.onSecondaryContainer,
+                ),
+              ),
             ),
           ),
         ],
@@ -896,7 +980,6 @@ class _DashboardMetricChartSheetBodyState
     BuildContext context, {
     required String title,
     required List<DashboardPlaceRow> rows,
-    required Map<int, dynamic> placeByPid,
   }) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -906,7 +989,8 @@ class _DashboardMetricChartSheetBodyState
         borderRadius: BorderRadius.circular(context.rs(12)),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
       ),
-      padding: ResponsiveLayout.only(context, left: 10, top: 8, right: 10, bottom: 8),
+      padding: ResponsiveLayout.only(context,
+          left: 10, top: 8, right: 10, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -926,8 +1010,7 @@ class _DashboardMetricChartSheetBodyState
                     borderRadius: BorderRadius.circular(context.rs(10)),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(context.rs(10)),
-                      onTap: () =>
-                          _openPlaceDetail(context, placeByPid, row.pid),
+                      onTap: () => _openPlaceDetail(context, row.pid),
                       child: Padding(
                         padding: ResponsiveLayout.only(
                           context,
@@ -1007,12 +1090,8 @@ class _DashboardMetricChartSheetBodyState
     );
   }
 
-  void _openPlaceDetail(
-    BuildContext context,
-    Map<int, dynamic> placeByPid,
-    int pid,
-  ) {
-    final info = placeByPid[pid];
+  void _openPlaceDetail(BuildContext context, int pid) {
+    final info = _placeByPid[pid];
     Navigator.of(context).pop();
     if (info != null) {
       final targetPath = widget.kind == DashboardMetricKind.collection

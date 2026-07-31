@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/presentation/viewmodel/calendar_view_model.dart';
@@ -14,8 +16,8 @@ class CalendarWidget extends ConsumerWidget {
     final vm = ref.read(calendarProvider.notifier);
 
     final screenH = MediaQuery.sizeOf(context).height;
-    // [height]는 1주·2주 모드 상한. 월별 높이는 주(5/6) 수에 맞춰 자동 계산.
-    final calendarWeekModeMaxHeight = (screenH * 0.38).clamp(280.0, 380.0);
+    // 리스트 영역 확보 — 1주·2주 모드 상한을 낮춤.
+    final calendarWeekModeMaxHeight = (screenH * 0.28).clamp(220.0, 300.0);
 
     return ScrollableCalendarWidget(
       adaptiveHeightForWeekModes: true,
@@ -25,6 +27,12 @@ class CalendarWidget extends ConsumerWidget {
       disableDateSelectionHighlight: true,
       initialSelectedDay: state.selectedDay,
       initialEvents: state.workforceDotEvents,
+      onMonthChanged: (monthFirst) {
+        unawaited(vm.onCalendarVisibleMonthChanged(monthFirst));
+      },
+      onCalendarPageAnchorChanged: (anchor) {
+        unawaited(vm.onCalendarVisibleMonthChanged(anchor));
+      },
       onDayPicked: (picked) async {
         await vm.onDaySelected(picked, picked);
       },

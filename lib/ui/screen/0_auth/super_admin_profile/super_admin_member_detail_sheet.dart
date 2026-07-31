@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/data/mappers/remote_mappers.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/domain/use_case/super_admin_remote_use_case.dart';
@@ -10,9 +11,15 @@ import 'package:w0001/ui/screen/0_auth/super_admin_profile/admin_member_private_
 import 'package:w0001/ui/screen/0_auth/super_admin_profile/super_admin_member_meta.dart';
 import 'package:w0001/ui/screen/0_auth/widgets/profile_section_chrome.dart';
 import 'package:w0001/ui/screen/0_auth/worker_mgmt/worker_mgmt_hid_content.dart';
-import 'package:w0001/util/worker_skills_display.dart';
+import 'package:w0001/ui/widget/human_picker/human_picker_skill_panel.dart';
+import 'package:w0001/ui/widget/worker_profile/worker_career_field.dart';
+import 'package:w0001/ui/widget/worker_profile/worker_profile_human_fields_panel.dart';
+import 'package:w0001/ui/widget/worker_profile/worker_profile_info_row.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'package:w0001/util/career_input.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/util/worker_skills_display.dart';
 
 /// 계정과 [HumanRead] 매칭: 서버 `worker_hid` → 이름 일치 → uid와 주민번호 숫자 일치.
 int? resolveWorkerHidForMember(UserRead u, List<HumanRead> humans) {
@@ -33,59 +40,6 @@ int? resolveWorkerHidForMember(UserRead u, List<HumanRead> humans) {
   return null;
 }
 
-class _DetailInfoRow extends StatelessWidget {
-  const _DetailInfoRow({
-    required this.label,
-    required this.value,
-    this.trailing,
-  });
-
-  final String label;
-  final String value;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: context.rsi(5)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: context.rsi(72),
-            child: Text(
-              label,
-              style: tt.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    value,
-                    style: tt.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      height: 1.25,
-                    ),
-                  ),
-                ),
-                if (trailing != null) trailing!,
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// 슈퍼관리자 회원 카드에서 연 경우 — 관리 메모·트러블 페어(인력 hid 기준).
 class SuperAdminMemberDetailSheet extends ConsumerStatefulWidget {
   const SuperAdminMemberDetailSheet({
@@ -103,10 +57,12 @@ class SuperAdminMemberDetailSheet extends ConsumerStatefulWidget {
 class _SuperAdminMemberDetailSheetState
     extends ConsumerState<SuperAdminMemberDetailSheet> {
   UserRead? _userFresh;
+  HumanRead? _linkedHuman;
   int? _hid;
   HumanModel? _skillsHuman;
   var _detailBusy = false;
   Object? _loadError;
+  String _careerDraft = '';
 
   UserRead get _displayUser => _userFresh ?? widget.initialUser;
 
@@ -128,27 +84,32 @@ class _SuperAdminMemberDetailSheetState
     });
     try {
       final fresh = await _uc.userGet(widget.initialUser.uid);
-      await ref
-          .read(workerMgmtHumanDirectoryProvider.notifier)
-          .reload(blocking: false);
-      var humans = ref.read(workerMgmtHumanDirectoryProvider).humans;
-      if (humans.isEmpty) {
-        await ref
-            .read(workerMgmtHumanDirectoryProvider.notifier)
-            .reload(blocking: true);
-        humans = ref.read(workerMgmtHumanDirectoryProvider).humans;
-      }
-      final hidResolved = (fresh.workerHid != null && fresh.workerHid! > 0)
-          ? fresh.workerHid
-          : resolveWorkerHidForMember(fresh, humans);
-      HumanRead? linked = hidResolved != null
-          ? findHumanReadForMember(fresh, humans)
-          : null;
-      if (hidResolved != null) {
+      HumanRead? linked;
+      int? hidResolved;
+
+      if (fresh.workerHid != null && fresh.workerHid! > 0) {
+        hidResolved = fresh.workerHid;
         try {
-          linked = await _uc.humanGet(hidResolved);
+          linked = await _uc.humanGet(hidResolved!);
         } catch (_) {}
+      } else {
+        final dir = ref.read(workerMgmtHumanDirectoryProvider);
+        if (!dir.fullyLoaded && dir.humans.isEmpty) {
+          await ref
+              .read(workerMgmtHumanDirectoryProvider.notifier)
+              .ensureLoaded();
+        }
+        final humans = ref.read(workerMgmtHumanDirectoryProvider).humans;
+        hidResolved = resolveWorkerHidForMember(fresh, humans);
+        linked =
+            hidResolved != null ? findHumanReadForMember(fresh, humans) : null;
+        if (hidResolved != null && linked == null) {
+          try {
+            linked = await _uc.humanGet(hidResolved);
+          } catch (_) {}
+        }
       }
+
       final skillsHuman = humanModelForMemberSkills(
         fresh,
         linkedHuman: linked,
@@ -157,7 +118,13 @@ class _SuperAdminMemberDetailSheetState
       setState(() {
         _userFresh = fresh;
         _hid = hidResolved;
+        _linkedHuman = linked;
         _skillsHuman = skillsHuman;
+        _careerDraft = CareerInputUtils.formatForDisplay(
+          linked?.career.trim().isNotEmpty == true
+              ? linked!.career
+              : fresh.career,
+        );
         _detailBusy = false;
       });
     } catch (e) {
@@ -167,6 +134,47 @@ class _SuperAdminMemberDetailSheetState
         _detailBusy = false;
       });
     }
+  }
+
+  Future<void> _saveCareer(String career) async {
+    final hid = _hid;
+    if (hid == null) return;
+    try {
+      final updated = await _uc.humanPatch(
+        hid,
+        {'career': CareerInputUtils.careerForApi(career)},
+      );
+      if (!mounted) return;
+      setState(() {
+        _linkedHuman = updated;
+        _careerDraft = CareerInputUtils.formatForDisplay(updated.career);
+        _skillsHuman = humanModelForMemberSkills(
+          _displayUser,
+          linkedHuman: updated,
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('경력을 저장했습니다.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('경력 저장 실패: $e')),
+      );
+    }
+  }
+
+  Future<void> _onWorkFieldsUpdated(HumanModel model) async {
+    if (!mounted) return;
+    setState(() => _skillsHuman = model);
+    final hid = model.hid;
+    if (hid == null) return;
+    try {
+      final fresh = await _uc.humanGet(hid);
+      if (!mounted) return;
+      setState(() => _linkedHuman = fresh);
+      ref.invalidate(workerMgmtHumanDirectoryProvider);
+    } catch (_) {}
   }
 
   Future<void> _refreshAll() async {
@@ -183,6 +191,14 @@ class _SuperAdminMemberDetailSheetState
     final bottom = MediaQuery.paddingOf(context).bottom;
     final user = _displayUser;
     final hid = _hid;
+    final linked = _linkedHuman;
+    final skillsHuman = _skillsHuman;
+    final siteRank = skillsHuman != null
+        ? resolveHumanSiteRank(skillsHuman)
+        : (user.role == UserRole.worker && user.workerRank.trim().isNotEmpty
+            ? user.workerRank.trim()
+            : null);
+    final hasSiteRank = siteRank != null && siteRank.isNotEmpty;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.88,
@@ -194,7 +210,7 @@ class _SuperAdminMemberDetailSheetState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: RefreshIndicator(
+              child: AppRefreshIndicator(
                 onRefresh: _refreshAll,
                 child: SingleChildScrollView(
                   controller: scrollCtrl,
@@ -208,12 +224,27 @@ class _SuperAdminMemberDetailSheetState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        user.uname,
-                        style: tt.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: Text(
+                              user.uname,
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (hasSiteRank) ...[
+                            SizedBox(width: ctx.rsi(8)),
+                            HumanPickerSiteRankBadge(label: siteRank),
+                          ],
+                        ],
                       ),
                       SizedBox(height: ctx.rsi(6)),
                       SuperAdminMemberStatusChips(
@@ -263,7 +294,7 @@ class _SuperAdminMemberDetailSheetState
                         ),
                       ],
                       SizedBox(height: ctx.rsi(14)),
-                      const ProfileSectionTitle('계정 정보'),
+                      const ProfileSectionTitle('기본 정보'),
                       SizedBox(height: ctx.rsi(8)),
                       ProfileInsetPanel(
                         padding: EdgeInsets.symmetric(
@@ -272,10 +303,13 @@ class _SuperAdminMemberDetailSheetState
                         ),
                         child: Column(
                           children: [
-                            _DetailInfoRow(label: '아이디', value: user.uid),
+                            WorkerProfileInfoRow(
+                              label: '아이디',
+                              value: user.uid,
+                            ),
                             if (user.phoneMasked != null &&
                                 user.phoneMasked!.isNotEmpty)
-                              _DetailInfoRow(
+                              WorkerProfileInfoRow(
                                 label: '연락처',
                                 value: user.phoneMasked!,
                                 trailing: user.phoneVerified
@@ -286,20 +320,8 @@ class _SuperAdminMemberDetailSheetState
                                       )
                                     : null,
                               ),
-                            if (user.role == UserRole.worker &&
-                                user.workerRank.isNotEmpty)
-                              _DetailInfoRow(
-                                label: '현장 역할',
-                                value: user.workerRank,
-                              ),
-                            if (user.role == UserRole.worker &&
-                                user.career.isNotEmpty)
-                              _DetailInfoRow(
-                                label: '경력',
-                                value: user.career,
-                              ),
                             if (hid != null)
-                              _DetailInfoRow(
+                              WorkerProfileInfoRow(
                                 label: '인력 연결',
                                 value: '연결됨 (hid $hid)',
                                 trailing: Icon(
@@ -311,24 +333,62 @@ class _SuperAdminMemberDetailSheetState
                           ],
                         ),
                       ),
-                      if (memberShouldShowWorkerSkills(user) &&
-                          _skillsHuman != null) ...[
+                      if (hid != null && linked != null) ...[
                         SizedBox(height: ctx.rsi(14)),
-                        const ProfileSectionTitle('작업 분야'),
-                        SizedBox(height: ctx.rsi(8)),
                         ProfileInsetPanel(
-                          padding: EdgeInsets.all(ctx.rsi(10)),
-                          child: HumanSkillsChipRow(
-                            human: _skillsHuman!,
-                            extraScrollHeight: 28,
+                          padding: EdgeInsets.all(ctx.rsi(12)),
+                          child: WorkerProfileHumanFieldsPanel(
+                            human: humanReadToModel(linked),
+                            onUpdated: _onWorkFieldsUpdated,
+                          ),
+                        ),
+                      ] else if (user.role == UserRole.worker) ...[
+                        SizedBox(height: ctx.rsi(14)),
+                        ProfileInsetPanel(
+                          padding: EdgeInsets.all(ctx.rsi(12)),
+                          child: Text(
+                            '인력 연결 후 현장 역할·일당·작업 분야를 수정할 수 있습니다.',
+                            style: tt.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
+                      SizedBox(height: ctx.rsi(14)),
+                      const ProfileSectionTitle('경력'),
+                      SizedBox(height: ctx.rsi(8)),
+                      ProfileInsetPanel(
+                        padding: EdgeInsets.all(ctx.rsi(12)),
+                        child: hid != null
+                            ? WorkerCareerField(
+                                career: _careerDraft,
+                                readOnlyUntilEdit: true,
+                                autoCommit: false,
+                                compact: true,
+                                onChanged: _saveCareer,
+                              )
+                            : Text(
+                                user.career.isNotEmpty
+                                    ? CareerInputUtils.formatForDisplay(
+                                        user.career,
+                                      )
+                                    : '인력 연결 후 경력을 수정할 수 있습니다.',
+                                style: tt.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
                       if (user.role == UserRole.worker) ...[
                         SizedBox(height: ctx.rsi(14)),
-                        const ProfileSectionTitle('세금·개인 정보'),
+                        const ProfileSectionTitle('세무·정산 정보'),
                         SizedBox(height: ctx.rsi(8)),
-                        AdminMemberPrivateInfoSection(workerUid: user.uid),
+                        AdminMemberPrivateInfoSection(
+                          workerUid: user.uid,
+                          human:
+                              linked != null ? humanReadToModel(linked) : null,
+                        ),
                       ],
                       if (_detailBusy && hid == null)
                         Padding(
@@ -360,17 +420,16 @@ class _SuperAdminMemberDetailSheetState
                         const ProfileSectionTitle('인력 연결'),
                         SizedBox(height: ctx.rsi(8)),
                         Material(
-                          color: user.approvalStatus ==
-                                  UserApprovalStatus.pending
-                              ? cs.errorContainer.withValues(alpha: 0.32)
-                              : cs.surfaceContainerHighest
-                                  .withValues(alpha: 0.55),
+                          color:
+                              user.approvalStatus == UserApprovalStatus.pending
+                                  ? cs.errorContainer.withValues(alpha: 0.32)
+                                  : cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(ctx.rsi(12)),
                           child: Padding(
                             padding: EdgeInsets.all(ctx.rsi(12)),
                             child: Text(
-                              user.approvalStatus ==
-                                      UserApprovalStatus.pending
+                              user.approvalStatus == UserApprovalStatus.pending
                                   ? '승인 대기 중인 계정입니다\n가입 승인 후 인력 정보가 연결됩니다'
                                   : user.approvalStatus ==
                                           UserApprovalStatus.rejected

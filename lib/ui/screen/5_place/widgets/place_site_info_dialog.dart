@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/place_info_model.dart';
@@ -7,6 +8,7 @@ import 'package:w0001/presentation/viewmodel/place_site_guide_providers.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 현장 기본 정보(주소·기간) + 인수인계(출입·열쇠·주차) — 앱바에서 연다.
 Future<void> showPlaceSiteInfoDialog(
@@ -59,8 +61,9 @@ class _PlaceSiteInfoDialogBodyState
     final pid = _pid;
     if (pid == null) return;
 
-    // load()가 state를 바꾸므로 첫 build가 끝난 뒤 호출 (Riverpod build 중 수정 방지).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // ✅ 즉시 로드 시작 (캐시가 있으면 스킵, 없으면 로딩)
+    // microtask로 실행해서 build 중 state 변경 방지
+    Future.microtask(() {
       if (!mounted) return;
       ref.read(placeSiteGuideByPidProvider(pid).notifier).load();
     });
@@ -103,7 +106,8 @@ class _PlaceSiteInfoDialogBodyState
       restroomAccess: _restroomCtrl.text,
       parkingInfo: _parkingCtrl.text,
       updatedAt: ref.read(placeSiteGuideByPidProvider(pid)).guide?.updatedAt,
-      updatedByUid: ref.read(placeSiteGuideByPidProvider(pid)).guide?.updatedByUid,
+      updatedByUid:
+          ref.read(placeSiteGuideByPidProvider(pid)).guide?.updatedByUid,
     );
   }
 
@@ -153,7 +157,9 @@ class _PlaceSiteInfoDialogBodyState
   }
 
   void _syncFormFromGuideState(PlaceSiteGuideByPidState guideState) {
-    if (guideState.isLoading || guideState.accessDenied || !guideState.hasLoadedOnce) {
+    if (guideState.isLoading ||
+        guideState.accessDenied ||
+        !guideState.hasLoadedOnce) {
       return;
     }
     if (guideState.loadGeneration == _hydratedGeneration) return;
@@ -205,7 +211,8 @@ class _PlaceSiteInfoDialogBodyState
     final periodLine = formatDuration(widget.place.pstart, pendSafe);
 
     return Dialog(
-      insetPadding: ResponsiveLayout.symmetric(context, horizontal: 20, vertical: 24),
+      insetPadding:
+          ResponsiveLayout.symmetric(context, horizontal: 20, vertical: 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.88,
@@ -216,7 +223,8 @@ class _PlaceSiteInfoDialogBodyState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: ResponsiveLayout.only(context, left: 20, top: 18, right: 8),
+              padding:
+                  ResponsiveLayout.only(context, left: 20, top: 18, right: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -252,7 +260,8 @@ class _PlaceSiteInfoDialogBodyState
             ),
             Flexible(
               child: SingleChildScrollView(
-                padding: ResponsiveLayout.only(context, left: 20, top: 14, right: 20, bottom: 8),
+                padding: ResponsiveLayout.only(context,
+                    left: 20, top: 14, right: 20, bottom: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -279,7 +288,8 @@ class _PlaceSiteInfoDialogBodyState
                       periodLine: periodLine,
                       showMoney: widget.showManagementMoney,
                       place: widget.place,
-                      onCopyAddress: addr.isEmpty ? null : () => _copyAddress(addr),
+                      onCopyAddress:
+                          addr.isEmpty ? null : () => _copyAddress(addr),
                     ),
                     rsV(context, 18),
                     Text(
@@ -354,7 +364,8 @@ class _PlaceSiteInfoDialogBodyState
               ),
             ),
             Padding(
-              padding: ResponsiveLayout.only(context, left: 16, top: 8, right: 16, bottom: 16),
+              padding: ResponsiveLayout.only(context,
+                  left: 16, top: 8, right: 16, bottom: 16),
               child: Row(
                 children: [
                   TextButton(
@@ -374,10 +385,7 @@ class _PlaceSiteInfoDialogBodyState
                         ? SizedBox(
                             width: context.rs(20),
                             height: context.rs(20),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: cs.onPrimary,
-                            ),
+                            child: const HammerLoadingIndicator(size: 20),
                           )
                         : Icon(Icons.save_outlined, size: context.rsi(20)),
                     label: Text(guideState.isSaving ? '저장 중…' : '저장'),
@@ -418,7 +426,8 @@ class _UnifiedInfoSection extends StatelessWidget {
       color: cs.surfaceContainerLow.withValues(alpha: 0.5),
       borderRadius: BorderRadius.circular(context.rs(14)),
       child: Padding(
-        padding: ResponsiveLayout.only(context, left: 14, top: 12, right: 10, bottom: 14),
+        padding: ResponsiveLayout.only(context,
+            left: 14, top: 12, right: 10, bottom: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -606,7 +615,8 @@ class _GuideFieldCard extends StatelessWidget {
         side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.45)),
       ),
       child: Padding(
-        padding: ResponsiveLayout.only(context, left: 14, top: 12, right: 14, bottom: 14),
+        padding: ResponsiveLayout.only(context,
+            left: 14, top: 12, right: 14, bottom: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -623,7 +633,7 @@ class _GuideFieldCard extends StatelessWidget {
               ],
             ),
             rsV(context, 6),
-            TextField(
+            AppTextField(
               controller: controller,
               onChanged: onChanged,
               readOnly: onChanged == null,

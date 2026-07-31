@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/navigation/pending_post_auth_navigation.dart';
@@ -31,9 +32,7 @@ class _SettingsLogoutSectionState extends ConsumerState<SettingsLogoutSection> {
     setState(() => _loggingOut = true);
     final uid = ref.read(authSessionProvider).asData?.value?.uid;
     try {
-      await ref
-          .read(authUseCaseProvider)
-          .logout(allDevices: choice.allDevices);
+      await ref.read(authUseCaseProvider).logout(allDevices: choice.allDevices);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -86,10 +85,7 @@ class _SettingsLogoutSectionState extends ConsumerState<SettingsLogoutSection> {
               ? SizedBox(
                   width: context.rs(18),
                   height: context.rs(18),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: cs.error.withValues(alpha: 0.7),
-                  ),
+                  child: const HammerLoadingIndicator(size: 18),
                 )
               : Icon(Icons.logout_rounded, size: context.rs(20)),
           label: Text(

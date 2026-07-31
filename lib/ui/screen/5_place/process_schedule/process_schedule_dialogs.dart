@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 typedef AddProcessDialogResult = ({
   String name,
@@ -21,7 +22,7 @@ Future<String?> showEditProcessNameDialog(
           borderRadius: BorderRadius.circular(ctx.rs(16)),
         ),
         title: const Text('공정 이름 수정'),
-        content: TextField(
+        content: AppTextField(
           controller: controller,
           autofocus: true,
           decoration: InputDecoration(
@@ -255,7 +256,7 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
   @override
   void initState() {
     super.initState();
-    _nameCtrl = TextEditingController(text: '추가 공정');
+    _nameCtrl = TextEditingController();
     final last = widget.dateLabels.length - 1;
     _startIdx = 0;
     _endIdx = last >= 3 ? 3 : last;
@@ -300,10 +301,11 @@ class _AddProcessDialogState extends State<AddProcessDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
+              AppTextField(
                 controller: _nameCtrl,
                 decoration: InputDecoration(
                   labelText: '공정 이름',
+                  hintText: '예: 전기, 타일, 목공',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(context.rs(12)),
                   ),

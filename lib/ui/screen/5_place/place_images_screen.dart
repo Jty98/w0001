@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:w0001/access/user_role_capabilities.dart';
@@ -13,13 +14,16 @@ import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_document_opener.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_image_attach_sheet.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_photo_group_meta_dialog.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_photo_gallery_sheet.dart';
 import 'package:w0001/util/place_photo/place_document_classify.dart';
 import 'package:w0001/util/place_photo/share_place_photo_originals.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
+import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:w0001/ui/widget/place_network_image.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 class PlaceImagesScreen extends ConsumerStatefulWidget {
@@ -37,6 +41,7 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
   PlaceImageTabType _tabType = PlaceImageTabType.site;
   bool _isPickingImages = false;
   DateTimeRange? _photoFilterRange;
+  late final ScrollController _scroll;
 
   String get _currentPhotoType {
     switch (_tabType) {
@@ -57,21 +62,39 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
       setState(() => _tabType = PlaceImageTabType.site);
       ref
           .read(placeDetailProvider(widget.placeInfo.pid!).notifier)
-          .fetchPlacePhotoGroups(photoType: 'site');
+          .switchPlacePhotoType('site');
     });
   }
 
   @override
   void initState() {
     super.initState();
+    _scroll = ScrollController()..addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pid = widget.placeInfo.pid;
       if (pid == null) return;
-      ref.read(placeDetailProvider(pid).notifier).fetchPlacePhotoGroups(
-            photoType: _currentPhotoType,
+      ref.read(placeDetailProvider(pid).notifier).switchPlacePhotoType(
+            _currentPhotoType,
           );
     });
+  }
+
+  void _onScroll() {
+    final pid = widget.placeInfo.pid;
+    if (pid == null) return;
+    onPagedScrollNearEnd(
+      _scroll,
+      onLoadMore: () => ref
+          .read(placeDetailProvider(pid).notifier)
+          .loadMorePlacePhotoGroups(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -101,95 +124,115 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
         onPressed: () => _openAttachSheet(context, vm),
         child: const Icon(Icons.add),
       ),
-      body: ListView(
-        padding: ResponsiveLayout.only(context, left: 12, top: 10, right: 12, bottom: 18),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await _pickPhotoFilterRange(context);
-                    if (picked == null) return;
-                    setState(() => _photoFilterRange = picked);
-                  },
-                  icon: const Icon(Icons.date_range_outlined),
-                  label: Text(_photoFilterLabel()),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(double.infinity, context.rs(42)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(context.rs(10)),
+      body: AppRefreshIndicator(
+        enabled: !(state.photoGroupsRefreshing && sortedDates.isEmpty),
+        onRefresh: () =>
+            vm.refreshPlacePhotoGroups(photoType: _currentPhotoType),
+        child: ListView(
+          controller: _scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: ResponsiveLayout.only(context,
+              left: 12, top: 10, right: 12, bottom: 18),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await _pickPhotoFilterRange(context);
+                      if (picked == null) return;
+                      setState(() => _photoFilterRange = picked);
+                    },
+                    icon: const Icon(Icons.date_range_outlined),
+                    label: Text(_photoFilterLabel()),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: Size(double.infinity, context.rs(42)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(context.rs(10)),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              rsH(context, 8),
-              IconButton.filledTonal(
-                tooltip: '날짜 필터 초기화',
-                onPressed: _photoFilterRange == null
-                    ? null
-                    : () => setState(() => _photoFilterRange = null),
-                icon: const Icon(Icons.restart_alt_rounded),
-              ),
-            ],
-          ),
-          rsV(context, 10),
-          SegmentedButton<PlaceImageTabType>(
-            segments: [
-              ButtonSegment<PlaceImageTabType>(
-                value: PlaceImageTabType.site,
-                label: Text('현장사진', style: TextStyle(fontSize: context.rsi(11)),),
-                icon: const Icon(Icons.home_repair_service_outlined),
-              ),
-              ButtonSegment<PlaceImageTabType>(
-                value: PlaceImageTabType.drawing,
-                label: Text('도면사진', style: TextStyle(fontSize: context.rsi(11)),),
-                icon: const Icon(Icons.architecture_outlined),
-              ),
-              if (showEstimate)
-                ButtonSegment<PlaceImageTabType>(
-                  value: PlaceImageTabType.estimate,
-                  label: Text('견적서', style: TextStyle(fontSize: context.rsi(11)),),
-                  icon: const Icon(Icons.request_quote_outlined),
+                rsH(context, 8),
+                IconButton.filledTonal(
+                  tooltip: '날짜 필터 초기화',
+                  onPressed: _photoFilterRange == null
+                      ? null
+                      : () => setState(() => _photoFilterRange = null),
+                  icon: const Icon(Icons.restart_alt_rounded),
                 ),
-            ],
-            selected: {_tabType},
-            showSelectedIcon: false,
-            style: AppSegmentedButton.styleFrom(),
-            onSelectionChanged: (next) {
-              if (next.isEmpty) return;
-              final tab = next.first;
-              final photoType = switch (tab) {
-                PlaceImageTabType.site => 'site',
-                PlaceImageTabType.drawing => 'drawing',
-                PlaceImageTabType.estimate => 'estimate',
-              };
-              setState(() => _tabType = tab);
-              vm.fetchPlacePhotoGroups(photoType: photoType);
-            },
-          ),
-          rsV(context, 10),
-          if (sortedDates.isEmpty)
-            Padding(
-              padding: ResponsiveLayout.symmetric(context, vertical: 32),
-              child: Center(
-                child: Text(
-                  '등록된 문서가 없습니다.',
-                  style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ),
-            )
-          else
-            ...sortedDates.map(
-              (dateKey) => _buildDateSection(
-                context,
-                me: me,
-                dateKey: dateKey,
-                groups: grouped[dateKey] ?? const [],
-                vm: vm,
-              ),
+              ],
             ),
-        ],
+            rsV(context, 10),
+            SegmentedButton<PlaceImageTabType>(
+              segments: [
+                ButtonSegment<PlaceImageTabType>(
+                  value: PlaceImageTabType.site,
+                  label:
+                      AppSegmentedButton.compactSegmentLabel(context, '현장사진'),
+                ),
+                ButtonSegment<PlaceImageTabType>(
+                  value: PlaceImageTabType.drawing,
+                  label:
+                      AppSegmentedButton.compactSegmentLabel(context, '도면사진'),
+                ),
+                if (showEstimate)
+                  ButtonSegment<PlaceImageTabType>(
+                    value: PlaceImageTabType.estimate,
+                    label:
+                        AppSegmentedButton.compactSegmentLabel(context, '견적서'),
+                  ),
+              ],
+              selected: {_tabType},
+              showSelectedIcon: false,
+              style: AppSegmentedButton.styleFrom(
+                padding: ResponsiveLayout.symmetric(context,
+                    horizontal: 4, vertical: 8),
+              ),
+              onSelectionChanged: (next) {
+                if (next.isEmpty) return;
+                final tab = next.first;
+                final photoType = switch (tab) {
+                  PlaceImageTabType.site => 'site',
+                  PlaceImageTabType.drawing => 'drawing',
+                  PlaceImageTabType.estimate => 'estimate',
+                };
+                setState(() => _tabType = tab);
+                vm.switchPlacePhotoType(photoType);
+              },
+            ),
+            rsV(context, 10),
+            if (state.photoGroupsRefreshing && sortedDates.isEmpty)
+              Padding(
+                padding: ResponsiveLayout.symmetric(context, vertical: 48),
+                child: const AppLoadingIndicator(),
+              )
+            else if (sortedDates.isEmpty)
+              Padding(
+                padding: ResponsiveLayout.symmetric(context, vertical: 32),
+                child: Center(
+                  child: Text(
+                    '등록된 문서가 없습니다.',
+                    style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+              )
+            else
+              ...sortedDates.map(
+                (dateKey) => _buildDateSection(
+                  context,
+                  me: me,
+                  dateKey: dateKey,
+                  groups: grouped[dateKey] ?? const [],
+                  vm: vm,
+                ),
+              ),
+            PagedListFooter(
+              isLoading: state.photoGroupsLoadingMore,
+              hasMore: state.photoGroupsHasMore,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -351,66 +394,68 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
       builder: (dialogCtx) {
         final tt = Theme.of(dialogCtx).textTheme;
         return StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => Dialog(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: Padding(
-              padding: ResponsiveLayout.only(dialogCtx, bottom: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: ResponsiveLayout.symmetric(dialogCtx, vertical: 10),
-                    child: Text(
-                      '날짜 선택',
-                      style: tt.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+          builder: (dialogCtx, setDialogState) => Dialog(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: Padding(
+                padding: ResponsiveLayout.only(dialogCtx, bottom: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding:
+                          ResponsiveLayout.symmetric(dialogCtx, vertical: 10),
+                      child: Text(
+                        '날짜 선택',
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  ScrollableCalendarWidget(
-                    height: calHeight,
-                    initialSelectedDay: pickedDay,
-                    useSingleDaySelection: true,
-                    showViewModeToggle: false,
-                    disableDateSelectionHighlight: true,
-                    onDayPicked: (d) {
-                      setDialogState(() => pickedDay = d);
-                    },
-                  ),
-                  rsV(dialogCtx, 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dialogCtx).pop(),
-                        child: Text(
-                          '취소',
-                          style: TextStyle(
-                            color: Theme.of(dialogCtx)
-                                .colorScheme
-                                .onSurfaceVariant,
+                    ScrollableCalendarWidget(
+                      height: calHeight,
+                      initialSelectedDay: pickedDay,
+                      useSingleDaySelection: true,
+                      showViewModeToggle: false,
+                      disableDateSelectionHighlight: true,
+                      onDayPicked: (d) {
+                        setDialogState(() => pickedDay = d);
+                      },
+                    ),
+                    rsV(dialogCtx, 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogCtx).pop(),
+                          child: Text(
+                            '취소',
+                            style: TextStyle(
+                              color: Theme.of(dialogCtx)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
                           ),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(dialogCtx).pop(pickedDay),
-                        child: Text(
-                          '확인',
-                          style: TextStyle(
-                            color: Theme.of(dialogCtx).colorScheme.primary,
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogCtx).pop(pickedDay),
+                          child: Text(
+                            '확인',
+                            style: TextStyle(
+                              color: Theme.of(dialogCtx).colorScheme.primary,
+                            ),
                           ),
                         ),
-                      ),
-                      rsH(dialogCtx, 8),
-                    ],
-                  ),
-                ],
+                        rsH(dialogCtx, 8),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
       },
     );
   }
@@ -434,7 +479,8 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: Padding(
-              padding: ResponsiveLayout.only(dialogCtx, left: 12, top: 10, right: 12, bottom: 10),
+              padding: ResponsiveLayout.only(dialogCtx,
+                  left: 12, top: 10, right: 12, bottom: 10),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -577,27 +623,18 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: ResponsiveLayout.only(context, bottom: 14),
+      padding: ResponsiveLayout.only(context, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: ResponsiveLayout.only(context, left: 2, bottom: 8),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.event_note_rounded,
-                  size: context.rsi(20),
-                  color: cs.primary,
-                ),
-                rsH(context, 8),
-                Text(
-                  '작업일 ${_formatPhotoDateHeading(dateKey)}',
-                  style: tt.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
+            padding: ResponsiveLayout.only(context, left: 2, bottom: 4),
+            child: Text(
+              _formatPhotoDateHeading(dateKey),
+              style: tt.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.onSurfaceVariant,
+              ),
             ),
           ),
           ...groups.map((g) => _buildWorkCard(context, me, g, vm)),
@@ -643,6 +680,18 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
     final photos = group.photos;
     if (photos.isEmpty) return false;
     if (!photos.every((e) => e.canFetchOriginalViaApi)) return false;
+
+    // 견적서·도면 등 단일 문서 — 분류 힌트 없어도 원본 API로 열기 (페이지네이션 이후 썸네일만 있는 경우 대비).
+    if (photos.length == 1) {
+      final e = photos.first;
+      if (_currentPhotoType == 'estimate' ||
+          _currentPhotoType == 'drawing' ||
+          isPlacePhotoDocumentEntry(e)) {
+        openPlacePhotoOriginalDocument(context, entry: e);
+        return true;
+      }
+    }
+
     final kinds = photos.map(classifyPlaceDocumentForViewer).toList();
     final allPdf = kinds.every((k) => k == PlaceDocumentKind.pdf);
     final allSheet = kinds.every(
@@ -650,7 +699,9 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
           k == PlaceDocumentKind.spreadsheetXlsx ||
           k == PlaceDocumentKind.legacyXls,
     );
-    if (!allPdf && !allSheet) return false;
+    final allMediaDoc = photos.every((e) => e.isDocumentMedia);
+    final allOpenableDoc = photos.every(shouldOfferInAppDocumentViewer);
+    if (!allPdf && !allSheet && !allMediaDoc && !allOpenableDoc) return false;
     openPlacePhotoOriginalDocument(context, entry: photos.first);
     return true;
   }
@@ -683,6 +734,13 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
     return '${names[0]}, ${names[1]} 외 ${names.length - 2}명';
   }
 
+  String _compactGroupMetaLine(PlacePhotoGroupModel g, int memoCount) {
+    final parts = <String>['${g.photos.length}장'];
+    if (memoCount > 0) parts.add('메모 $memoCount');
+    parts.add(_uploadersSummarySentence(g));
+    return parts.join(' · ');
+  }
+
   Widget _buildWorkCard(
     BuildContext context,
     UserRead? me,
@@ -695,200 +753,206 @@ class _PlaceImagesScreenState extends ConsumerState<PlaceImagesScreen> {
     final remain = group.photoUrls.length - 1;
     final thumbRemote = _isHttpUrl(firstUrl);
     final memoCount = _memoFilledCount(group);
-    final thumbSize = context.rs(86);
-    return Card(
-      margin: EdgeInsets.only(bottom: context.rs(8)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(context.rs(12)),
-        onTap: () {
-          if (_tryOpenDocumentDirectlyFromWorkList(context, me, group)) return;
-          showPlacePhotoGroupGallerySheet(
-            context,
-            group,
-            pid: widget.placeInfo.pid!,
-            photoType: _currentPhotoType,
-            placeDisplayName: widget.placeInfo.pname,
-          );
-        },
-        child: Padding(
-          padding: ResponsiveLayout.all(context, 11),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(context.rs(10)),
-                child: Stack(
-                  children: [
-                    SizedBox(
-                      width: thumbSize,
-                      height: thumbSize,
-                      child: thumbRemote
-                          ? Image.network(
-                              firstUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.grey.shade200,
+    final thumbSize = context.rs(56);
+    final canEditMeta = _canEditPhotoGroupMeta(group, me);
+    final canDelete = _canDeletePhotoGroup(group, me);
+    final canShare = group.photos.any((e) => e.canFetchOriginalViaApi);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.rs(5)),
+      child: Material(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(context.rs(10)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            if (_tryOpenDocumentDirectlyFromWorkList(context, me, group))
+              return;
+            showPlacePhotoGroupGallerySheet(
+              context,
+              group,
+              pid: widget.placeInfo.pid!,
+              photoType: _currentPhotoType,
+              placeDisplayName: widget.placeInfo.pname,
+            );
+          },
+          child: Padding(
+            padding:
+                ResponsiveLayout.symmetric(context, horizontal: 8, vertical: 7),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(context.rs(8)),
+                  child: Stack(
+                    children: [
+                      SizedBox(
+                        width: thumbSize,
+                        height: thumbSize,
+                        child: thumbRemote
+                            ? PlaceNetworkImage(
+                                url: firstUrl,
+                                fit: BoxFit.cover,
+                                width: thumbSize,
+                                height: thumbSize,
+                                thumbCacheLogicalWidth: thumbSize,
+                                errorBuilder: (_) => ColoredBox(
+                                  color: cs.surfaceContainerHighest,
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: cs.onSurfaceVariant,
+                                    size: context.rsi(22),
+                                  ),
+                                ),
+                              )
+                            : ColoredBox(
+                                color: cs.surfaceContainerHighest,
                                 child: Icon(
-                                  Icons.broken_image_outlined,
-                                  color: Colors.grey.shade600,
-                                  size: context.rsi(28),
+                                  firstUrl.startsWith('local://camera')
+                                      ? Icons.photo_camera
+                                      : Icons.image_outlined,
+                                  color: cs.onSurfaceVariant,
+                                  size: context.rsi(22),
                                 ),
                               ),
-                            )
-                          : Container(
-                              color: Colors.grey.shade200,
-                              child: Icon(
-                                firstUrl.startsWith('local://camera')
-                                    ? Icons.photo_camera
-                                    : Icons.image_outlined,
-                                color: Colors.grey.shade600,
-                                size: context.rsi(28),
+                      ),
+                      if (remain > 0)
+                        Positioned(
+                          right: context.rs(3),
+                          bottom: context.rs(3),
+                          child: Container(
+                            padding: ResponsiveLayout.symmetric(
+                              context,
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '+$remain',
+                              style: tt.labelSmall?.copyWith(
+                                color: Colors.white,
+                                fontSize: context.rsi(10),
+                                fontWeight: FontWeight.w700,
+                                height: 1.1,
                               ),
                             ),
-                    ),
-                    if (remain > 0)
-                      Positioned(
-                        right: context.rs(4),
-                        bottom: context.rs(4),
-                        child: Container(
-                          padding: ResponsiveLayout.symmetric(
-                            context,
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.62),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            '+$remain',
-                            style: tt.labelSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              rsH(context, 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      group.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tt.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    rsV(context, 8),
-                    Text(
-                      [
-                        '파일 ${group.photos.length}건',
-                        if (memoCount > 0) '메모 $memoCount건',
-                      ].join(' · '),
-                      style: tt.labelMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                        height: 1.25,
-                      ),
-                    ),
-                    rsV(context, 4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: ResponsiveLayout.only(context, top: 1),
-                          child: Icon(
-                            Icons.person_outline_rounded,
-                            size: context.rsi(18),
-                            color: cs.onSurfaceVariant,
-                          ),
+                rsH(context, 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
                         ),
-                        rsH(context, 6),
-                        Expanded(
-                          child: Text(
-                            _uploadersSummarySentence(group),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurface,
-                              height: 1.35,
-                            ),
-                          ),
+                      ),
+                      rsV(context, 2),
+                      Text(
+                        _compactGroupMetaLine(group, memoCount),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.2,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (_canEditPhotoGroupMeta(group, me))
-                IconButton(
-                  tooltip: '작업명·작업일 수정',
-                  icon: Icon(Icons.edit_outlined,
-                      color: Colors.blueGrey.shade600),
-                  onPressed: () => showPlacePhotoGroupMetaEditDialog(
-                    context: context,
-                    group: group,
-                    onSubmit: ({
-                      required String title,
-                      required String photoDateIso,
-                    }) async {
-                      final err = await vm.patchPlacePhotoGroupMeta(
-                        pgid: group.pgid,
-                        photoType: _currentPhotoType,
-                        title: title,
-                        photoDate: photoDateIso,
-                      );
-                      return err;
+                if (canEditMeta || canShare || canDelete)
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      size: context.rsi(20),
+                      color: cs.onSurfaceVariant,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minWidth: context.rs(32),
+                      minHeight: context.rs(32),
+                    ),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          showPlacePhotoGroupMetaEditDialog(
+                            context: context,
+                            group: group,
+                            onSubmit: ({
+                              required String title,
+                              required String photoDateIso,
+                            }) async {
+                              return vm.patchPlacePhotoGroupMeta(
+                                pgid: group.pgid,
+                                photoType: _currentPhotoType,
+                                title: title,
+                                photoDate: photoDateIso,
+                              );
+                            },
+                          );
+                        case 'share':
+                          if (canShare) {
+                            sharePlacePhotoOriginalEntries(
+                              context,
+                              group.photos,
+                              placeDisplayName: widget.placeInfo.pname,
+                              groupTitle: group.title,
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('공유 가능한 문서가 없습니다'),
+                              ),
+                            );
+                          }
+                        case 'delete':
+                          showDialog<void>(
+                            context: context,
+                            builder: (dialogCtx) => deleteDialog(
+                              onPressed: () => vm
+                                  .deletePlacePhotoGroup(
+                                group.pgid,
+                                photoType: _currentPhotoType,
+                              )
+                                  .then((_) {
+                                if (dialogCtx.mounted) {
+                                  Navigator.of(dialogCtx).pop();
+                                }
+                              }),
+                            ),
+                          );
+                      }
                     },
+                    itemBuilder: (menuCtx) => [
+                      if (canEditMeta)
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text('작업명·날짜 수정'),
+                        ),
+                      PopupMenuItem(
+                        value: 'share',
+                        enabled: canShare,
+                        child: const Text('공유'),
+                      ),
+                      if (canDelete)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('삭제'),
+                        ),
+                    ],
                   ),
-                ),
-              IconButton(
-                tooltip: '문서 공유',
-                onPressed: group.photos.any((e) => e.canFetchOriginalViaApi)
-                    ? () => sharePlacePhotoOriginalEntries(
-                          context,
-                          group.photos,
-                          placeDisplayName: widget.placeInfo.pname,
-                          groupTitle: group.title,
-                        )
-                    : () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('공유 가능한 문서가 없습니다'),
-                          ),
-                        );
-                      },
-                icon: Icon(
-                  Icons.share_outlined,
-                  color: group.photos.any((e) => e.canFetchOriginalViaApi)
-                      ? Colors.blueGrey
-                      : Colors.grey.shade400,
-                ),
-              ),
-              if (_canDeletePhotoGroup(group, me))
-                IconButton(
-                  tooltip: '작업 삭제',
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (dialogCtx) => deleteDialog(
-                      onPressed: () => vm
-                          .deletePlacePhotoGroup(
-                        group.pgid,
-                        photoType: _currentPhotoType,
-                      )
-                          .then((_) {
-                        if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-                      }),
-                    ),
-                  ),
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -1,50 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:w0001/theme/app_colors.dart';
+import 'package:w0001/theme/app_input_styles.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
 import 'package:w0001/theme/app_typography.dart';
 
 /// 앱 라이트/다크 테마 — [AppColors]와 M3 [ColorScheme]을 맞춘다.
 abstract final class AppTheme {
+  static const double _buttonRadius = 12;
+
+  static RoundedRectangleBorder get _buttonShape => RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_buttonRadius),
+      );
+
+  static ButtonStyle get _buttonStyle => ButtonStyle(
+        shape: WidgetStatePropertyAll(_buttonShape),
+      );
+
   static ThemeData light() {
-    // 시드로 primary 계열만 쓰고, 배경·컨테이너는 중립 흰색/그레이로 답답함을 줄인다(M3 surface tint도 끔).
+    // 네이비(primary)·그레이(텍스트/서피스) 중심. 스카이 블루는 tertiary로만 두어 M3 자동 틴트를 최소화.
+    // 이전: seedColor=오렌지, secondary=베이지, surface=#FAFAFA
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primaryColor,
       brightness: Brightness.light,
     ).copyWith(
       primary: AppColors.primaryColor,
       onPrimary: Colors.white,
-      secondary: AppColors.accentColor,
-      onSecondary: AppColors.textPrimary,
-      surface: AppColors.backgroundColor,
+      primaryContainer: AppColors.iconBadgeFill,
+      onPrimaryContainer: AppColors.primaryColor,
+      secondary: AppColors.textSecondary,
+      onSecondary: Colors.white,
+      secondaryContainer: AppColors.surfaceMuted,
+      onSecondaryContainer: AppColors.textPrimary,
+      tertiary: AppColors.accentColor,
+      onTertiary: AppColors.textPrimary,
+      tertiaryContainer: const Color(0xFFEAF7FE),
+      onTertiaryContainer: AppColors.textPrimary,
+      surface: AppColors.cardBackground,
       onSurface: AppColors.textPrimary,
       onSurfaceVariant: AppColors.textSecondary,
+      outline: AppColors.borderColor,
       surfaceTint: Colors.transparent,
-      surfaceContainerLowest: Colors.white,
-      surfaceContainerLow: const Color(0xFFF5F5F5),
-      surfaceContainer: const Color(0xFFF0F0F0),
-      surfaceContainerHigh: const Color(0xFFE8E8E8),
-      surfaceContainerHighest: const Color(0xFFE0E0E0),
-      outlineVariant: const Color(0xFFE0E0E0),
+      shadow: const Color(0x1A1A1A2E),
+      surfaceContainerLowest: AppColors.backgroundColor,
+      surfaceContainerLow: const Color(0xFFFAFAFA),
+      surfaceContainer: const Color(0xFFF5F5F5),
+      surfaceContainerHigh: const Color(0xFFE5E7EB),
+      surfaceContainerHighest: const Color(0xFFD1D5DB),
+      outlineVariant: AppColors.borderColor,
     );
 
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
-      fontFamily: 'SCDream',
+      fontFamily: AppTypography.fontFamily,
     );
 
-    final textTheme = AppTypography.light(base.textTheme, colorScheme.onSurface);
+    final textTheme =
+        AppTypography.light(base.textTheme, colorScheme.onSurface);
+    final appliedTextTheme = textTheme.apply(
+      bodyColor: colorScheme.onSurface,
+      displayColor: colorScheme.onSurface,
+      fontFamily: AppTypography.fontFamily,
+    );
 
     return base.copyWith(
-      textTheme: textTheme.apply(
-        bodyColor: colorScheme.onSurface,
-        displayColor: colorScheme.onSurface,
+      textTheme: appliedTextTheme,
+      primaryTextTheme: appliedTextTheme,
+      iconTheme: IconThemeData(color: colorScheme.onSurface),
+      primaryIconTheme: IconThemeData(color: colorScheme.onSurface),
+      cardTheme: CardThemeData(
+        color: colorScheme.surface,
+        elevation: 0,
+        shadowColor: colorScheme.shadow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+          ),
+        ),
       ),
       appBarTheme: AppBarTheme(
         centerTitle: true,
         toolbarHeight: 64, // 논리 dp — 전역 TextScaler와 별도
-        titleTextStyle: textTheme.titleLarge,
+        titleTextStyle: appliedTextTheme.titleLarge,
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         surfaceTintColor: Colors.transparent,
@@ -53,6 +93,25 @@ abstract final class AppTheme {
       searchBarTheme: SearchBarThemeData(
         elevation: const WidgetStatePropertyAll(0),
         backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        textStyle: WidgetStatePropertyAll(
+          TextStyle(
+            inherit: false,
+            color: colorScheme.onSurface,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            textBaseline: TextBaseline.alphabetic,
+            fontFeatures: AppInputStyles.inputFontFeatures,
+          ),
+        ),
+        hintStyle: WidgetStatePropertyAll(
+          TextStyle(
+            inherit: false,
+            color: colorScheme.onSurfaceVariant,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            textBaseline: TextBaseline.alphabetic,
+          ),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             side: BorderSide(width: 2, color: colorScheme.outline),
@@ -75,52 +134,93 @@ abstract final class AppTheme {
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant.withValues(alpha: 0.5),
       ),
+      filledButtonTheme: FilledButtonThemeData(style: _buttonStyle),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: _buttonStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: _buttonStyle),
+      textButtonTheme: TextButtonThemeData(style: _buttonStyle),
+      iconButtonTheme: IconButtonThemeData(style: _buttonStyle),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      inputDecorationTheme: AppInputStyles.inputDecorationTheme(colorScheme),
+      textSelectionTheme: AppInputStyles.textSelectionTheme(colorScheme),
       segmentedButtonTheme: AppSegmentedButton.themeData(colorScheme),
     );
   }
 
   static ThemeData dark() {
-    // 다크 모드용 ColorScheme — 가독성 개선을 위해 더 밝은 텍스트 색상 사용
+    const onSurface = Color(0xFFEEEEEC);
+    const onSurfaceVariant = Color(0xFFAEAEAC);
+    const cardSurface = Color(0xFF323230);
+
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primaryColor,
       brightness: Brightness.dark,
     ).copyWith(
-      primary: AppColors.primaryColor,
+      primary: const Color(0xFF4A7AB5),
       onPrimary: Colors.white,
-      secondary: AppColors.accentColor,
-      onSecondary: Colors.white,
-      surface: const Color(0xFF1C1C1E), // 약간 더 밝은 배경
-      onSurface: const Color(0xFFEEEEEE), // 더 밝은 텍스트
-      onSurfaceVariant: const Color(0xFFC8C8C8), // 더 밝은 보조 텍스트
+      primaryContainer: const Color(0xFF243B55),
+      onPrimaryContainer: const Color(0xFFB8D4F0),
+      secondary: onSurfaceVariant,
+      onSecondary: onSurface,
+      secondaryContainer: const Color(0xFF3A3A38),
+      onSecondaryContainer: onSurface,
+      tertiary: AppColors.accentColor,
+      onTertiary: const Color(0xFF1A1A1A),
+      tertiaryContainer: const Color(0xFF2A4A5E),
+      onTertiaryContainer: const Color(0xFFC8ECFC),
+      surface: cardSurface,
+      onSurface: onSurface,
+      onSurfaceVariant: onSurfaceVariant,
       surfaceTint: Colors.transparent,
-      surfaceContainerLowest: const Color(0xFF0F0F0F),
-      surfaceContainerLow: const Color(0xFF212121),
-      surfaceContainer: const Color(0xFF2A2A2A),
-      surfaceContainerHigh: const Color(0xFF333333),
-      surfaceContainerHighest: const Color(0xFF3D3D3D),
-      outlineVariant: const Color(0xFF484848),
-      outline: const Color(0xFF606060),
       shadow: Colors.black,
+      surfaceContainerLowest: const Color(0xFF1E1E1C),
+      surfaceContainerLow: const Color(0xFF2A2A28),
+      surfaceContainer: const Color(0xFF3A3A38),
+      surfaceContainerHigh: const Color(0xFF444442),
+      surfaceContainerHighest: const Color(0xFF4E4E4C),
+      outlineVariant: const Color(0xFF4E4E4C),
+      outline: const Color(0xFF6E6E6C),
     );
 
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
-      fontFamily: 'SCDream',
+      scaffoldBackgroundColor: colorScheme.surfaceContainerLowest,
+      fontFamily: AppTypography.fontFamily,
     );
 
-    final textTheme = AppTypography.light(base.textTheme, colorScheme.onSurface);
+    final textTheme =
+        AppTypography.light(base.textTheme, colorScheme.onSurface);
+    final appliedTextTheme = textTheme.apply(
+      bodyColor: colorScheme.onSurface,
+      displayColor: colorScheme.onSurface,
+      fontFamily: AppTypography.fontFamily,
+    );
 
     return base.copyWith(
-      textTheme: textTheme.apply(
-        bodyColor: colorScheme.onSurface,
-        displayColor: colorScheme.onSurface,
+      textTheme: appliedTextTheme,
+      primaryTextTheme: appliedTextTheme,
+      iconTheme: IconThemeData(color: colorScheme.onSurface),
+      primaryIconTheme: IconThemeData(color: colorScheme.onSurface),
+      cardTheme: CardThemeData(
+        color: colorScheme.surface,
+        elevation: 0,
+        shadowColor: colorScheme.shadow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+          ),
+        ),
       ),
       appBarTheme: AppBarTheme(
         centerTitle: true,
         toolbarHeight: 64,
-        titleTextStyle: textTheme.titleLarge,
+        titleTextStyle: appliedTextTheme.titleLarge,
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         surfaceTintColor: Colors.transparent,
@@ -129,6 +229,25 @@ abstract final class AppTheme {
       searchBarTheme: SearchBarThemeData(
         elevation: const WidgetStatePropertyAll(0),
         backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        textStyle: WidgetStatePropertyAll(
+          TextStyle(
+            inherit: false,
+            color: colorScheme.onSurface,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            textBaseline: TextBaseline.alphabetic,
+            fontFeatures: AppInputStyles.inputFontFeatures,
+          ),
+        ),
+        hintStyle: WidgetStatePropertyAll(
+          TextStyle(
+            inherit: false,
+            color: colorScheme.onSurfaceVariant,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            textBaseline: TextBaseline.alphabetic,
+          ),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             side: BorderSide(width: 2, color: colorScheme.outline),
@@ -151,6 +270,18 @@ abstract final class AppTheme {
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant.withValues(alpha: 0.5),
       ),
+      filledButtonTheme: FilledButtonThemeData(style: _buttonStyle),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: _buttonStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: _buttonStyle),
+      textButtonTheme: TextButtonThemeData(style: _buttonStyle),
+      iconButtonTheme: IconButtonThemeData(style: _buttonStyle),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      inputDecorationTheme: AppInputStyles.inputDecorationTheme(colorScheme),
+      textSelectionTheme: AppInputStyles.textSelectionTheme(colorScheme),
       segmentedButtonTheme: AppSegmentedButton.themeData(colorScheme),
     );
   }

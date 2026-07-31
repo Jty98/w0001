@@ -1,23 +1,27 @@
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/domain/repository/materialcost_abst.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
+import 'package:w0001/util/funtions.dart';
 
 class MaterialCostRepositoryImpl implements MaterialCostRepository {
   MaterialCostRepositoryImpl(this._remote);
 
   final SuperAdminRemoteRepository _remote;
 
-  @override
-  Future<bool> addMaterialCosts(List<MaterialCostModel> mCostList) async {
-    for (final m in mCostList) {
-      await _remote.materialCostCreate(<String, dynamic>{
+  Map<String, dynamic> _createBody(MaterialCostModel m) => <String, dynamic>{
         'mpid': m.mpid,
         'mname': m.mname,
-        'mdate': m.mdate,
+        'mdate': normalizeToIsoDateString(m.mdate),
         'mprice': m.mprice,
         'mcategory': m.mcategory,
-      });
-    }
+      };
+
+  @override
+  Future<bool> addMaterialCosts(List<MaterialCostModel> mCostList) async {
+    if (mCostList.isEmpty) return true;
+    await Future.wait(
+      mCostList.map((m) => _remote.materialCostCreate(_createBody(m))),
+    );
     return true;
   }
 
@@ -28,7 +32,7 @@ class MaterialCostRepositoryImpl implements MaterialCostRepository {
       materialCost.mid!,
       <String, dynamic>{
         'mname': materialCost.mname,
-        'mdate': materialCost.mdate,
+        'mdate': normalizeToIsoDateString(materialCost.mdate),
         'mprice': materialCost.mprice,
         'mcategory': materialCost.mcategory,
       },

@@ -26,9 +26,15 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace "com.example.w0001"
+    namespace "com.example.interior_work_cost_app"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
+
+    // lint {
+    //     disable 'NullSafeMutableLiveData'
+    //     checkReleaseBuilds false
+    //     abortOnError false
+    // }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -45,7 +51,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.example.w0001"
+        applicationId "com.example.interior_work_cost_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         minSdkVersion flutter.minSdkVersion

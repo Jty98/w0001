@@ -2,6 +2,10 @@ import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/place_site_guide_model.dart';
 import 'package:w0001/data/model/remote/super_admin_json.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
+import 'package:w0001/util/career_input.dart';
+import 'package:w0001/util/human_work_assignability.dart';
+import 'package:w0001/util/place_photo/place_document_classify.dart';
+import 'package:w0001/util/work_instruction_layers_merge.dart';
 import 'package:w0001/util/worker_skills_parse.dart';
 
 // ---------------------------------------------------------------------------
@@ -100,10 +104,13 @@ class HumanRead {
     this.primarySpecialty,
     this.specialties = const [],
     this.career = '',
+    this.workerRank = '',
     this.canBePlaceMember = false,
     this.linkedUserName,
     this.hphone,
     this.linkedPhone,
+    this.linkedUserIsActive = true,
+    this.linkedUserApprovalStatus = UserApprovalStatus.approved,
   });
 
   final int hid;
@@ -125,9 +132,12 @@ class HumanRead {
   /// 워커 프로필 경력.
   final String career;
 
+  /// 현장 역할 (`worker_rank`).
+  final String workerRank;
+
   /// 현장 멤버로 추가 가능 여부 (app_user 계정 연결 여부)
   final bool canBePlaceMember;
-  
+
   /// 연결된 app_user의 이름
   final String? linkedUserName;
 
@@ -137,11 +147,17 @@ class HumanRead {
   /// 앱 계정 연결 전화번호 (마스킹)
   final String? linkedPhone;
 
+  /// 연결된 app_user 활동 여부.
+  final bool linkedUserIsActive;
+
+  /// 연결된 app_user 승인 상태.
+  final UserApprovalStatus linkedUserApprovalStatus;
+
   factory HumanRead.fromJson(Map<String, dynamic> m) {
-    final skills = parseWorkerSkillsFromMap(m);
-    final hnumberRaw = m['hnumber'] ??
-        m['hnumber_masked'] ??
-        m['hnumberMasked'];
+    final primarySpecialty = parseWorkerPrimarySpecialtyFromMap(m);
+    final hnumberRaw =
+        m['hnumber'] ?? m['hnumber_masked'] ?? m['hnumberMasked'];
+    final linkedAccount = parseLinkedUserAccountFromMap(m);
     return HumanRead(
       hid: saInt(m['hid']) ?? 0,
       uid: saString(m['uid'] ?? m['user_uid']) ?? '',
@@ -152,13 +168,18 @@ class HumanRead {
       hdefaultrole: saString(m['hdefaultrole'] ?? m['hdefaultRole']) ?? '',
       hstar: saInt(m['hstar']) ?? 0,
       hdelete: saInt(m['hdelete']) ?? 0,
-      primarySpecialty: skills.primary,
-      specialties: skills.specialties,
-      career: saString(m['career']) ?? '',
+      primarySpecialty: primarySpecialty,
+      specialties: const [],
+      career: CareerInputUtils.parseWireField(
+        m['career'] ?? m['career_years'] ?? m['careerYears'],
+      ),
+      workerRank: pickWorkerRankFromMap(m),
       canBePlaceMember: m['can_be_place_member'] == true,
       linkedUserName: saString(m['linked_user_name']),
       hphone: saString(m['hphone']),
       linkedPhone: saString(m['linked_phone'] ?? m['linkedPhone']),
+      linkedUserIsActive: linkedAccount.isActive,
+      linkedUserApprovalStatus: linkedAccount.approval,
     );
   }
 }
@@ -177,6 +198,9 @@ class PlaceWorkDayRead {
     required this.paid,
     required this.workrole,
     this.instructionBlocks = const [],
+    this.siteInstructionBlocks = const [],
+    this.processInstructionBlocks = const [],
+    this.individualInstructionBlocks = const [],
   });
 
   final int pwdid;
@@ -187,10 +211,42 @@ class PlaceWorkDayRead {
   final int paid;
   final String workrole;
 
-  /// Quill·이미지 블록 JSON — 작업자 일정·본문과 동일 스키마.
+  /// 서버가 합성해 내려주는 병합본(레거시 서버는 여기만 존재).
   final List<WorkerAnnouncementBlock> instructionBlocks;
 
+  /// 현장·일자 전체 작업지시.
+  final List<WorkerAnnouncementBlock> siteInstructionBlocks;
+
+  /// 이 행 [workrole]에 해당하는 공정별 작업지시.
+  final List<WorkerAnnouncementBlock> processInstructionBlocks;
+
+  /// 인력별 개별 작업지시 — [POST]/[PATCH] 시 이 레이어만 저장.
+  final List<WorkerAnnouncementBlock> individualInstructionBlocks;
+
+  /// 표시·FCM 미리보기용 — 레이어가 있으면 병합, 없으면 [instructionBlocks].
+  List<WorkerAnnouncementBlock> get resolvedInstructionBlocks =>
+      mergeWorkInstructionLayers(
+        site: siteInstructionBlocks,
+        process: processInstructionBlocks,
+        individual: individualInstructionBlocks,
+        mergedFallback: instructionBlocks,
+      );
+
   factory PlaceWorkDayRead.fromJson(Map<String, dynamic> m) {
+    final hasExplicitIndividual =
+        m.containsKey('individual_instruction_blocks') ||
+            m.containsKey('individualInstructionBlocks');
+    final individual = hasExplicitIndividual
+        ? parseIndividualInstructionBlocks(m)
+        : const <WorkerAnnouncementBlock>[];
+    final site = parseSiteInstructionBlocks(m);
+    final process = parseProcessInstructionBlocks(m);
+    final merged = parseWorkerAnnouncementBlockList(
+      m['instruction_blocks'] ??
+          m['work_instruction_blocks'] ??
+          m['instructionBlocks'],
+    );
+
     return PlaceWorkDayRead(
       pwdid: saInt(m['pwdid']) ?? 0,
       pid: saInt(m['pid']) ?? 0,
@@ -198,12 +254,16 @@ class PlaceWorkDayRead {
       workdate: saString(m['workdate']) ?? '',
       dailywage: saInt(m['dailywage']) ?? 0,
       paid: saInt(m['paid']) ?? 0,
-      workrole: saString(m['workrole']) ?? '',
-      instructionBlocks: parseWorkerAnnouncementBlockList(
-        m['instruction_blocks'] ??
-            m['work_instruction_blocks'] ??
-            m['instructionBlocks'],
-      ),
+      workrole: saString(m['workrole']) ??
+          saString(m['wrole']) ??
+          saString(m['work_role']) ??
+          '',
+      instructionBlocks: merged,
+      siteInstructionBlocks: site,
+      processInstructionBlocks: process,
+      individualInstructionBlocks: hasExplicitIndividual
+          ? individual
+          : (site.isEmpty && process.isEmpty ? merged : individual),
     );
   }
 }
@@ -499,6 +559,8 @@ class PlacePhotoRead {
     required this.pgid,
     required this.photourl,
     this.originalname,
+    this.originalUrl,
+    this.mediakind,
     required this.sortorder,
     required this.createdatms,
     this.createdByUid,
@@ -514,6 +576,8 @@ class PlacePhotoRead {
   final int pgid;
   final String photourl;
   final String? originalname;
+  final String? originalUrl;
+  final String? mediakind;
   final int sortorder;
   final int createdatms;
   final String? createdByUid;
@@ -531,12 +595,19 @@ class PlacePhotoRead {
   final String phototype;
 
   factory PlacePhotoRead.fromJson(Map<String, dynamic> m) {
-    final displayUrl = saString(m['display_url']);
-    final originalUrl = saString(m['original_url']);
+    final displayUrl = saString(m['display_url']) ?? saString(m['displayUrl']);
+    final originalUrl =
+        saString(m['original_url']) ?? saString(m['originalUrl']);
     final legacyPhoto = saString(m['photourl']) ?? '';
     final resolved = (displayUrl != null && displayUrl.isNotEmpty)
         ? displayUrl
         : (legacyPhoto.isNotEmpty ? legacyPhoto : (originalUrl ?? ''));
+    var originalname =
+        saString(m['originalname']) ?? saString(m['original_name']);
+    if (originalname == null || originalname.trim().isEmpty) {
+      originalname = fileNameHintFromUrl(originalUrl);
+    }
+    final mediakind = saString(m['mediakind']) ?? saString(m['media_kind']);
 
     /// 서버 권장: 스냅샷 즉시 표시 → 없으면 `created_by_uname`(조인)·기타 별칭.
     final uploaderName = saString(m['created_by_uname_snapshot']) ??
@@ -578,7 +649,9 @@ class PlacePhotoRead {
       phid: saInt(m['phid']) ?? 0,
       pgid: saInt(m['pgid']) ?? 0,
       photourl: resolved,
-      originalname: saString(m['originalname']),
+      originalname: originalname,
+      originalUrl: originalUrl,
+      mediakind: mediakind,
       sortorder: saInt(m['sortorder']) ?? 0,
       createdatms: saInt(m['createdatms']) ?? 0,
       createdByUid:

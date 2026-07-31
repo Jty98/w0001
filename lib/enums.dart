@@ -39,6 +39,6 @@ enum PlaceState { complete, incomplete }
 
 enum TotalSegment { place, duration }
 
-enum DayTpye { range, whole, month }
+enum DayTpye { range, whole, month, year }
 
 enum CompleteState { incomplete, whole }

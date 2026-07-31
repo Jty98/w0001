@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
+import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:w0001/data/mappers/remote_mappers.dart';
 import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/domain/use_case/super_admin_remote_use_case.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/presentation/viewmodel/worker_mgmt_view_model.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
+import 'package:w0001/theme/app_section_card.dart';
+import 'package:w0001/ui/widget/human_picker/human_search_pick_sheet.dart';
 import 'package:w0001/util/worker_mgmt_messages.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 /// 인력 hid 기준 작업자 메모·평가·트러블 페어 UI (회원 상세·작업자 목록 등에서 공통).
 ///
@@ -42,11 +48,14 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
   Future<void> reload({bool silent = true}) =>
       ref.read(workerMgmtHidVmProvider(_self).notifier).reload(silent: silent);
 
-  String _hname(List<HumanRead> humans, int hid) {
-    for (final h in humans) {
-      if (h.hid == hid) return h.hname;
-    }
-    return '이름 없음';
+  String _hname(int hid) {
+    final vm = ref.read(workerMgmtHidVmProvider(_self));
+    final resolved = vm.partnerNameByHid[hid];
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final cached =
+        ref.read(workerMgmtHumanDirectoryProvider.notifier).humanByHid(hid);
+    if (cached != null && cached.hname.isNotEmpty) return cached.hname;
+    return vm.initialLoading || vm.refreshing ? '…' : '이름 없음';
   }
 
   Future<void> _addMemo() async {
@@ -113,7 +122,7 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    TextField(
+                    AppTextField(
                       controller: memoCtrl,
                       autofocus: true,
                       maxLines: 5,
@@ -195,7 +204,7 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
                   onChanged: (v) => setLocal(() => severity = v.round()),
                 ),
                 const SizedBox(height: 8),
-                TextField(
+                AppTextField(
                   controller: noteCtrl,
                   maxLines: 3,
                   decoration: const InputDecoration(
@@ -269,6 +278,10 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
   Future<void> _editTroublePartners() async {
     final self = _self;
     final vm = ref.read(workerMgmtHidVmProvider(_self));
+    await ref
+        .read(workerMgmtHumanDirectoryProvider.notifier)
+        .loadAllHumans(blocking: false);
+    if (!mounted) return;
     final humans = ref.read(workerMgmtHumanDirectoryProvider).humans;
     final prevMap = {
       for (final e in vm.troublePairs) e.partnerHid: e.pairId,
@@ -278,74 +291,25 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
         .toList()
       ..sort((a, b) => a.hname.compareTo(b.hname));
     final selected = Set<int>.from(vm.troublePairs.map((e) => e.partnerHid));
-    final result = await showDialog<String>(
+    final pickRows = candidates
+        .map(
+          (h) => HumanPickRow(
+            hid: h.hid,
+            name: h.hname,
+            human: humanReadToModel(h),
+          ),
+        )
+        .toList();
+    final result = await showHumanHidMultiPickSheet(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              title: const Text('트러블 인력 선택'),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 360,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      '${widget.displayName} 님과 같은 현장에 함께 투입되면 경고됩니다. 체크 해제 시 페어가 삭제됩니다.',
-                      style: Theme.of(ctx).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: candidates.length,
-                        itemBuilder: (ctx, i) {
-                          final h = candidates[i];
-                          return CheckboxListTile(
-                            value: selected.contains(h.hid),
-                            onChanged: (v) {
-                              setLocal(() {
-                                if (v == true) {
-                                  selected.add(h.hid);
-                                } else {
-                                  selected.remove(h.hid);
-                                }
-                              });
-                            },
-                            title: Text(h.hname),
-                            subtitle: h.hnumber.isNotEmpty
-                                ? Text(
-                                    h.hnumber,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  )
-                                : null,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('취소'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, 'ok'),
-                  child: const Text('적용'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      title: '트러블 인력 선택',
+      candidates: pickRows,
+      initialSelected: selected,
     );
-    if (!mounted || result != 'ok') return;
+    if (!mounted || result == null) return;
+    selected
+      ..clear()
+      ..addAll(result);
     final prev = prevMap.keys.toSet();
     final toAdd = selected.difference(prev);
     final toRemove = prev.difference(selected);
@@ -415,60 +379,11 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
     required Widget child,
     Widget? trailing,
   }) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.5),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: cs.shadow.withValues(alpha: 0.07),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.fromLTRB(
-        context.rsi(18),
-        context.rsi(16),
-        context.rsi(18),
-        context.rsi(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(context.rsi(10)),
-                  child: Icon(icon,
-                      size: context.rs(22), color: cs.onPrimaryContainer),
-                ),
-              ),
-              SizedBox(width: context.rsi(12)),
-              Expanded(
-                child: Text(
-                  title,
-                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-              if (trailing != null) trailing,
-            ],
-          ),
-          SizedBox(height: context.rsi(16)),
-          child,
-        ],
-      ),
+    return AppSectionCard(
+      icon: icon,
+      title: title,
+      trailing: trailing,
+      child: child,
     );
   }
 
@@ -479,85 +394,79 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final isEval = n.noteType == 'evaluation';
-    final surface = cs.surfaceContainerHighest.withValues(alpha: 0.55);
     return Padding(
       padding: EdgeInsets.only(bottom: context.rsi(10)),
-      child: Material(
-        color: surface,
+      child: AppInsetTile(
         borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: EdgeInsets.all(context.rsi(14)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isEval ? Icons.star_rounded : Icons.sticky_note_2_outlined,
-                    size: context.rs(20),
-                    color: isEval ? cs.tertiary : cs.primary,
+        padding: EdgeInsets.all(context.rsi(14)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isEval ? Icons.star_rounded : Icons.sticky_note_2_outlined,
+                  size: context.rs(20),
+                  color: isEval ? cs.tertiary : cs.primary,
+                ),
+                SizedBox(width: context.rsi(8)),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: context.rsi(10),
+                    vertical: context.rsi(4),
                   ),
+                  decoration: BoxDecoration(
+                    color: (isEval ? cs.tertiaryContainer : cs.primaryContainer)
+                        .withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isEval ? '평가' : '메모',
+                    style: tt.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: isEval
+                          ? cs.onTertiaryContainer
+                          : cs.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                if (isEval && n.rating != null) ...[
                   SizedBox(width: context.rsi(8)),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: context.rsi(10),
-                      vertical: context.rsi(4),
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          (isEval ? cs.tertiaryContainer : cs.primaryContainer)
-                              .withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      isEval ? '평가' : '메모',
-                      style: tt.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: isEval
-                            ? cs.onTertiaryContainer
-                            : cs.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                  if (isEval && n.rating != null) ...[
-                    SizedBox(width: context.rsi(8)),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(
-                        5,
-                        (i) => Padding(
-                          padding: EdgeInsets.only(right: context.rsi(2)),
-                          child: Icon(
-                            i < (n.rating ?? 0)
-                                ? Icons.star_rounded
-                                : Icons.star_outline_rounded,
-                            size: context.rs(16),
-                            color: cs.tertiary,
-                          ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      5,
+                      (i) => Padding(
+                        padding: EdgeInsets.only(right: context.rsi(2)),
+                        child: Icon(
+                          i < (n.rating ?? 0)
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          size: context.rs(16),
+                          color: cs.tertiary,
                         ),
                       ),
                     ),
-                  ],
-                ],
-              ),
-              if (n.authorUid != null && n.authorUid!.trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '작성 · ${n.authorUid}',
-                  style: tt.labelSmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    letterSpacing: 0.2,
                   ),
-                ),
+                ],
               ],
+            ),
+            if (n.authorUid != null && n.authorUid!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                n.memo,
-                style: tt.bodyMedium?.copyWith(height: 1.45),
+                '작성 · ${n.authorUid}',
+                style: tt.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  letterSpacing: 0.2,
+                ),
               ),
             ],
-          ),
+            const SizedBox(height: 8),
+            Text(
+              n.memo,
+              style: tt.bodyMedium?.copyWith(height: 1.45),
+            ),
+          ],
         ),
       ),
     );
@@ -568,7 +477,6 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final vm = ref.watch(workerMgmtHidVmProvider(widget.workerHid));
-    final humans = ref.watch(workerMgmtHumanDirectoryProvider).humans;
 
     if (vm.initialLoading && vm.notes.isEmpty && vm.troublePairs.isEmpty) {
       return Skeletonizer(
@@ -666,7 +574,24 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
           )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: vm.notes.map((n) => _noteTile(context, n)).toList(),
+            children: [
+              ...vm.notes.map((n) => _noteTile(context, n)),
+              if (vm.notesHasMore || vm.notesLoadingMore)
+                Padding(
+                  padding: EdgeInsets.only(top: context.rsi(8)),
+                  child: vm.notesLoadingMore
+                      ? const AppLoadingIndicator()
+                      : TextButton(
+                          onPressed: () => ref
+                              .read(
+                                workerMgmtHidVmProvider(widget.workerHid)
+                                    .notifier,
+                              )
+                              .loadMoreNotes(),
+                          child: const Text('메모·평가 더 불러오기'),
+                        ),
+                ),
+            ],
           );
 
     final troubleTrailing = _savingConflict
@@ -679,8 +604,7 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
                 icon: Icon(Icons.edit_rounded, size: context.rs(18)),
                 label: const Text('편집'),
                 style: FilledButton.styleFrom(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: context.rsi(16)),
+                  padding: EdgeInsets.symmetric(horizontal: context.rsi(16)),
                 ),
               ),
             ),
@@ -705,7 +629,27 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
           ),
         ),
         SizedBox(height: context.rsi(12)),
-        if (vm.troublePairs.isEmpty)
+        if (vm.troublePairsLoading && vm.troublePairs.isEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: context.rsi(8)),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: context.rs(16),
+                  height: context.rs(16),
+                  child: const HammerLoadingIndicator(size: 16),
+                ),
+                SizedBox(width: context.rsi(10)),
+                Text(
+                  '트러블 인력 불러오는 중…',
+                  style: tt.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (vm.troublePairs.isEmpty)
           Text(
             '등록된 트러블 인력이 없습니다.',
             style: tt.bodySmall?.copyWith(
@@ -719,7 +663,7 @@ class WorkerMgmtHidContentState extends ConsumerState<WorkerMgmtHidContent> {
             runSpacing: context.rsi(8),
             children: vm.troublePairs.map((e) {
               final id = e.partnerHid;
-              final label = _hname(humans, id);
+              final label = _hname(id);
               final pairId = e.pairId;
               final canDelete = pairId != null && !_savingConflict;
               return Material(

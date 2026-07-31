@@ -4,6 +4,7 @@ import 'package:w0001/access/user_role_capabilities.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/data/model/place_photo_entry.dart';
 import 'package:w0001/data/model/place_photo_group_model.dart';
+import 'package:w0001/navigation/app_router.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 import 'package:w0001/util/place_photo/place_document_classify.dart';
@@ -11,15 +12,16 @@ import 'package:w0001/ui/screen/5_place/widgets/place_document_opener.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_photo_group_meta_dialog.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_photo_memo_image_sheet.dart';
 import 'package:w0001/util/place_photo/share_place_photo_originals.dart';
+import 'package:w0001/ui/widget/place_network_image.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 String _formatPhotoDateForSheet(String raw) {
   final s = raw.length >= 10 ? raw.substring(0, 10) : raw.trim();
   final d = DateTime.tryParse(s);
-  if (d == null) return '작업일 $raw';
+  if (d == null) return '업로드일 $raw';
   final w = ['월', '화', '수', '목', '금', '토', '일'][d.weekday - 1];
-  return '작업일 ${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')} ($w)';
+  return '업로드일 ${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')} ($w)';
 }
 
 bool _canEditPhotoMemo(PlacePhotoEntry e, UserRead? me) {
@@ -185,7 +187,8 @@ class _PlacePhotoGallerySheetState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: ResponsiveLayout.only(context, left: 4, top: 2, right: 4, bottom: 4),
+              padding: ResponsiveLayout.only(context,
+                  left: 4, top: 2, right: 4, bottom: 4),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -217,7 +220,7 @@ class _PlacePhotoGallerySheetState
                   ),
                   if (_canEditGroupMeta(group, me))
                     IconButton(
-                      tooltip: '작업명·작업일 수정',
+                      tooltip: '작업명·업로드일 수정',
                       icon: Icon(Icons.edit_outlined, color: cs.primary),
                       onPressed: openGroupMetaEdit,
                     ),
@@ -262,11 +265,12 @@ class _PlacePhotoGallerySheetState
               ),
             ),
             Padding(
-              padding: ResponsiveLayout.only(context, left: 16, right: 16, bottom: 6),
+              padding: ResponsiveLayout.only(context,
+                  left: 16, right: 16, bottom: 6),
               child: Text(
                 me?.canViewPlacePhotoDocuments(widget.photoType) == true
-                    ? '탭해서 크게 보기 · 길게 눌러 메모 수정 · 전체화면에서 PDF·엑셀 원본 열기'
-                    : '탭해서 크게 보기 · 길게 눌러 사진과 메모를 수정합니다.',
+                    ? '탭해서 크게 보기 · 길게 눌러 메모 수정'
+                    : '탭해서 크게 보기 · 길게 눌러 메모를 확인합니다.',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -275,7 +279,8 @@ class _PlacePhotoGallerySheetState
             ),
             if (_selectionMode)
               Padding(
-                padding: ResponsiveLayout.only(context, left: 16, right: 16, bottom: 4),
+                padding: ResponsiveLayout.only(context,
+                    left: 16, right: 16, bottom: 4),
                 child: Text(
                   '공유할 항목을 눌러 선택하세요.',
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -287,7 +292,8 @@ class _PlacePhotoGallerySheetState
             const Divider(height: 1),
             Expanded(
               child: GridView.builder(
-                padding: ResponsiveLayout.only(context, left: 12, top: 12, right: 12, bottom: 8),
+                padding: ResponsiveLayout.only(context,
+                    left: 12, top: 12, right: 12, bottom: 8),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
                   mainAxisSpacing: context.rs(8),
@@ -322,6 +328,17 @@ class _PlacePhotoGallerySheetState
                       onTap: () {
                         if (_selectionMode) {
                           _toggleIndex(i);
+                        } else if (me?.canViewPlacePhotoDocuments(
+                                    widget.photoType) ==
+                                true &&
+                            isPlacePhotoDocumentEntry(e)) {
+                          Navigator.of(sheetCtx).pop();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            final host = rootNavigatorKey.currentContext;
+                            if (host != null) {
+                              openPlacePhotoOriginalDocument(host, entry: e);
+                            }
+                          });
                         } else {
                           _openFullscreenViewer(
                             context: sheetCtx,
@@ -346,11 +363,10 @@ class _PlacePhotoGallerySheetState
                               ),
                               child: _GalleryThumb(
                                 url: e.displayUrl,
-                                docHint: me?.canViewPlacePhotoDocuments(widget.photoType) ==
+                                docHint: me?.canViewPlacePhotoDocuments(
+                                            widget.photoType) ==
                                         true
-                                    ? classifyPlaceDocumentByFileName(
-                                        e.originalName,
-                                      )
+                                    ? classifyPlaceDocumentForViewer(e)
                                     : null,
                               ),
                             ),
@@ -476,6 +492,8 @@ void _openFullscreenViewer({
     context: context,
     isScrollControlled: true,
     useSafeArea: false,
+    isDismissible: true,
+    enableDrag: true,
     barrierColor: Colors.black87,
     backgroundColor: Colors.black,
     builder: (viewerCtx) => _FullscreenPhotoViewerSheet(
@@ -531,12 +549,13 @@ class _FullscreenPhotoViewerSheetState
 
   String _memoTeaser(String? memo) {
     final t = memo?.trim() ?? '';
-    if (t.isEmpty) return '메모가 없습니다. 아래 버튼에서 사진·메모를 함께 엽니다.';
+    if (t.isEmpty) return '메모가 없습니다. 탭해서 확인하거나 작성할 수 있습니다.';
     if (t.length <= 96) return t;
     return '${t.substring(0, 93)}…';
   }
 
-  Future<void> _openMemoImagePanel(BuildContext ctx, PlacePhotoEntry cur) async {
+  Future<void> _openMemoImagePanel(
+      BuildContext ctx, PlacePhotoEntry cur) async {
     final me = ref
         .read(authSessionProvider)
         .maybeWhen(data: (u) => u, orElse: () => null);
@@ -559,10 +578,10 @@ class _FullscreenPhotoViewerSheetState
   Widget build(BuildContext context) {
     final h = MediaQuery.sizeOf(context).height;
     final topPad = MediaQuery.viewPaddingOf(context).top;
-    
+
     // Provider에서 최신 데이터를 가져와서 전체 사진 리스트를 업데이트
     final placeState = ref.watch(placeDetailProvider(widget.pid));
-    
+
     // 현재 표시 중인 사진이 속한 그룹의 최신 데이터 찾기
     // 초기 entries의 첫 번째 사진의 phid를 기준으로 그룹을 찾음
     List<PlacePhotoEntry> currentEntries = widget.entries;
@@ -578,18 +597,19 @@ class _FullscreenPhotoViewerSheetState
         if (currentEntries != widget.entries) break;
       }
     }
-    
+
     // 인덱스가 범위를 벗어나지 않도록 보정
     if (_index >= currentEntries.length && currentEntries.isNotEmpty) {
       _index = currentEntries.length - 1;
     }
-    
-    final cur = currentEntries.isNotEmpty ? currentEntries[_index] : widget.entries[_index];
+
+    final cur = currentEntries.isNotEmpty
+        ? currentEntries[_index]
+        : widget.entries[_index];
     final me = ref
         .watch(authSessionProvider)
         .maybeWhen(data: (u) => u, orElse: () => null);
     final tt = Theme.of(context).textTheme;
-    final canEdit = _canEditPhotoMemo(cur, me);
 
     return SizedBox(
       height: h * 0.94,
@@ -597,7 +617,8 @@ class _FullscreenPhotoViewerSheetState
         children: [
           SizedBox(height: topPad + context.rs(4)),
           Padding(
-            padding: ResponsiveLayout.symmetric(context, horizontal: 4, vertical: 4),
+            padding:
+                ResponsiveLayout.symmetric(context, horizontal: 4, vertical: 4),
             child: Row(
               children: [
                 IconButton(
@@ -616,12 +637,6 @@ class _FullscreenPhotoViewerSheetState
                       letterSpacing: 0.5,
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: '사진과 메모',
-                  icon: const Icon(Icons.picture_in_picture_alt_outlined,
-                      color: Colors.amberAccent),
-                  onPressed: () => _openMemoImagePanel(context, cur),
                 ),
                 IconButton(
                   tooltip: cur.canFetchOriginalViaApi ? '이 항목 공유' : '공유 불가',
@@ -665,7 +680,8 @@ class _FullscreenPhotoViewerSheetState
             child: InkWell(
               onTap: () => _openMemoImagePanel(context, cur),
               child: Padding(
-                padding: ResponsiveLayout.only(context, left: 14, top: 10, right: 14, bottom: 12),
+                padding: ResponsiveLayout.only(context,
+                    left: 14, top: 8, right: 14, bottom: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -673,35 +689,25 @@ class _FullscreenPhotoViewerSheetState
                     Row(
                       children: [
                         Icon(Icons.notes_rounded,
-                            color: Colors.white54, size: context.rsi(20)),
-                        rsH(context, 8),
+                            color: Colors.white54, size: context.rsi(18)),
+                        rsH(context, 6),
                         Text(
                           '메모',
-                          style: tt.labelLarge?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          canEdit ? '편집' : '보기',
                           style: tt.labelMedium?.copyWith(
-                            color: Colors.amberAccent.withValues(alpha: 0.9),
+                            color: Colors.white.withValues(alpha: 0.85),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        Icon(Icons.open_in_full_rounded,
-                            color: Colors.white38, size: context.rsi(18)),
                       ],
                     ),
-                    rsV(context, 6),
+                    rsV(context, 4),
                     Text(
                       _memoTeaser(cur.memo),
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: tt.bodySmall?.copyWith(
                         color: cur.hasMemo ? Colors.white70 : Colors.white38,
-                        height: 1.35,
+                        height: 1.3,
                       ),
                     ),
                   ],
@@ -727,8 +733,18 @@ class _FullscreenPageContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = classifyPlaceDocumentForViewer(entry);
-    if (docTools && kind != PlaceDocumentKind.imageOrOther) {
-      return _DocTapToOpenFullscreen(entry: entry, kind: kind);
+    final isDoc = isPlacePhotoDocumentEntry(entry);
+    if (docTools && isDoc) {
+      return _DocTapToOpenFullscreen(
+        entry: entry,
+        kind: kind == PlaceDocumentKind.imageOrOther ? null : kind,
+      );
+    }
+    if (isDoc) {
+      return const _Placeholder(
+        icon: Icons.lock_outline_rounded,
+        label: '문서 원본을 열 권한이 없습니다',
+      );
     }
     return _ZoomableNetworkOrPlaceholder(url: entry.displayUrl);
   }
@@ -737,26 +753,41 @@ class _FullscreenPageContent extends StatelessWidget {
 class _DocTapToOpenFullscreen extends StatelessWidget {
   const _DocTapToOpenFullscreen({
     required this.entry,
-    required this.kind,
+    this.kind,
   });
 
   final PlacePhotoEntry entry;
-  final PlaceDocumentKind kind;
+  final PlaceDocumentKind? kind;
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final icon = kind == PlaceDocumentKind.pdf
         ? Icons.picture_as_pdf_outlined
-        : Icons.table_chart_outlined;
-    final label = kind == PlaceDocumentKind.pdf ? 'PDF' : '엑셀';
+        : (kind == PlaceDocumentKind.spreadsheetXlsx ||
+                kind == PlaceDocumentKind.legacyXls)
+            ? Icons.table_chart_outlined
+            : Icons.description_outlined;
+    final label = kind == PlaceDocumentKind.pdf
+        ? 'PDF'
+        : (kind == PlaceDocumentKind.spreadsheetXlsx ||
+                kind == PlaceDocumentKind.legacyXls)
+            ? '엑셀'
+            : '문서';
     return Material(
       color: Colors.black,
       child: InkWell(
-        onTap: () => openPlacePhotoOriginalDocument(
-          context,
-          entry: entry,
-        ),
+        onTap: () {
+          final host = rootNavigatorKey.currentContext;
+          if (host == null) return;
+          Navigator.of(context).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final ctx = rootNavigatorKey.currentContext;
+            if (ctx != null) {
+              openPlacePhotoOriginalDocument(ctx, entry: entry);
+            }
+          });
+        },
         child: Center(
           child: Padding(
             padding: ResponsiveLayout.all(context, 24),
@@ -804,30 +835,28 @@ class _ZoomableNetworkOrPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
-    if (_isHttpUrl(url)) {
+    if (isHttpImageUrl(url)) {
       return InteractiveViewer(
         minScale: 1,
         maxScale: 4,
         child: Center(
-          child: Image.network(
-            url,
+          child: PlaceNetworkImage(
+            url: url,
             fit: BoxFit.contain,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Skeletonizer(
-                enabled: true,
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  child: Center(
-                    child: Text(
-                      '이미지',
-                      style: tt.bodyMedium?.copyWith(color: Colors.white70),
-                    ),
+            thumbCacheLogicalWidth: MediaQuery.sizeOf(context).width,
+            placeholder: (context) => Skeletonizer(
+              enabled: true,
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.35),
+                child: Center(
+                  child: Text(
+                    '이미지',
+                    style: tt.bodyMedium?.copyWith(color: Colors.white70),
                   ),
                 ),
-              );
-            },
-            errorBuilder: (_, __, ___) => const _Placeholder(
+              ),
+            ),
+            errorBuilder: (_) => const _Placeholder(
               icon: Icons.broken_image_outlined,
               label: '이미지를 불러오지 못했습니다',
             ),
@@ -893,13 +922,15 @@ class _GalleryThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget core;
-    if (_isHttpUrl(url)) {
-      core = Image.network(
-        url,
+    if (isHttpImageUrl(url)) {
+      final thumbW = MediaQuery.sizeOf(context).width / 4;
+      core = PlaceNetworkImage(
+        url: url,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        errorBuilder: (_, __, ___) => Icon(
+        thumbCacheLogicalWidth: thumbW,
+        errorBuilder: (_) => Icon(
           Icons.broken_image_outlined,
           color: Colors.black45,
           size: context.rsi(28),
@@ -913,8 +944,8 @@ class _GalleryThumb extends StatelessWidget {
         size: context.rsi(32),
       );
     }
-    final showDoc = docHint != null &&
-        docHint != PlaceDocumentKind.imageOrOther;
+    final showDoc =
+        docHint != null && docHint != PlaceDocumentKind.imageOrOther;
     if (!showDoc) return core;
     final icon = docHint == PlaceDocumentKind.pdf
         ? Icons.picture_as_pdf_outlined
@@ -965,6 +996,3 @@ class _Placeholder extends StatelessWidget {
     );
   }
 }
-
-bool _isHttpUrl(String s) =>
-    s.startsWith('http://') || s.startsWith('https://');

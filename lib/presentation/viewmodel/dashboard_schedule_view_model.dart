@@ -1,11 +1,13 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show Timer, unawaited;
 
 import 'package:alarm/alarm.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/access/user_role_access.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/mappers/remote_mappers.dart';
 import 'package:w0001/data/model/auth_models.dart';
+import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/data/model/schedule_memo_model.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
@@ -140,13 +142,20 @@ class DashboardScheduleState {
 }
 
 class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
-  static const _rangeHalfDays = 371;
+  /// 전체보기·위젯 풀 — 과거/미래 주 수 (742일 일괄 로드 대신).
+  static const int _fullViewWeekRadius = 12;
+  static const int _widgetWeekRadius = 4;
+
   /// 좌우 주 스와이프: 과거 52주 + 미래 52주 + 이번 주 기준 한 칸 = 105페이지.
   static const int weekPagePastCount = 52;
   static const int weekPageFutureCount = 52;
   static const int weekPageCount = weekPagePastCount + weekPageFutureCount + 1;
 
-  Future<void>? _weekReloadInFlight;
+  int _weekReloadGeneration = 0;
+
+  static const Duration _donePatchDebounce = Duration(milliseconds: 650);
+  final Map<int, Timer> _donePatchTimers = {};
+  final Map<int, bool> _pendingDoneValues = {};
 
   bool? _tryReadUserIsWorker() {
     try {
@@ -161,13 +170,19 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
 
   Future<List<ScheduleMemoModel>> _memosBetween(String from, String to) async {
     final r = ref.read(superAdminRemoteRepositoryProvider);
-    final all = await r.scheduleMemosList();
-    final filtered = all
-        .where(
-          (m) =>
-              m.taskdate.compareTo(from) >= 0 && m.taskdate.compareTo(to) <= 0,
-        )
-        .toList();
+    final base = ListQuery(from: from, to: to);
+    final filtered = <ScheduleMemoRead>[];
+    String? cursor;
+    var guard = 0;
+    while (guard++ < 100) {
+      final q = cursor == null
+          ? base.copyWith(clearCursor: true)
+          : base.copyWith(cursor: cursor);
+      final page = await r.scheduleMemosQueryPage(q);
+      filtered.addAll(page.items);
+      if (!page.canLoadMore) break;
+      cursor = page.nextCursor!.trim();
+    }
     filtered.sort((a, b) {
       final c = a.taskdate.compareTo(b.taskdate);
       if (c != 0) return c;
@@ -178,12 +193,18 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     return filtered.map(scheduleMemoReadToModel).toList();
   }
 
-  Future<int> _nextSortOrder(String taskDate) async {
+  Future<List<ScheduleMemoModel>> _memosForSameDay(String taskDate) async {
     final r = ref.read(superAdminRemoteRepositoryProvider);
-    final all = await r.scheduleMemosList();
-    final same = all.where((x) => x.taskdate == taskDate).toList();
+    final page = await r.scheduleMemosQueryPage(
+      ListQuery(from: taskDate, to: taskDate),
+    );
+    return page.items.map(scheduleMemoReadToModel).toList();
+  }
+
+  Future<int> _nextSortOrder(String taskDate) async {
+    final same = await _memosForSameDay(taskDate);
     if (same.isEmpty) return 0;
-    return same.map((e) => e.sortorder).reduce((a, b) => a > b ? a : b) + 1;
+    return same.map((e) => e.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
   }
 
   DateTime _anchorMonday() {
@@ -207,7 +228,8 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     return scheduleDateOnly(_anchorMonday().add(Duration(days: 7 * i)));
   }
 
-  void _onAuthSessionForSchedule(AsyncValue<UserRead?>? prev, AsyncValue<UserRead?> next) {
+  void _onAuthSessionForSchedule(
+      AsyncValue<UserRead?>? prev, AsyncValue<UserRead?> next) {
     final u = next.asData?.value;
     if (u == null) return;
     if (u.isWorker) {
@@ -223,53 +245,116 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
 
   @override
   DashboardScheduleState build() {
-    ref.listen<AsyncValue<UserRead?>>(authSessionProvider, _onAuthSessionForSchedule,
+    ref.onDispose(_disposeDonePatchState);
+    ref.listen<AsyncValue<UserRead?>>(
+        authSessionProvider, _onAuthSessionForSchedule,
         fireImmediately: true);
     return DashboardScheduleState.initial();
   }
 
-  Future<void> _reloadWeek({bool? isWorker}) async {
-    if (_weekReloadInFlight != null) {
-      return _weekReloadInFlight;
+  void _disposeDonePatchState() {
+    unawaited(flushPendingDonePatches());
+  }
+
+  /// 디바운스 대기 중인 완료(done) 변경을 즉시 서버에 반영합니다.
+  /// 화면 이탈·탭 전환·앱 백그라운드·새로고침 직전에 호출합니다.
+  Future<void> flushPendingDonePatches() async {
+    for (final timer in _donePatchTimers.values) {
+      timer.cancel();
     }
-    _weekReloadInFlight = _reloadWeekBody(isWorker: isWorker);
-    try {
-      await _weekReloadInFlight;
-    } finally {
-      _weekReloadInFlight = null;
+    _donePatchTimers.clear();
+    if (_pendingDoneValues.isEmpty) return;
+
+    final pending = Map<int, bool>.from(_pendingDoneValues);
+    _pendingDoneValues.clear();
+    for (final entry in pending.entries) {
+      await _flushDonePatch(entry.key, entry.value);
     }
   }
 
-  Future<void> _reloadWeekBody({bool? isWorker}) async {
+  String _weekCacheKey(DateTime weekMonday) =>
+      scheduleDateKey(scheduleDateOnly(scheduleStartOfWeekMonday(weekMonday)));
+
+  List<ScheduleMemoModel>? _cachedWeekMemos(DateTime weekMonday) {
+    final cached = state.weekMemosByWeekKey[_weekCacheKey(weekMonday)];
+    if (cached == null) return null;
+    return List<ScheduleMemoModel>.from(cached);
+  }
+
+  void _applyWeekToState({
+    required DateTime weekMonday,
+    required List<ScheduleMemoModel> memos,
+    required Map<String, List<ScheduleMemoModel>> cache,
+    bool? isWeekLoading,
+  }) {
+    final isCurrent =
+        _weekCacheKey(weekMonday) == _weekCacheKey(state.weekStart);
+    state = state.copyWith(
+      weekMemosByWeekKey: cache,
+      weekMemos: isCurrent ? memos : state.weekMemos,
+      isWeekLoading: isCurrent
+          ? (isWeekLoading ?? state.isWeekLoading)
+          : state.isWeekLoading,
+    );
+  }
+
+  Future<void> _reloadWeek({
+    bool? isWorker,
+    DateTime? weekMonday,
+    bool background = false,
+  }) async {
+    final targetMonday = scheduleDateOnly(
+        scheduleStartOfWeekMonday(weekMonday ?? state.weekStart));
+    final gen = ++_weekReloadGeneration;
     final worker = isWorker ?? _tryReadUserIsWorker();
-    if (worker == true) {
-      state = state.copyWith(isWeekLoading: false);
+    if (worker == true || worker == null) {
+      if (gen == _weekReloadGeneration) {
+        state = state.copyWith(isWeekLoading: false);
+      }
       return;
     }
-    if (worker == null) {
-      state = state.copyWith(isWeekLoading: false);
-      return;
+
+    final cacheKey = _weekCacheKey(targetMonday);
+    final cached = state.weekMemosByWeekKey[cacheKey];
+    final isCurrent = cacheKey == _weekCacheKey(state.weekStart);
+
+    if (cached != null && isCurrent) {
+      state = state.copyWith(
+        weekMemos: List<ScheduleMemoModel>.from(cached),
+        isWeekLoading: false,
+      );
+    } else if (!background && cached == null && isCurrent) {
+      state = state.copyWith(isWeekLoading: true);
     }
-    state = state.copyWith(isWeekLoading: true);
+
     try {
-      final from = scheduleDateKey(state.weekStart);
-      final to = scheduleDateKey(state.weekStart.add(const Duration(days: 6)));
+      final from = scheduleDateKey(targetMonday);
+      final to = scheduleDateKey(targetMonday.add(const Duration(days: 6)));
       final list = await _memosBetween(from, to);
-      final key = scheduleDateKey(scheduleDateOnly(state.weekStart));
+      if (gen != _weekReloadGeneration || !ref.mounted) return;
+
       final map = Map<String, List<ScheduleMemoModel>>.from(
         state.weekMemosByWeekKey,
       );
-      map[key] = List<ScheduleMemoModel>.from(list);
-      state = state.copyWith(weekMemos: list, weekMemosByWeekKey: map);
+      map[cacheKey] = List<ScheduleMemoModel>.from(list);
+      _applyWeekToState(
+        weekMonday: targetMonday,
+        memos: list,
+        cache: map,
+        isWeekLoading: false,
+      );
     } catch (e, st) {
       debugPrint('DashboardSchedule week reload failed: $e\n$st');
+      if (gen == _weekReloadGeneration && ref.mounted && isCurrent) {
+        state = state.copyWith(isWeekLoading: false);
+      }
     } finally {
-      state = state.copyWith(isWeekLoading: false);
-      // 현재 주가 열려 있을 때는 위젯 데이터(풀 + 이번 주)를 함께 동기화한다.
-      final now = DateTime.now();
-      final thisMon = scheduleStartOfWeekMonday(now);
-      if (scheduleDateOnly(state.weekStart) == scheduleDateOnly(thisMon)) {
-        await _updateWidgetData();
+      if (gen == _weekReloadGeneration) {
+        final now = DateTime.now();
+        final thisMon = scheduleStartOfWeekMonday(now);
+        if (scheduleDateOnly(state.weekStart) == scheduleDateOnly(thisMon)) {
+          await _updateWidgetData();
+        }
       }
     }
   }
@@ -288,10 +373,10 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     try {
       final today = scheduleDateOnly(DateTime.now());
       final firstMonday = scheduleStartOfWeekMonday(
-        today.subtract(const Duration(days: _rangeHalfDays)),
+        today.subtract(Duration(days: 7 * _fullViewWeekRadius)),
       );
       final lastMonday = scheduleStartOfWeekMonday(
-        today.add(const Duration(days: _rangeHalfDays)),
+        today.add(Duration(days: 7 * _fullViewWeekRadius)),
       );
       final from = scheduleDateKey(firstMonday);
       final to = scheduleDateKey(lastMonday.add(const Duration(days: 6)));
@@ -304,15 +389,17 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     }
   }
 
-  /// 상황판 진입·세션 확정 시 호출. [force]면 진행 중이던 주간 로드를 끊고 다시 시도한다.
+  /// 상황판 진입·세션 확정 시 호출. [force]면 캐시를 비우고 다시 시도한다.
   Future<void> ensureWeekLoaded({bool force = false}) async {
     if (force) {
-      _weekReloadInFlight = null;
+      _weekReloadGeneration++;
+      state = state.copyWith(weekMemosByWeekKey: const {});
     }
     await _reloadWeek();
   }
 
   Future<void> refresh() async {
+    await flushPendingDonePatches();
     state = state.copyWith(weekMemosByWeekKey: const {});
     await _reloadWeek();
     if (state.fullMemos != null) {
@@ -322,6 +409,7 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
 
   /// Loads the wide range once; later calls are no-ops until data is cleared.
   Future<void> loadFullMemosIfNeeded() async {
+    await flushPendingDonePatches();
     if (state.fullMemos != null) return;
     await _reloadFullMemos();
   }
@@ -346,12 +434,21 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     if (sel.isBefore(nextStart) || sel.isAfter(weekEnd)) {
       sel = nextStart;
     }
+
+    final cached = _cachedWeekMemos(nextStart);
     state = state.copyWith(
       weekStart: nextStart,
       selectedDay: sel,
-      weekMemos: const [],
+      weekMemos: cached ?? const [],
+      isWeekLoading: cached == null,
     );
-    _reloadWeek();
+
+    unawaited(
+      _reloadWeek(
+        weekMonday: nextStart,
+        background: cached != null,
+      ),
+    );
   }
 
   void goWeek(int deltaWeeks) {
@@ -372,6 +469,7 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   }
 
   Future<void> _afterMutation() async {
+    await flushPendingDonePatches();
     state = state.copyWith(weekMemosByWeekKey: const {});
     await _reloadWeek();
     await refreshFullMemosIfLoaded();
@@ -381,10 +479,12 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
   Future<void> _updateWidgetData() async {
     try {
       final thisMon = scheduleStartOfWeekMonday(DateTime.now());
-      final poolFrom =
-          scheduleDateKey(thisMon.subtract(const Duration(days: 7 * 52)));
-      final poolTo =
-          scheduleDateKey(thisMon.add(const Duration(days: 7 * 52 + 6)));
+      final poolFrom = scheduleDateKey(
+        thisMon.subtract(Duration(days: 7 * _widgetWeekRadius)),
+      );
+      final poolTo = scheduleDateKey(
+        thisMon.add(Duration(days: 7 * _widgetWeekRadius + 6)),
+      );
       final poolList = await _memosBetween(poolFrom, poolTo);
       await WidgetDataManager.saveSchedulePool(poolList);
 
@@ -426,15 +526,38 @@ class DashboardScheduleViewModel extends Notifier<DashboardScheduleState> {
     await _updateWidgetData();
   }
 
-  Future<void> setDone(int sid, bool done) async {
+  Future<void> setDone(int sid, bool done) {
+    final found = _findMemoBySid(sid);
+    if (found == null) return Future.value();
+    _replaceMemoInState(found.copyWith(done: done));
+
+    _pendingDoneValues[sid] = done;
+    _donePatchTimers[sid]?.cancel();
+    _donePatchTimers[sid] = Timer(_donePatchDebounce, () {
+      unawaited(_flushDonePatch(sid, _pendingDoneValues.remove(sid) ?? done));
+    });
+    return Future.value();
+  }
+
+  Future<void> _flushDonePatch(int sid, bool done) async {
+    _donePatchTimers.remove(sid)?.cancel();
+    if (!ref.mounted) return;
+
     final found = _findMemoBySid(sid);
     if (found == null) return;
+
     final r = ref.read(superAdminRemoteRepositoryProvider);
-    final updated = found.copyWith(done: done);
-    await r.scheduleMemoPatch(sid, <String, dynamic>{'done': done});
-    await _safeSyncAlarmForMemo(updated);
-    _replaceMemoInState(updated);
-    await _updateWidgetData();
+    try {
+      await r.scheduleMemoPatch(sid, <String, dynamic>{'done': done});
+      final updated = found.copyWith(done: done);
+      await _safeSyncAlarmForMemo(updated);
+      _replaceMemoInState(updated);
+      await _updateWidgetData();
+    } catch (e, st) {
+      debugPrint('schedule memo done patch failed sid=$sid: $e\n$st');
+      await _reloadWeek();
+      await refreshFullMemosIfLoaded();
+    }
   }
 
   void _replaceMemoInState(ScheduleMemoModel updated) {

@@ -99,9 +99,7 @@ class ImageUploadResult {
     final legacyPhoto = saString(m['photourl']) ?? '';
     final resolved = display.isNotEmpty
         ? display
-        : (originalUrl.isNotEmpty
-            ? originalUrl
-            : legacyPhoto);
+        : (originalUrl.isNotEmpty ? originalUrl : legacyPhoto);
     final phid = _readPhidFromUploadMap(m);
     if (resolved.isEmpty && phid <= 0) {
       throw StateError(

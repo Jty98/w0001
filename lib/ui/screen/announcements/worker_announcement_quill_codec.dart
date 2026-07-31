@@ -1,14 +1,20 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dart_quill_delta/dart_quill_delta.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:w0001/data/model/worker_announcement_models.dart';
+import 'package:w0001/ui/screen/announcements/announcement_image_strip_embed.dart';
+import 'package:w0001/util/image_attachment/image_upload_result.dart';
+import 'package:w0001/util/image_attachment/upload_image_remote.dart';
 
 /// 서버 변경 전까지 Quill 문서(JSON ops)를 한 개의 텍스트 블록에 싣습니다.
 abstract final class WorkerAnnouncementQuillCodec {
   WorkerAnnouncementQuillCodec._();
 
-  static const magic = '__W0001_QUILL_V1__:';
+  static const magic = kWorkerAnnouncementQuillMagic;
 
   static bool isQuillEnvelopeText(String text) =>
       text.trimLeft().startsWith(magic);
@@ -38,12 +44,16 @@ abstract final class WorkerAnnouncementQuillCodec {
 
   static List<dynamic>? decodeDeltaOps(List<WorkerAnnouncementBlock> blocks) {
     if (!blocksLookLikeStoredQuill(blocks)) return null;
-    final b = blocks.first as WorkerAnnouncementTextBlock;
-    final raw =
-        jsonDecode(b.text.substring(b.text.indexOf(magic) + magic.length));
-    if (raw is List) return raw;
-    if (raw is Map<String, dynamic> && raw['ops'] is List) {
-      return raw['ops'] as List<dynamic>;
+    try {
+      final b = blocks.first as WorkerAnnouncementTextBlock;
+      final raw =
+          jsonDecode(b.text.substring(b.text.indexOf(magic) + magic.length));
+      if (raw is List) return raw;
+      if (raw is Map<String, dynamic> && raw['ops'] is List) {
+        return raw['ops'] as List<dynamic>;
+      }
+    } catch (_) {
+      return null;
     }
     return null;
   }
@@ -123,8 +133,191 @@ abstract final class WorkerAnnouncementQuillCodec {
     return false;
   }
 
+  static bool _deltaOpsHasInvisibleColor(List<dynamic> ops) {
+    for (final op in ops) {
+      if (op is! Map) continue;
+      final attrs = op['attributes'];
+      if (attrs is! Map) continue;
+      for (final key in <String>['color', 'background']) {
+        if (attrs.containsKey(key) && _colorAttributeIsInvisible(attrs[key])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// 편집 중 투명 `color`/`background` 속성이 붙으면 즉시 제거한다.
+  static StreamSubscription<DocChange>? attachInvisibleColorGuard(
+    QuillController controller,
+  ) {
+    var fixing = false;
+    void sanitize() {
+      if (fixing) return;
+      final ops = List<dynamic>.from(controller.document.toDelta().toJson());
+      if (!_deltaOpsHasInvisibleColor(ops)) return;
+      fixing = true;
+      try {
+        final sel = controller.selection;
+        final cleaned =
+            _documentWithoutInvisibleTextColors(controller.document);
+        controller.document = cleaned;
+        final len = cleaned.length;
+        controller.updateSelection(
+          TextSelection(
+            baseOffset: sel.baseOffset.clamp(0, len),
+            extentOffset: sel.extentOffset.clamp(0, len),
+          ),
+          ChangeSource.local,
+        );
+      } finally {
+        fixing = false;
+      }
+    }
+
+    controller.addListener(sanitize);
+    return controller.document.changes.listen((_) => sanitize());
+  }
+
+  /// Quill 편집용 컨트롤러 — 로드 시·입력 중 투명 글자색을 막는다.
+  static QuillController createEditingController({
+    required Document document,
+    TextSelection selection = const TextSelection.collapsed(offset: 0),
+  }) {
+    final controller = QuillController(
+      document: _documentWithoutInvisibleTextColors(document),
+      selection: selection,
+    );
+    attachInvisibleColorGuard(controller);
+    return controller;
+  }
+
   static List<WorkerAnnouncementBlock> blocksForApi(Document doc) {
+    if (documentHasLocalImages(doc)) {
+      throw StateError(
+        '로컬 이미지가 아직 업로드되지 않았습니다. '
+        '저장 전 prepareDocumentForSave 또는 uploadLocalImagesInDocument를 호출하세요.',
+      );
+    }
     return [encodeDocument(doc)];
+  }
+
+  /// 로컬 파일 경로·`file://` 참조인지 (아직 서버에 안 올린 이미지).
+  static bool isLocalImageRef(String ref) {
+    final u = ref.trim();
+    if (u.isEmpty) return false;
+    final lower = u.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return false;
+    }
+    if (lower.startsWith('file://')) return true;
+    if (u.startsWith('/')) return true;
+    if (!kIsWeb && RegExp(r'^[A-Za-z]:\\').hasMatch(u)) return true;
+    return false;
+  }
+
+  static String localPathFromRef(String ref) {
+    final u = ref.trim();
+    if (u.startsWith('file://')) {
+      return Uri.parse(u).toFilePath();
+    }
+    return u;
+  }
+
+  static bool documentHasLocalImages(Document doc) {
+    for (final op in doc.toDelta().operations) {
+      final data = op.data;
+      if (data is! Map) continue;
+      if (data.containsKey('image')) {
+        if (isLocalImageRef(data['image']?.toString() ?? '')) return true;
+      }
+      final stripRaw = data[AnnouncementImageStripEmbed.type];
+      if (stripRaw == null) continue;
+      final stripJson = stripRaw is String ? stripRaw : jsonEncode(stripRaw);
+      final parsed = AnnouncementImageStripData.tryParseJson(stripJson);
+      if (parsed == null) continue;
+      for (final u in parsed.urls) {
+        if (isLocalImageRef(u)) return true;
+      }
+    }
+    return false;
+  }
+
+  /// 저장 직전 — 문서 안 로컬 이미지를 업로드하고 URL로 치환한다.
+  static Future<Document> uploadLocalImagesInDocument(
+    Document doc, {
+    ImageUploadCategory category = ImageUploadCategory.announcementImage,
+    void Function(int current, int total)? onProgress,
+  }) async {
+    final ops = List<dynamic>.from(doc.toDelta().toJson());
+    final locals = <String>{};
+
+    void collect(String raw) {
+      final u = raw.trim();
+      if (isLocalImageRef(u)) locals.add(u);
+    }
+
+    for (final op in ops) {
+      if (op is! Map) continue;
+      final ins = op['insert'];
+      if (ins is! Map) continue;
+      if (ins.containsKey('image')) {
+        collect(ins['image']?.toString() ?? '');
+      }
+      final stripRaw = ins[AnnouncementImageStripEmbed.type];
+      if (stripRaw == null) continue;
+      final stripJson = stripRaw is String ? stripRaw : jsonEncode(stripRaw);
+      final parsed = AnnouncementImageStripData.tryParseJson(stripJson);
+      if (parsed == null) continue;
+      for (final u in parsed.urls) {
+        collect(u);
+      }
+    }
+
+    if (locals.isEmpty) return doc;
+
+    final urlByLocal = <String, String>{};
+    final list = locals.toList(growable: false);
+    for (var i = 0; i < list.length; i++) {
+      onProgress?.call(i + 1, list.length);
+      final ref = list[i];
+      final res = await uploadLocalImageFile(
+        localPathFromRef(ref),
+        category: category,
+      );
+      urlByLocal[ref] = res.displayUrl;
+    }
+
+    final newOps = ops.map((op) {
+      if (op is! Map) return op;
+      final m = Map<String, dynamic>.from(op);
+      final ins = m['insert'];
+      if (ins is! Map) return m;
+      final insM = Map<String, dynamic>.from(ins);
+      if (insM.containsKey('image')) {
+        final raw = insM['image']?.toString().trim() ?? '';
+        final remote = urlByLocal[raw];
+        if (remote != null) insM['image'] = remote;
+      }
+      final stripRaw = insM[AnnouncementImageStripEmbed.type];
+      if (stripRaw != null) {
+        final stripJson = stripRaw is String ? stripRaw : jsonEncode(stripRaw);
+        final parsed = AnnouncementImageStripData.tryParseJson(stripJson);
+        if (parsed != null) {
+          final newUrls = parsed.urls
+              .map((u) => urlByLocal[u.trim()] ?? u)
+              .toList(growable: false);
+          insM[AnnouncementImageStripEmbed.type] = jsonEncode(<String, Object?>{
+            'urls': newUrls,
+            'mode': parsed.mode.name,
+          });
+        }
+      }
+      m['insert'] = insM;
+      return m;
+    }).toList();
+
+    return Document.fromDelta(Delta.fromJson(newOps));
   }
 
   /// 공지 수정 화면에 올 초기 문서.
@@ -172,34 +365,130 @@ abstract final class WorkerAnnouncementQuillCodec {
     return true;
   }
 
-  /// 수신함·목록 한 줄 미리보기 (Quill·레거시 공통 디코드).
+  /// 목록 미리보기용 — blocks에 표시 가능한 본문이 있는지.
+  static bool blocksHaveDisplayableBody(List<WorkerAnnouncementBlock> blocks) {
+    if (blocks.isEmpty) return false;
+    if (blocksPlainTextPreview(blocks, maxLen: 1).isNotEmpty) return true;
+    for (final b in blocks) {
+      switch (b) {
+        case WorkerAnnouncementImageBlock(:final url):
+          if (url.trim().isNotEmpty) return true;
+        case WorkerAnnouncementTextBlock(:final text):
+          if (blocksLookLikeStoredQuill([b])) return true;
+          if (text.trim().isNotEmpty) return true;
+      }
+    }
+    return false;
+  }
+
+  static String _photoPreviewTag({int count = 1}) {
+    if (count <= 0) return '[사진]';
+    if (count == 1) return '[사진]';
+    return '[사진 $count]';
+  }
+
+  static String _truncatePreview(String s, int maxLen) {
+    if (s.length <= maxLen) return s;
+    return '${s.substring(0, maxLen)}…';
+  }
+
+  static void _appendPreviewToken(StringBuffer buf, String token) {
+    if (buf.isEmpty) {
+      buf.write(token);
+      return;
+    }
+    final tail = buf.toString();
+    if (!RegExp(r'[\s]$').hasMatch(tail)) {
+      buf.write(' ');
+    }
+    buf.write(token);
+  }
+
+  static String _normalizePreviewWhitespace(String s) {
+    return s
+        .replaceAll('\u200b', '')
+        .replaceAll(RegExp(r'[ \t]+'), ' ')
+        .replaceAll(RegExp(r'\n+'), ' ')
+        .trim();
+  }
+
+  static String _deltaOpsOrderedPreview(List<dynamic> ops) {
+    final buf = StringBuffer();
+    for (final op in ops) {
+      if (op is! Map) continue;
+      final ins = op['insert'];
+      if (ins is String) {
+        buf.write(ins);
+        continue;
+      }
+      if (ins is! Map) continue;
+
+      if (ins.containsKey('image')) {
+        final u = ins['image']?.toString().trim() ?? '';
+        if (u.isNotEmpty) {
+          _appendPreviewToken(buf, _photoPreviewTag());
+        }
+        continue;
+      }
+
+      final stripRaw = ins[AnnouncementImageStripEmbed.type];
+      if (stripRaw == null) continue;
+      final data = AnnouncementImageStripData.tryParseJson(
+        stripRaw is String ? stripRaw : jsonEncode(stripRaw),
+      );
+      if (data != null && data.urls.isNotEmpty) {
+        _appendPreviewToken(
+          buf,
+          _photoPreviewTag(count: data.urls.length),
+        );
+      } else {
+        _appendPreviewToken(buf, _photoPreviewTag());
+      }
+    }
+    return _normalizePreviewWhitespace(buf.toString());
+  }
+
+  static String _legacyBlocksOrderedPreview(
+      List<WorkerAnnouncementBlock> blocks) {
+    final buf = StringBuffer();
+    for (final b in blocks) {
+      switch (b) {
+        case WorkerAnnouncementTextBlock(:final text):
+          if (WorkerAnnouncementQuillCodec.isQuillEnvelopeText(text)) {
+            final ops = decodeDeltaOps([b]);
+            if (ops != null) {
+              buf.write(_deltaOpsOrderedPreview(ops));
+            }
+            continue;
+          }
+          final t = text.trim();
+          if (t.isNotEmpty) buf.write(t);
+        case WorkerAnnouncementImageBlock(:final url):
+          if (url.trim().isNotEmpty) {
+            _appendPreviewToken(buf, _photoPreviewTag());
+          }
+      }
+    }
+    return _normalizePreviewWhitespace(buf.toString());
+  }
+
+  /// 수신함·목록 한 줄 미리보기 (Quill·레거시 공통, 본문 순서 유지).
   static String blocksPlainTextPreview(
     List<WorkerAnnouncementBlock> blocks, {
     int maxLen = 92,
   }) {
     if (blocks.isEmpty) return '';
     try {
-      final doc = decodeToDocument(blocks);
-      final buf = StringBuffer();
-      var hasNonText = false;
-      for (final op in doc.toDelta().operations) {
-        final data = op.data;
-        if (data is String) {
-          buf.write(data);
-        } else {
-          hasNonText = true;
-        }
-      }
-      var s = buf.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (s.isEmpty) {
-        return hasNonText ? '사진·첨부 포함' : '';
-      }
-      if (s.length > maxLen) {
-        return '${s.substring(0, maxLen)}…';
-      }
-      return s;
+      final ops = decodeDeltaOps(blocks);
+      final ordered = ops != null
+          ? _deltaOpsOrderedPreview(ops)
+          : _legacyBlocksOrderedPreview(blocks);
+      if (ordered.isEmpty) return '';
+      return _truncatePreview(ordered, maxLen);
     } catch (_) {
-      return '';
+      final fallback = _legacyBlocksOrderedPreview(blocks);
+      if (fallback.isEmpty) return '';
+      return _truncatePreview(fallback, maxLen);
     }
   }
 }

@@ -16,8 +16,7 @@ void fcmSetPendingScheduleLink(FcmPendingScheduleLink? v) {
   _fcmPendingScheduleLink = v;
 }
 
-FcmPendingScheduleLink? fcmPeekPendingScheduleLink() =>
-    _fcmPendingScheduleLink;
+FcmPendingScheduleLink? fcmPeekPendingScheduleLink() => _fcmPendingScheduleLink;
 
 void fcmClearPendingScheduleLink() {
   _fcmPendingScheduleLink = null;

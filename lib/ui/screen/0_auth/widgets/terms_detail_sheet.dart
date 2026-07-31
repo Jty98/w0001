@@ -68,8 +68,7 @@ Future<void> showTermsDetailSheet(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: cs.primaryContainer.withValues(alpha: 0.65),
-                          borderRadius:
-                              BorderRadius.circular(sheetCtx.rs(12)),
+                          borderRadius: BorderRadius.circular(sheetCtx.rs(12)),
                         ),
                         child: Icon(
                           Icons.article_outlined,
@@ -108,8 +107,7 @@ Future<void> showTermsDetailSheet(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerLow.withValues(alpha: 0.55),
-                        borderRadius:
-                            BorderRadius.circular(sheetCtx.rs(14)),
+                        borderRadius: BorderRadius.circular(sheetCtx.rs(14)),
                         border: Border.all(
                           color: cs.outlineVariant.withValues(alpha: 0.4),
                         ),
@@ -151,8 +149,7 @@ Future<void> showTermsDetailSheet(
                       style: FilledButton.styleFrom(
                         minimumSize: Size.fromHeight(sheetCtx.rs(52)),
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(sheetCtx.rs(12)),
+                          borderRadius: BorderRadius.circular(sheetCtx.rs(12)),
                         ),
                       ),
                       child: const Text('확인'),

@@ -26,12 +26,10 @@ Future<CrossPlaceConflictChoice?> showCrossPlaceWorkDayConflictDialog(
         SizedBox(height: ctx.rsi(12)),
       ];
       for (final c in conflicts) {
-        final places = c.assignments
-            .map((a) {
-              final role = a.workrole.isNotEmpty ? ' (${a.workrole})' : '';
-              return '· ${a.placeName}$role';
-            })
-            .join('\n');
+        final places = c.assignments.map((a) {
+          final role = a.workrole.isNotEmpty ? ' (${a.workrole})' : '';
+          return '· ${a.placeName}$role';
+        }).join('\n');
         lines.add(
           Padding(
             padding: EdgeInsets.only(bottom: ctx.rsi(10)),

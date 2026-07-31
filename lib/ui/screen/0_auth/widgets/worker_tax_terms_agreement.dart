@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/data/model/terms_models.dart';
@@ -23,7 +24,8 @@ class WorkerTaxTermsAgreement extends ConsumerStatefulWidget {
       _WorkerTaxTermsAgreementState();
 }
 
-class _WorkerTaxTermsAgreementState extends ConsumerState<WorkerTaxTermsAgreement> {
+class _WorkerTaxTermsAgreementState
+    extends ConsumerState<WorkerTaxTermsAgreement> {
   var _checked = false;
   var _loadingDetail = false;
 
@@ -49,7 +51,8 @@ class _WorkerTaxTermsAgreementState extends ConsumerState<WorkerTaxTermsAgreemen
     if (_loadingDetail) return;
     setState(() => _loadingDetail = true);
     try {
-      final detail = await ref.read(termsUseCaseProvider).getTermDetail(term.id);
+      final detail =
+          await ref.read(termsUseCaseProvider).getTermDetail(term.id);
       if (!mounted) return;
       await showTermsDetailSheet(context, detail: detail);
       if (!widget.alreadyAgreed) {
@@ -103,7 +106,8 @@ class _WorkerTaxTermsAgreementState extends ConsumerState<WorkerTaxTermsAgreemen
             context,
             child: Row(
               children: [
-                Icon(Icons.verified_rounded, color: cs.primary, size: context.rs(20)),
+                Icon(Icons.verified_rounded,
+                    color: cs.primary, size: context.rs(20)),
                 SizedBox(width: context.rsi(10)),
                 Expanded(
                   child: Text(
@@ -117,10 +121,7 @@ class _WorkerTaxTermsAgreementState extends ConsumerState<WorkerTaxTermsAgreemen
                       ? SizedBox(
                           width: context.rs(16),
                           height: context.rs(16),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: cs.primary,
-                          ),
+                          child: const HammerLoadingIndicator(size: 16),
                         )
                       : const Text('전문'),
                 ),
@@ -139,14 +140,16 @@ class _WorkerTaxTermsAgreementState extends ConsumerState<WorkerTaxTermsAgreemen
                   children: [
                     Text(
                       '[필수] ${term.displayTitle}',
-                      style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      style:
+                          tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     if (_checked)
                       Padding(
                         padding: EdgeInsets.only(top: context.rsi(4)),
                         child: Text(
                           '전문을 확인하셨습니다. 저장 시 동의가 완료됩니다.',
-                          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                          style: tt.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ),
                   ],
@@ -158,10 +161,7 @@ class _WorkerTaxTermsAgreementState extends ConsumerState<WorkerTaxTermsAgreemen
                     ? SizedBox(
                         width: context.rs(16),
                         height: context.rs(16),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.primary,
-                        ),
+                        child: const HammerLoadingIndicator(size: 16),
                       )
                     : const Text('전문'),
               ),

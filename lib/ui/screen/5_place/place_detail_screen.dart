@@ -7,6 +7,8 @@ import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
+import 'package:w0001/presentation/viewmodel/place_site_guide_providers.dart';
+import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/screen/5_place/place_workforce_screen.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_site_info_dialog.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_worker_instruction_week_peek.dart';
@@ -98,6 +100,12 @@ class PlaceDetailScreen extends ConsumerWidget {
             context.push('/place/detail/process-schedule', extra: place),
       ),
       _PlaceMenuItem(
+        title: '작업 체크리스트',
+        icon: Icons.checklist_rounded,
+        accentColor: const Color(0xFF2E7D32),
+        onTap: () => context.push('/place/detail/checklist', extra: place),
+      ),
+      _PlaceMenuItem(
         title: '문서관리',
         icon: Icons.folder_open_rounded,
         accentColor: cs.secondary,
@@ -142,15 +150,19 @@ class PlaceDetailScreen extends ConsumerWidget {
             tooltip: '현장 정보 · 인수인계',
             icon: const Icon(Icons.info_outline_rounded),
             onPressed: () {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!context.mounted) return;
-                showPlaceSiteInfoDialog(
-                  context,
-                  ref: ref,
-                  place: place,
-                  showManagementMoney: isManagement,
-                );
-              });
+              // ✅ 미리 데이터 로드 시작 (비동기, 백그라운드)
+              final pid = place.pid;
+              if (pid != null) {
+                ref.read(placeSiteGuideByPidProvider(pid).notifier).load();
+              }
+
+              // ✅ 즉시 다이얼로그 열기 (로딩 중이면 스켈레톤 표시)
+              showPlaceSiteInfoDialog(
+                context,
+                ref: ref,
+                place: place,
+                showManagementMoney: isManagement,
+              );
             },
           ),
         ],
@@ -196,7 +208,6 @@ class _PlaceDetailSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
     final totalRevenue = place.pfirstrevenue + place.totalAdditionalRevenue;
     final balance = (place.pcontractTotal - totalRevenue) < 0
         ? 0
@@ -208,49 +219,19 @@ class _PlaceDetailSummaryCard extends StatelessWidget {
     final padH = (lw * 0.028).clamp(context.rs(9), context.rs(14));
     final padV = (lw * 0.020).clamp(context.rs(6), context.rs(9));
 
-    return Material(
-      color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(padH, padV, padH, padV),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.account_balance_wallet_outlined,
-                  size: context.rs(22),
-                  color: cs.primary,
-                ),
-                SizedBox(width: context.rsi(8)),
-                Text(
-                  '금액 요약',
-                  style: tt.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.25,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: (lw * 0.014).clamp(context.rs(4), context.rs(7))),
-            _MgmtMoneyGrid(
-              colorScheme: cs,
-              layoutWidth: lw,
-              contract: place.pcontractTotal,
-              collected: totalRevenue,
-              balance: balance,
-              cost: totalCost,
-              profit: profit,
-            ),
-          ],
-        ),
+    return AppSectionCard(
+      icon: Icons.account_balance_wallet_outlined,
+      title: '금액 요약',
+      denseHeader: true,
+      contentPadding: EdgeInsets.fromLTRB(padH, padV, padH, padV),
+      child: _MgmtMoneyGrid(
+        colorScheme: cs,
+        layoutWidth: lw,
+        contract: place.pcontractTotal,
+        collected: totalRevenue,
+        balance: balance,
+        cost: totalCost,
+        profit: profit,
       ),
     );
   }
@@ -342,54 +323,45 @@ class _MgmtMoneyGrid extends StatelessWidget {
           ],
         ),
         SizedBox(height: gap),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: profitAccent.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: 0.55),
-            ),
+        AppInsetTile(
+          padding: EdgeInsets.symmetric(
+            horizontal: (layoutWidth * 0.024).clamp(8.0, 12.0),
+            vertical: (layoutWidth * 0.020).clamp(6.0, 9.0),
           ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: (layoutWidth * 0.024).clamp(8.0, 12.0),
-              vertical: (layoutWidth * 0.020).clamp(6.0, 9.0),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(Icons.trending_up_rounded,
-                    size: (layoutWidth * 0.040).clamp(14.0, 17.0),
-                    color: profitAccent),
-                SizedBox(width: (layoutWidth * 0.014).clamp(5.0, 8.0)),
-                Expanded(
-                  flex: 2,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(Icons.trending_up_rounded,
+                  size: (layoutWidth * 0.040).clamp(14.0, 17.0),
+                  color: profitAccent),
+              SizedBox(width: (layoutWidth * 0.014).clamp(5.0, 8.0)),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '현재 영업이익',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              Flexible(
+                flex: 3,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
                   child: Text(
-                    '현재 영업이익',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: cs.onSurfaceVariant,
+                    _formatProfitAmountAndMarginPct(profit, contract),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: profitAccent,
                         ),
+                    maxLines: 1,
+                    textAlign: TextAlign.end,
                   ),
                 ),
-                Flexible(
-                  flex: 3,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      _formatProfitAmountAndMarginPct(profit, contract),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: profitAccent,
-                          ),
-                      maxLines: 1,
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
@@ -420,51 +392,53 @@ class _TintedMoneyTile extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final iconSz = (layoutWidth * 0.038).clamp(context.rs(13), context.rs(16));
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
-      ),
-      child: Padding(
-        padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: iconSz, color: accent.withValues(alpha: 0.95)),
-                SizedBox(width: (layoutWidth * 0.014).clamp(4.0, 7.0)),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: tt.labelMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: (layoutWidth * 0.014).clamp(context.rs(4), context.rs(7))),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: tt.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.35,
-                  color: cs.onSurface,
-                ),
-                maxLines: 1,
+    return AppInsetTile(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: iconSz + 6,
+                height: iconSz + 6,
+                alignment: Alignment.center,
+                decoration:
+                    AppSectionCardStyles.iconBadgeDecoration(context, cs),
+                child: Icon(icon, size: iconSz, color: accent),
               ),
+              SizedBox(width: (layoutWidth * 0.014).clamp(4.0, 7.0)),
+              Expanded(
+                child: Text(
+                  label,
+                  style: tt.labelMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(
+              height:
+                  (layoutWidth * 0.014).clamp(context.rs(4), context.rs(7))),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: tt.titleSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.35,
+                color: cs.onSurface,
+              ),
+              maxLines: 1,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -552,8 +526,9 @@ class _ModernMenuCard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final slotH = constraints.maxHeight;
-        final compact =
-            slotH.isFinite && slotH > 0 && slotH < (side * 0.14).clamp(46.0, 56.0);
+        final compact = slotH.isFinite &&
+            slotH > 0 &&
+            slotH < (side * 0.14).clamp(46.0, 56.0);
         final padH = (side * 0.04).clamp(12.0, 16.0);
         final padV = compact
             ? (slotH * 0.12).clamp(4.0, 8.0)
@@ -566,48 +541,38 @@ class _ModernMenuCard extends StatelessWidget {
             ? (slotH * 0.30).clamp(12.0, 16.0)
             : (side * 0.042).clamp(14.0, 17.0);
         final gap = (side * 0.032).clamp(8.0, 14.0);
+        final cardRadius = AppSectionCardStyles.borderRadius(context);
 
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: item.onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Ink(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: cs.shadow.withValues(alpha: 0.04),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 3.5,
-                      height: iconBox,
-                      decoration: BoxDecoration(
-                        color: item.accentColor,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    SizedBox(width: gap),
-                    SizedBox(
-                      width: iconBox,
-                      height: iconBox,
-                      child: DecoratedBox(
+        return DecoratedBox(
+          decoration: AppSectionCardStyles.cardDecoration(context),
+          child: ClipRRect(
+            borderRadius: cardRadius,
+            clipBehavior: Clip.antiAlias,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: item.onTap,
+                borderRadius: cardRadius,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 3.5,
+                        height: iconBox,
                         decoration: BoxDecoration(
-                          color: item.accentColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(11),
+                          color: item.accentColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      SizedBox(width: gap),
+                      Container(
+                        width: iconBox,
+                        height: iconBox,
+                        alignment: Alignment.center,
+                        decoration: AppSectionCardStyles.iconBadgeDecoration(
+                          context,
+                          cs,
                         ),
                         child: Icon(
                           item.icon,
@@ -615,32 +580,32 @@ class _ModernMenuCard extends StatelessWidget {
                           size: iconSz,
                         ),
                       ),
-                    ),
-                    SizedBox(width: gap),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
+                      SizedBox(width: gap),
+                      Expanded(
+                        child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Text(
-                            item.title,
-                            style: tt.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.2,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              item.title,
+                              style: tt.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.2,
+                              ),
+                              maxLines: 1,
                             ),
-                            maxLines: 1,
                           ),
                         ),
                       ),
-                    ),
-                    SizedBox(width: gap * 0.5),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                      size: chevronSz,
-                    ),
-                  ],
+                      SizedBox(width: gap * 0.5),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                        size: chevronSz,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

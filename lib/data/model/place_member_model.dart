@@ -103,8 +103,7 @@ class PlaceMemberRemoveResponse {
   factory PlaceMemberRemoveResponse.fromJson(Map<String, dynamic> m) {
     return PlaceMemberRemoveResponse(
       pid: saInt(m['pid']) ?? 0,
-      workerUid:
-          saString(m['worker_uid'] ?? m['workerUid'] ?? m['uid']) ?? '',
+      workerUid: saString(m['worker_uid'] ?? m['workerUid'] ?? m['uid']) ?? '',
       accessRevoked: m['access_revoked'] == true || m['accessRevoked'] == true,
       message: saString(m['message']),
       warning: _parseRemoveWarning(m),

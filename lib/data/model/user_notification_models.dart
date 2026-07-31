@@ -1,4 +1,5 @@
 import 'package:w0001/data/model/remote/super_admin_json.dart';
+import 'package:w0001/util/funtions.dart';
 
 /// 서버·로컬 공통 알림함 항목.
 class UserNotificationItem {
@@ -53,7 +54,7 @@ class UserNotificationItem {
       m['created_at'] ?? m['createdAt'] ?? m['created_at_ms'],
     );
     final read = _parseDateTime(m['read_at'] ?? m['readAt']);
-    return UserNotificationItem(
+    var item = UserNotificationItem(
       id: idRaw ?? '',
       type: (saString(m['type']) ?? '').trim(),
       title: (saString(m['title']) ?? '').trim(),
@@ -63,6 +64,13 @@ class UserNotificationItem {
       readAt: read,
       isLocalOnly: saBool(m['is_local_only']) ?? false,
     );
+    if (item.type.isNotEmpty) {
+      final pw = placeWorkDayDisplayCopy(item.type, item.payload);
+      if (pw != null) {
+        item = item.copyWith(title: pw.title, body: pw.body);
+      }
+    }
+    return item;
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -86,19 +94,143 @@ class UserNotificationItem {
     final id = 'local_${now.millisecondsSinceEpoch}';
     final t = title?.trim();
     final b = body?.trim();
+    final pw = placeWorkDayDisplayCopy(type, payload);
     return UserNotificationItem(
       id: id,
       type: type,
-      title: (t != null && t.isNotEmpty)
-          ? t
-          : defaultTitleForType(type),
-      body: (b != null && b.isNotEmpty)
-          ? b
-          : defaultBodyForType(type, payload),
+      title: pw?.title ??
+          ((t != null && t.isNotEmpty) ? t : defaultTitleForType(type)),
+      body: pw?.body ??
+          ((b != null && b.isNotEmpty) ? b : defaultBodyForType(type, payload)),
       payload: Map<String, dynamic>.from(payload),
       createdAt: now,
       isLocalOnly: true,
     );
+  }
+
+  /// `placeworkday_*` FCM — type 기준 표시 문구 (신규 투입 vs 지시 변경 구분).
+  static ({String title, String body})? placeWorkDayDisplayCopy(
+    String type,
+    Map<String, dynamic> payload,
+  ) {
+    final placeName = _placeNameFromPayload(payload);
+    final workDateLabel = _workDateLabelFromPayload(payload);
+    return switch (type) {
+      'placeworkday_assignment' => (
+          title: '작업 배정',
+          body: _placeWorkDayBody(
+            workDateLabel: workDateLabel,
+            placeName: placeName,
+            suffix: '에 투입되었습니다.',
+            fallback: '새 현장에 투입되었습니다.',
+          ),
+        ),
+      'placeworkday_instruction' => (
+          title: '작업 지시',
+          body: _placeWorkDayBody(
+            workDateLabel: workDateLabel,
+            placeName: placeName,
+            suffix: ' 작업지시가 변경되었습니다.',
+            fallback: '작업지시가 변경되었습니다.',
+          ),
+        ),
+      _ => null,
+    };
+  }
+
+  static String _placeWorkDayBody({
+    required String? workDateLabel,
+    required String? placeName,
+    required String suffix,
+    required String fallback,
+  }) {
+    final hasDate = workDateLabel != null && workDateLabel.isNotEmpty;
+    final hasPlace = placeName != null && placeName.isNotEmpty;
+    if (hasDate && hasPlace) {
+      return '$workDateLabel · $placeName$suffix';
+    }
+    if (hasDate) return '$workDateLabel$suffix';
+    if (hasPlace) return '$placeName$suffix';
+    return fallback;
+  }
+
+  static String? _workDateLabelFromPayload(Map<String, dynamic> payload) {
+    final start = _parsePayloadCalendarDate(
+          payload,
+          const [
+            'workdate',
+            'work_date',
+            'taskdate',
+            'startDate',
+            'start_date',
+          ],
+        ) ??
+        _parseNestedRangeDate(payload, isStart: true);
+    if (start == null) return null;
+
+    final end = _parsePayloadCalendarDate(
+          payload,
+          const [
+            'endDate',
+            'end_date',
+            'workdate_end',
+            'workdateEnd',
+            'endWorkdate',
+            'taskdate_end',
+          ],
+        ) ??
+        _parseNestedRangeDate(payload, isStart: false);
+
+    if (end != null && end.isAfter(start)) {
+      return _formatWorkDateRangeLabel(start, end);
+    }
+    return formatDateTimeWeekDayToString(start);
+  }
+
+  static DateTime? _parsePayloadCalendarDate(
+    Map<String, dynamic> payload,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final raw = saString(payload[key]);
+      if (raw == null || raw.trim().isEmpty) continue;
+      final iso = normalizeToIsoDateString(raw);
+      final dt = DateTime.tryParse(iso);
+      if (dt != null) {
+        return DateTime(dt.year, dt.month, dt.day);
+      }
+    }
+    return null;
+  }
+
+  static DateTime? _parseNestedRangeDate(
+    Map<String, dynamic> payload, {
+    required bool isStart,
+  }) {
+    final raw = payload['date_range'] ?? payload['dateRange'];
+    if (raw is! Map) return null;
+    final nested = Map<String, dynamic>.from(raw);
+    return _parsePayloadCalendarDate(
+      nested,
+      isStart
+          ? const ['start', 'start_date', 'startDate']
+          : const ['end', 'end_date', 'endDate'],
+    );
+  }
+
+  /// 기간 투입 알림 — `7월 16일 ~ 7월 18일` 형식.
+  static String _formatWorkDateRangeLabel(DateTime start, DateTime end) {
+    if (start.year == end.year) {
+      return '${start.month}월 ${start.day}일 ~ ${end.month}월 ${end.day}일';
+    }
+    return '${start.year}년 ${start.month}월 ${start.day}일 ~ '
+        '${end.year}년 ${end.month}월 ${end.day}일';
+  }
+
+  static String? _placeNameFromPayload(Map<String, dynamic> payload) {
+    return saString(payload['place_name']) ??
+        saString(payload['placeName']) ??
+        saString(payload['pname']);
   }
 
   static String defaultTitleForType(String type) {
@@ -106,7 +238,7 @@ class UserNotificationItem {
       'signup_pending' => '가입 승인 대기',
       'worker_announcement_global' => '전체 공지',
       'worker_announcement_place' => '현장 공지',
-      'placeworkday_assignment' => '일정 배정',
+      'placeworkday_assignment' => '작업 배정',
       'placeworkday_instruction' => '작업 지시',
       'worker_place_photo' => '현장 사진',
       'place_access_revoked' => '현장 접근 해제',
@@ -124,12 +256,11 @@ class UserNotificationItem {
     String type,
     Map<String, dynamic> payload,
   ) {
-    final placeName =
-        saString(payload['place_name']) ?? saString(payload['placeName']);
-    final uname = saString(payload['uname']) ?? saString(payload['pending_uname']);
+    final placeName = _placeNameFromPayload(payload);
+    final uname =
+        saString(payload['uname']) ?? saString(payload['pending_uname']);
     return switch (type) {
-      'signup_pending' =>
-        uname != null ? '$uname 님 가입 요청' : '새 가입 요청이 있습니다.',
+      'signup_pending' => uname != null ? '$uname 님 가입 요청' : '새 가입 요청이 있습니다.',
       'worker_place_photo' => placeName != null
           ? '[$placeName] 작업자가 사진을 등록했습니다.'
           : '작업자가 현장 사진을 등록했습니다.',

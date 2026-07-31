@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io';
 
 import 'package:excel/excel.dart';
@@ -9,6 +10,7 @@ import 'package:w0001/data/datasources/remote/auth/users_api.dart';
 import 'package:w0001/data/model/materialcost_model.dart';
 import 'package:w0001/data/model/place_photo_entry.dart';
 import 'package:w0001/data/model/place_photo_group_model.dart';
+import 'package:w0001/data/model/paged_result.dart' show mergePagedItems;
 import 'package:w0001/data/model/revenue_model.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
@@ -22,6 +24,7 @@ import 'package:w0001/domain/use_case/materialcost_use_case.dart';
 import 'package:w0001/domain/use_case/revenue_use_case.dart';
 import 'package:w0001/domain/use_case/workcost_use_case.dart';
 import 'package:w0001/access/user_role_access.dart';
+import 'package:w0001/data/datasources/remote/list_query.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
@@ -29,6 +32,8 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
     show placeUseCaseProvider;
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
+import 'package:scrollable_calendar_package/calendar.dart';
+import 'package:w0001/util/concurrent_task_runner.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/image_attachment/image_upload_result.dart';
 import 'package:w0001/util/image_attachment/upload_image_remote.dart';
@@ -37,6 +42,52 @@ import 'package:w0001/util/image_attachment/upload_image_remote.dart';
 /// 수익 입력은 [PlaceRevenueScreen] 쪽 `TextEditingController`에서 관리(Provider dispose와 분리).
 String nextJangeumLabelForRevenueList(List<RevenueModel> list) {
   return '${list.length + 1}차 잔금';
+}
+
+/// 현장 사진·문서 묶음 API 페이지 크기 — [kListPageSize]와 동일.
+const int kPhotoGroupPageSize = kListPageSize;
+
+/// `site` / `drawing` / `estimate` 탭별 사진·문서 목록 캐시.
+class PhotoGroupsTabCache {
+  const PhotoGroupsTabCache({
+    this.items = const [],
+    this.hasMore = false,
+    this.loadingMore = false,
+    this.isRefreshing = false,
+    this.initialLoadDone = false,
+    this.nextCursor,
+    this.totalCount,
+  });
+
+  final List<PlacePhotoGroupModel> items;
+  final bool hasMore;
+  final bool loadingMore;
+  final bool isRefreshing;
+  final bool initialLoadDone;
+  final String? nextCursor;
+  final int? totalCount;
+
+  PhotoGroupsTabCache copyWith({
+    List<PlacePhotoGroupModel>? items,
+    bool? hasMore,
+    bool? loadingMore,
+    bool? isRefreshing,
+    bool? initialLoadDone,
+    String? nextCursor,
+    bool clearNextCursor = false,
+    int? totalCount,
+    bool clearTotalCount = false,
+  }) {
+    return PhotoGroupsTabCache(
+      items: items ?? this.items,
+      hasMore: hasMore ?? this.hasMore,
+      loadingMore: loadingMore ?? this.loadingMore,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
+      initialLoadDone: initialLoadDone ?? this.initialLoadDone,
+      nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
+      totalCount: clearTotalCount ? null : (totalCount ?? this.totalCount),
+    );
+  }
 }
 
 class PlaceDetailState {
@@ -53,11 +104,11 @@ class PlaceDetailState {
     required this.photoPickedDay,
     required this.totalCostList,
     required this.revenueList,
-    required this.photoGroupList,
-    /// [photoGroupList]를 마지막으로 채운 `getPlacePhotoGroups`의 `photoType` (탭·새로고침 일치용).
+    required this.photoGroupsByType,
     required this.loadedPlacePhotoType,
     required this.alertText,
     required this.isLoading,
+    required this.costCache,
   });
 
   final int pid;
@@ -74,10 +125,29 @@ class PlaceDetailState {
   final DateTime photoPickedDay;
   final List<TotalCostModel> totalCostList;
   final List<RevenueModel> revenueList;
-  final List<PlacePhotoGroupModel> photoGroupList;
+  final Map<String, PhotoGroupsTabCache> photoGroupsByType;
   final String loadedPlacePhotoType;
   final String alertText;
   final bool isLoading;
+
+  /// 기간별 비용 데이터 캐시 (키: "startDate_endDate" 형식)
+  final Map<String, List<TotalCostModel>> costCache;
+
+  PhotoGroupsTabCache _tab(String photoType) =>
+      photoGroupsByType[photoType] ?? const PhotoGroupsTabCache();
+
+  List<PlacePhotoGroupModel> get photoGroupList =>
+      _tab(loadedPlacePhotoType).items;
+
+  bool get photoGroupsHasMore => _tab(loadedPlacePhotoType).hasMore;
+
+  bool get photoGroupsLoadingMore => _tab(loadedPlacePhotoType).loadingMore;
+
+  bool get photoGroupsRefreshing => _tab(loadedPlacePhotoType).isRefreshing;
+
+  String? get photoGroupsNextCursor => _tab(loadedPlacePhotoType).nextCursor;
+
+  int? get photoGroupsTotalCount => _tab(loadedPlacePhotoType).totalCount;
 
   factory PlaceDetailState.initial(int pid) => PlaceDetailState(
         pid: pid,
@@ -92,10 +162,11 @@ class PlaceDetailState {
         photoPickedDay: DateTime.now(),
         totalCostList: const [],
         revenueList: const [],
-        photoGroupList: const [],
+        photoGroupsByType: const {},
         loadedPlacePhotoType: 'site',
         alertText: '',
         isLoading: false,
+        costCache: const {},
       );
 
   PlaceDetailState copyWith({
@@ -111,10 +182,11 @@ class PlaceDetailState {
     DateTime? photoPickedDay,
     List<TotalCostModel>? totalCostList,
     List<RevenueModel>? revenueList,
-    List<PlacePhotoGroupModel>? photoGroupList,
+    Map<String, PhotoGroupsTabCache>? photoGroupsByType,
     String? loadedPlacePhotoType,
     String? alertText,
     bool? isLoading,
+    Map<String, List<TotalCostModel>>? costCache,
   }) {
     return PlaceDetailState(
       pid: pid,
@@ -132,11 +204,11 @@ class PlaceDetailState {
       photoPickedDay: photoPickedDay ?? this.photoPickedDay,
       totalCostList: totalCostList ?? this.totalCostList,
       revenueList: revenueList ?? this.revenueList,
-      photoGroupList: photoGroupList ?? this.photoGroupList,
-      loadedPlacePhotoType:
-          loadedPlacePhotoType ?? this.loadedPlacePhotoType,
+      photoGroupsByType: photoGroupsByType ?? this.photoGroupsByType,
+      loadedPlacePhotoType: loadedPlacePhotoType ?? this.loadedPlacePhotoType,
       alertText: alertText ?? this.alertText,
       isLoading: isLoading ?? this.isLoading,
+      costCache: costCache ?? this.costCache,
     );
   }
 }
@@ -179,6 +251,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   bool _initialized = false;
   int _photoFetchToken = 0;
+  Future<void>? _loadMorePhotosInFlight;
 
   // 수익(추가/수정) TextEditingController는 [PlaceRevenueScreen] State에서 수명 관리(Provider와 분리)
   final TextEditingController mNameController = TextEditingController();
@@ -240,6 +313,32 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     state = state.copyWith(alertText: '');
   }
 
+  /// 금액 변동이 있는 날짜를 CalendarEvent 리스트로 변환
+  List<CalendarEvent> _getUniqueDateEventsFromCosts() {
+    final uniqueDates = <DateTime>{};
+
+    // 모든 비용 항목에서 날짜 추출
+    for (final cost in state.totalCostList) {
+      try {
+        final date = DateTime.parse(cost.date);
+        final dateOnly = DateTime(date.year, date.month, date.day);
+        uniqueDates.add(dateOnly);
+      } catch (_) {
+        // 날짜 파싱 실패 시 무시
+      }
+    }
+
+    // 각 날짜를 CalendarEvent로 변환
+    return uniqueDates.map((date) {
+      return CalendarEvent(
+        startDate: date,
+        endDate: date,
+        title: '금액 변동',
+        color: Colors.orange.withValues(alpha: 0.7),
+      );
+    }).toList();
+  }
+
   Future<DateTimeRange?> _pickRangeWithScrollableCalendar(
     BuildContext context,
   ) async {
@@ -247,6 +346,10 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     // 다른 화면에서 사용한 범위가 남아 보이지 않도록 한다.
     DateTime? rangeStart;
     DateTime? rangeEnd;
+
+    // ✅ 금액 변동이 있는 날짜를 이벤트로 변환
+    final transactionDates = _getUniqueDateEventsFromCosts();
+
     return showDialog<DateTimeRange>(
       context: context,
       builder: (ctx) {
@@ -277,6 +380,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
                         height: calHeight,
                         initialRangeStart: rangeStart,
                         initialRangeEnd: rangeEnd,
+                        initialEvents: transactionDates, // ✅ 금액 변동일 표시
                         showViewModeToggle: false,
                         showRangeSummarySection: false,
                         disableDateSelectionHighlight: true,
@@ -382,14 +486,70 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     state = state.copyWith(selectedFilterType: filterType);
   }
 
-  Future<void> fetchTotalCostFromPlace() async {
+  /// 날짜 범위를 캐시 키로 변환
+  String _getCacheKey(DateTimeRange range) {
+    final start = range.start.toIso8601String().substring(0, 10);
+    final end = range.end.toIso8601String().substring(0, 10);
+    return '${start}_$end';
+  }
+
+  /// 비용 데이터 조회 (캐싱 지원)
+  ///
+  /// [forceRefresh]: true면 캐시를 무시하고 서버에서 새로 가져옴
+  /// [silent]: true면 로딩 인디케이터를 표시하지 않음
+  Future<void> fetchTotalCostFromPlace({
+    bool silent = false,
+    bool forceRefresh = false,
+  }) async {
     if (ref.read(authSessionProvider).asData?.value?.isWorker ?? false) {
       state = state.copyWith(totalCostList: const [], isLoading: false);
       return;
     }
-    state = state.copyWith(isLoading: true);
-    final list = await _placeUseCase.getTotalCostsForPlace(pid);
-    state = state.copyWith(totalCostList: list, isLoading: false);
+
+    final r = state.dateTimeRange;
+    final cacheKey = _getCacheKey(r);
+
+    // ✅ 캐시 확인 (forceRefresh가 false일 때만)
+    if (!forceRefresh && state.costCache.containsKey(cacheKey)) {
+      print('✅ [금액관리] 캐시 사용: $cacheKey');
+      final cachedList = state.costCache[cacheKey]!;
+      state = state.copyWith(
+        totalCostList: cachedList,
+        isLoading: false,
+      );
+      return;
+    }
+
+    // 🌐 서버에서 데이터 조회
+    if (!silent) {
+      state = state.copyWith(isLoading: true);
+    }
+
+    print('🌐 [금액관리] API 호출: $cacheKey (forceRefresh: $forceRefresh)');
+
+    try {
+      final list = await _placeUseCase.getTotalCostsForPlace(
+        pid,
+        from: r.start,
+        to: r.end,
+      );
+
+      // ✅ 캐시에 저장
+      final updatedCache =
+          Map<String, List<TotalCostModel>>.from(state.costCache);
+      updatedCache[cacheKey] = list;
+
+      state = state.copyWith(
+        totalCostList: list,
+        isLoading: false,
+        costCache: updatedCache,
+      );
+
+      print('✅ [금액관리] 데이터 로드 완료: ${list.length}건, 캐시 저장됨');
+    } catch (e) {
+      print('❌ [금액관리] 데이터 로드 실패: $e');
+      state = state.copyWith(isLoading: false);
+    }
   }
 
   Future<void> fetchAllRevenueFromPlace() async {
@@ -401,15 +561,35 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     state = state.copyWith(revenueList: list);
   }
 
+  /// 비용 저장·삭제 후 — 비용 목록만 다시 읽는다 (캐시 무효화).
+  Future<void> refreshCostsForGlobalFetch() async {
+    if (ref.read(authSessionProvider).asData?.value?.isWorker ?? false) {
+      return;
+    }
+    // 캐시 무효화 후 새로 가져오기
+    await fetchTotalCostFromPlace(silent: true, forceRefresh: true);
+  }
+
+  Future<void> refreshRevenueForGlobalFetch() async {
+    if (ref.read(authSessionProvider).asData?.value?.isWorker ?? false) {
+      return;
+    }
+    await fetchAllRevenueFromPlace();
+  }
+
+  Future<void> refreshPhotosForGlobalFetch() async {
+    await refreshPlacePhotoGroups();
+  }
+
   /// [FetchData.fetchAllData]용: `invalidate`로 notifier를 끊지 않고 목록·비용·사진만 다시 읽는다. (TextEditingController 유지)
   Future<void> refreshForGlobalFetch() async {
     final worker =
         ref.read(authSessionProvider).asData?.value?.isWorker ?? false;
     if (!worker) {
-      await fetchTotalCostFromPlace();
+      await fetchTotalCostFromPlace(silent: true, forceRefresh: true);
       await fetchAllRevenueFromPlace();
     }
-    await fetchPlacePhotoGroups(photoType: state.loadedPlacePhotoType);
+    await refreshPlacePhotoGroups();
   }
 
   Future<void> deleteRevenue({required int rid}) async {
@@ -417,18 +597,143 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     await fetchAllRevenueFromPlace();
   }
 
-  Future<void> fetchPlacePhotoGroups({required String photoType}) async {
-    final fetchToken = ++_photoFetchToken;
-    var groups = await _placeUseCase.getPlacePhotoGroups(
-      pid,
-      photoType: photoType,
-    );
-    groups = await _enrichPhotoAuthors(groups);
-    if (fetchToken != _photoFetchToken) return;
+  PhotoGroupsTabCache _photoCacheFor(String photoType) =>
+      state.photoGroupsByType[photoType] ?? const PhotoGroupsTabCache();
+
+  void _setPhotoCache(String photoType, PhotoGroupsTabCache cache) {
     state = state.copyWith(
-      photoGroupList: groups,
-      loadedPlacePhotoType: photoType,
+      photoGroupsByType: {...state.photoGroupsByType, photoType: cache},
     );
+  }
+
+  /// 탭 전환 — 캐시가 있으면 즉시 표시, 없을 때만 API 호출.
+  void switchPlacePhotoType(String photoType) {
+    state = state.copyWith(loadedPlacePhotoType: photoType);
+    final cached = _photoCacheFor(photoType);
+    if (!cached.initialLoadDone) {
+      fetchPlacePhotoGroups(photoType: photoType);
+    }
+  }
+
+  Future<void> refreshPlacePhotoGroups({String? photoType}) {
+    return fetchPlacePhotoGroups(
+      photoType: photoType ?? state.loadedPlacePhotoType,
+      force: true,
+    );
+  }
+
+  Future<void> fetchPlacePhotoGroups({
+    required String photoType,
+    bool force = false,
+  }) async {
+    final cached = _photoCacheFor(photoType);
+    if (!force && cached.initialLoadDone) {
+      state = state.copyWith(loadedPlacePhotoType: photoType);
+      return;
+    }
+
+    final fetchToken = ++_photoFetchToken;
+    _setPhotoCache(
+      photoType,
+      cached.copyWith(
+        isRefreshing: true,
+        loadingMore: false,
+        items: force ? cached.items : const [],
+        hasMore: force ? cached.hasMore : false,
+        clearNextCursor: !force,
+        clearTotalCount: !force,
+      ),
+    );
+    state = state.copyWith(loadedPlacePhotoType: photoType);
+
+    try {
+      final page = await _placeUseCase.fetchPlacePhotoGroupsPage(
+        pid,
+        photoType: photoType,
+        query: const ListQuery(limit: kPhotoGroupPageSize),
+      );
+      var groups = await _enrichPhotoAuthors(page.items);
+      if (fetchToken != _photoFetchToken) return;
+      _setPhotoCache(
+        photoType,
+        PhotoGroupsTabCache(
+          items: groups,
+          hasMore: page.hasMore,
+          nextCursor: page.nextCursor,
+          totalCount: page.totalCount,
+          initialLoadDone: true,
+        ),
+      );
+    } catch (e, st) {
+      debugPrint('fetchPlacePhotoGroups failed: $e\n$st');
+      if (fetchToken != _photoFetchToken) return;
+      if (force && cached.initialLoadDone) {
+        _setPhotoCache(
+          photoType,
+          cached.copyWith(isRefreshing: false),
+        );
+      } else {
+        _setPhotoCache(
+          photoType,
+          const PhotoGroupsTabCache(initialLoadDone: true),
+        );
+      }
+    }
+  }
+
+  /// 스크롤 하단 — 사진·문서 묶음 다음 페이지.
+  Future<void> loadMorePlacePhotoGroups() async {
+    if (!state.photoGroupsHasMore || state.photoGroupsLoadingMore) return;
+    if (_loadMorePhotosInFlight != null) return _loadMorePhotosInFlight;
+
+    final cursor = state.photoGroupsNextCursor;
+    if (cursor == null || cursor.isEmpty) return;
+
+    _loadMorePhotosInFlight = _loadMorePlacePhotoGroupsBody();
+    try {
+      await _loadMorePhotosInFlight;
+    } finally {
+      _loadMorePhotosInFlight = null;
+    }
+  }
+
+  Future<void> _loadMorePlacePhotoGroupsBody() async {
+    final fetchToken = _photoFetchToken;
+    final photoType = state.loadedPlacePhotoType;
+    final tab = _photoCacheFor(photoType);
+    _setPhotoCache(photoType, tab.copyWith(loadingMore: true));
+    try {
+      final page = await _placeUseCase.fetchPlacePhotoGroupsPage(
+        pid,
+        photoType: photoType,
+        query: ListQuery(
+          limit: kPhotoGroupPageSize,
+          cursor: tab.nextCursor,
+        ),
+      );
+      var groups = await _enrichPhotoAuthors(page.items);
+      if (fetchToken != _photoFetchToken) return;
+      final merged = _photoCacheFor(photoType);
+      _setPhotoCache(
+        photoType,
+        merged.copyWith(
+          items: mergePagedItems(merged.items, groups, (g) => g.pgid),
+          nextCursor: page.nextCursor,
+          hasMore: page.hasMore,
+          totalCount: page.totalCount ?? merged.totalCount,
+          loadingMore: false,
+        ),
+      );
+    } catch (e, st) {
+      debugPrint('loadMorePlacePhotoGroups failed: $e\n$st');
+    } finally {
+      if (fetchToken == _photoFetchToken) {
+        final tabNow = _photoCacheFor(photoType);
+        if (tabNow.loadingMore) {
+          _setPhotoCache(photoType, tabNow.copyWith(loadingMore: false));
+        }
+      }
+    }
   }
 
   Future<List<PlacePhotoGroupModel>> _enrichPhotoAuthors(
@@ -453,11 +758,25 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
     if (toFetch.isNotEmpty) {
       final api = UsersRemoteApi(AppHttpClient.I);
-      for (final u in toFetch) {
-        try {
-          final user = await api.get(u);
-          names[u] = user.uname;
-        } catch (_) {}
+      final uids = toFetch.toList();
+      final fetched = await runWithConcurrencyLimit<String?>(
+        uids.map(
+          (u) => () async {
+            try {
+              final user = await api.get(u);
+              return user.uname;
+            } catch (_) {
+              return null;
+            }
+          },
+        ),
+        limit: 6,
+      );
+      for (var i = 0; i < uids.length; i++) {
+        final name = fetched[i];
+        if (name != null && name.isNotEmpty) {
+          names[uids[i]] = name;
+        }
       }
     }
 
@@ -484,6 +803,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
                   phid: e.phid,
                   displayUrl: e.displayUrl,
                   originalName: e.originalName,
+                  originalUrl: e.originalUrl,
+                  mediaKind: e.mediaKind,
                   createdByUid: e.createdByUid,
                   authorDisplayName: display,
                   memo: e.memo,
@@ -498,7 +819,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
   Future<void> deletePlacePhotoGroup(int pgid,
       {required String photoType}) async {
     await _placeUseCase.deletePlacePhotoGroup(pgid, pid: pid);
-    await fetchPlacePhotoGroups(photoType: photoType);
+    await fetchPlacePhotoGroups(photoType: photoType, force: true);
   }
 
   Future<String?> patchPlacePhotoMemo({
@@ -541,7 +862,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
         originalUrl: originalUrl,
         originalname: originalname,
       );
-      await fetchPlacePhotoGroups(photoType: photoType);
+      await fetchPlacePhotoGroups(photoType: photoType, force: true);
       return null;
     } catch (e) {
       final h = unwrapHttpClientException(e);
@@ -549,7 +870,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     }
   }
 
-  /// 묶음 작업명·작업일(yyyy-MM-dd) 수정.
+  /// 묶음 작업명·업로드일(yyyy-MM-dd) 수정.
   Future<String?> patchPlacePhotoGroupMeta({
     required int pgid,
     required String photoType,
@@ -562,7 +883,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
         title: title,
         photoDate: photoDate,
       );
-      await fetchPlacePhotoGroups(photoType: photoType);
+      await fetchPlacePhotoGroups(photoType: photoType, force: true);
       return null;
     } catch (e) {
       final h = unwrapHttpClientException(e);
@@ -591,7 +912,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     );
     photoTitleController.clear();
     photoUrlsController.clear();
-    await fetchPlacePhotoGroups(photoType: photoType);
+    await fetchPlacePhotoGroups(photoType: photoType, force: true);
   }
 
   /// 기기에서 고른 이미지 경로를 업로드 후 `PlacePhoto` 행으로 저장. 실패 시 안내 문구.
@@ -617,7 +938,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       );
       photoTitleController.clear();
       photoUrlsController.clear();
-      await fetchPlacePhotoGroups(photoType: photoType);
+      await fetchPlacePhotoGroups(photoType: photoType, force: true);
       return null;
     } on HttpClientException catch (e) {
       return e.message;
@@ -680,7 +1001,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     } else {
       await _materialCostUseCase.deleteMaterialCost(id);
     }
-    await fetchTotalCostFromPlace();
+    _removeCostFromState(id: id, category: category);
   }
 
   /// 인건비와 같은 날·현장·인력의 작업 투입(place-work-days) 연결 여부.
@@ -703,7 +1024,7 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     int? pwdid,
   }) async {
     await _workCostUseCase.deleteWorkCostLinked(wid: wid, pwdid: pwdid);
-    await fetchTotalCostFromPlace();
+    _removeCostFromState(id: wid, category: 'w');
   }
 
   Future<void> updateCost(String category, int id, String date) async {
@@ -725,7 +1046,25 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
         mprice: price,
       );
       await _materialCostUseCase.updateMaterialCostItem(m);
-      await fetchTotalCostFromPlace();
+      final current = _findCostById(category: category, id: id);
+      if (current != null) {
+        _upsertCostInState(
+          TotalCostModel(
+            pname: current.pname,
+            pcomplete: current.pcomplete,
+            name: m.mname,
+            date: m.mdate,
+            price: m.mprice,
+            category: m.mcategory,
+            id: current.id,
+            wcomplete: current.wcomplete,
+            wcompletedAt: current.wcompletedAt,
+            whid: current.whid,
+            wpid: current.wpid,
+            workrole: current.workrole,
+          ),
+        );
+      }
     } else {
       if (price == null) {
         state = state.copyWith(alertText: '모든 항목을 입력해 주세요.');
@@ -740,13 +1079,98 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
         wpid: 1,
       );
       await _workCostUseCase.updateWorkCostItem(w);
-      await fetchTotalCostFromPlace();
+      final current = _findCostById(category: category, id: id);
+      if (current != null) {
+        _upsertCostInState(
+          TotalCostModel(
+            pname: current.pname,
+            pcomplete: current.pcomplete,
+            name: current.name,
+            date: w.wdate,
+            price: w.wprice,
+            category: current.category,
+            id: current.id,
+            wcomplete: current.wcomplete,
+            wcompletedAt: current.wcompletedAt,
+            whid: current.whid,
+            wpid: current.wpid,
+            workrole: current.workrole,
+          ),
+        );
+      }
     }
   }
 
   Future<void> updateWComplete(int wcomplete, int id) async {
     await _workCostUseCase.toggleWorkCostCompletionStatus(wcomplete, id);
-    await fetchTotalCostFromPlace();
+    final nextComplete = wcomplete == 1 ? 0 : 1;
+    final nowIso = DateTime.now().toIso8601String();
+    final current = _findCostById(category: 'w', id: id);
+    if (current != null) {
+      _upsertCostInState(
+        TotalCostModel(
+          pname: current.pname,
+          pcomplete: current.pcomplete,
+          name: current.name,
+          date: current.date,
+          price: current.price,
+          category: current.category,
+          id: current.id,
+          wcomplete: nextComplete,
+          wcompletedAt: nextComplete == 1 ? (current.wcompletedAt ?? nowIso) : null,
+          whid: current.whid,
+          wpid: current.wpid,
+          workrole: current.workrole,
+        ),
+      );
+    }
+    // 화면 체감 속도는 즉시 반영으로 확보하고, 실제 서버 상태는 백그라운드 동기화.
+    unawaited(fetchTotalCostFromPlace(silent: true, forceRefresh: true));
+  }
+
+  TotalCostModel? _findCostById({
+    required String category,
+    required int id,
+  }) {
+    for (final cost in state.totalCostList) {
+      if (cost.category == category && cost.id == id) return cost;
+    }
+    return null;
+  }
+
+  void _upsertCostInState(TotalCostModel updated) {
+    final updatedList = state.totalCostList
+        .map((e) => (e.id == updated.id && e.category == updated.category) ? updated : e)
+        .toList(growable: false);
+    final updatedCache = <String, List<TotalCostModel>>{};
+    for (final entry in state.costCache.entries) {
+      updatedCache[entry.key] = entry.value
+          .map((e) => (e.id == updated.id && e.category == updated.category) ? updated : e)
+          .toList(growable: false);
+    }
+    state = state.copyWith(
+      totalCostList: updatedList,
+      costCache: updatedCache,
+    );
+  }
+
+  void _removeCostFromState({
+    required int id,
+    required String category,
+  }) {
+    final updatedList = state.totalCostList
+        .where((e) => !(e.id == id && e.category == category))
+        .toList(growable: false);
+    final updatedCache = <String, List<TotalCostModel>>{};
+    for (final entry in state.costCache.entries) {
+      updatedCache[entry.key] = entry.value
+          .where((e) => !(e.id == id && e.category == category))
+          .toList(growable: false);
+    }
+    state = state.copyWith(
+      totalCostList: updatedList,
+      costCache: updatedCache,
+    );
   }
 
   Future<void> changeDateTimeRange(int index, BuildContext context) async {
@@ -775,6 +1199,9 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
       selectedDayType: nextType,
       dateTimeRange: nextRange,
     );
+
+    // ✅ 날짜 범위 변경 후 데이터 다시 불러오기 (캐시 우선 사용)
+    await fetchTotalCostFromPlace(forceRefresh: false);
   }
 
   Future<void> exportAndSharePlaceInfoToExcel(String pname) async {
@@ -851,7 +1278,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
     await Share.shareXFiles(
       [XFile(excelFile.path)],
-      subject: '$pname (${formatDateTimeRangeToString(dateTimeRange, periodType: state.selectedDayType)})',
+      subject:
+          '$pname (${formatDateTimeRangeToString(dateTimeRange, periodType: state.selectedDayType)})',
     );
   }
 }

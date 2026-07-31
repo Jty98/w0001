@@ -4,6 +4,7 @@ import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart'
 import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
 import 'package:w0001/util/responsive_layout.dart';
+import 'package:w0001/ui/widget/app_text_field.dart';
 
 const List<int> _alarmOffsetChoices = [0, 30, 60, 180, 1440];
 
@@ -23,6 +24,49 @@ String _alarmOffsetLabel(int minutes) {
       if (minutes % 60 == 0) return '${minutes ~/ 60}시간 전';
       return '$minutes분 전';
   }
+}
+
+const double _sheetButtonRadius = 10;
+
+ButtonStyle _sheetOutlinedButtonStyle(ColorScheme cs) {
+  return OutlinedButton.styleFrom(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_sheetButtonRadius),
+    ),
+    side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.75)),
+    foregroundColor: cs.onSurface,
+    textStyle: const TextStyle(fontWeight: FontWeight.w700),
+  );
+}
+
+ButtonStyle _sheetFilledButtonStyle(ColorScheme cs) {
+  return FilledButton.styleFrom(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_sheetButtonRadius),
+    ),
+    textStyle: const TextStyle(fontWeight: FontWeight.w800),
+  );
+}
+
+TextStyle? _sheetLabelStyle(TextTheme tt, ColorScheme cs) {
+  return tt.titleSmall?.copyWith(
+    fontWeight: FontWeight.w800,
+    color: cs.onSurface,
+  );
+}
+
+TextStyle? _sheetValueStyle(TextTheme tt, ColorScheme cs) {
+  return tt.bodyMedium?.copyWith(
+    fontWeight: FontWeight.w700,
+    color: cs.onSurface,
+  );
+}
+
+TextStyle? _sheetHintStyle(TextTheme tt, ColorScheme cs) {
+  return tt.bodySmall?.copyWith(
+    fontWeight: FontWeight.w600,
+    color: cs.onSurfaceVariant,
+  );
 }
 
 class DashboardMemoEditorResult {
@@ -166,7 +210,7 @@ class _DashboardScheduleMemoEditorSheetState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
+                    AppTextField(
                       autofocus: true,
                       decoration: const InputDecoration(
                         hintText: '현장 이름 검색',
@@ -190,9 +234,12 @@ class _DashboardScheduleMemoEditorSheetState
                                   dense: true,
                                   title: Text(
                                     name,
-                                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                    style: Theme.of(ctx)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                   ),
                                   onTap: () => Navigator.pop(ctx, name),
                                 );
@@ -234,6 +281,10 @@ class _DashboardScheduleMemoEditorSheetState
   Widget build(BuildContext context) {
     final pad = MediaQuery.paddingOf(context);
     final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final labelStyle = _sheetLabelStyle(tt, cs);
+    final valueStyle = _sheetValueStyle(tt, cs);
+    final hintStyle = _sheetHintStyle(tt, cs);
 
     return KeyboardAwareScrollView(
       padding: EdgeInsets.fromLTRB(
@@ -243,161 +294,173 @@ class _DashboardScheduleMemoEditorSheetState
         context.rsi(16) + pad.bottom,
       ),
       child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.existing == null ? '일정 추가' : '일정 수정',
-                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              rsV(context, 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('날짜'),
-                subtitle: Text(scheduleDateKey(_picked)),
-                trailing: const Icon(Icons.calendar_today_outlined),
-                onTap: _pickDateWithScrollableCalendar,
-              ),
-              _TaskTimePickerField(
-                pickedTime: _pickedTime,
-                onTapPicker: () async {
-                  final picked = await widget.onPickTime(_pickedTime);
-                  if (picked != null) {
-                    setState(() => _pickedTime = picked);
-                  }
-                },
-                onClear: _pickedTime == null
-                    ? null
-                    : () {
-                        setState(() {
-                          _pickedTime = null;
-                          _alarmEnabled = false;
-                        });
-                      },
-              ),
-              SwitchListTile(
-                value: _alarmEnabled,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('사전 알람'),
-                subtitle: Text(
-                  _pickedTime == null
-                      ? '시간을 지정하면 알람을 켤 수 있어요.'
-                      : '지정한 시간보다 미리 알람을 울립니다.',
-                ),
-                onChanged: _pickedTime == null
-                    ? null
-                    : (v) => setState(() => _alarmEnabled = v),
-              ),
-              if (_alarmEnabled) ...[
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  initialValue: _alarmOffsetMinutes,
-                  decoration: const InputDecoration(
-                    labelText: '알람 시점',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _alarmOffsetChoices
-                      .map(
-                        (v) => DropdownMenuItem<int>(
-                          value: v,
-                          child: Text(_alarmOffsetLabel(v)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() => _alarmOffsetMinutes = v);
-                    }
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.existing == null ? '일정 추가' : '일정 수정',
+            style: tt.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: cs.onSurface,
+            ),
+          ),
+          rsV(context, 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text('날짜', style: labelStyle),
+            subtitle: Text(scheduleDateKey(_picked), style: valueStyle),
+            trailing: Icon(Icons.calendar_today_outlined, color: cs.onSurface),
+            onTap: _pickDateWithScrollableCalendar,
+          ),
+          _TaskTimePickerField(
+            pickedTime: _pickedTime,
+            labelStyle: labelStyle,
+            valueStyle: valueStyle,
+            onTapPicker: () async {
+              final picked = await widget.onPickTime(_pickedTime);
+              if (picked != null) {
+                setState(() => _pickedTime = picked);
+              }
+            },
+            onClear: _pickedTime == null
+                ? null
+                : () {
+                    setState(() {
+                      _pickedTime = null;
+                      _alarmEnabled = false;
+                    });
                   },
-                ),
-                const SizedBox(height: 12),
-              ],
-              TextField(
-                controller: _titleCtrl,
-                focusNode: _titleFocus,
-                scrollPadding: keyboardScrollPadding(context),
-                decoration: const InputDecoration(
-                  labelText: '제목',
-                  border: OutlineInputBorder(),
-                ),
-                textInputAction: TextInputAction.next,
-                onTap: scheduleKeyboardScrollIntoView,
+          ),
+          SwitchListTile(
+            value: _alarmEnabled,
+            contentPadding: EdgeInsets.zero,
+            title: Text('사전 알람', style: labelStyle),
+            subtitle: Text(
+              _pickedTime == null
+                  ? '시간을 지정하면 알람을 켤 수 있어요.'
+                  : '지정한 시간보다 미리 알람을 울립니다.',
+              style: hintStyle,
+            ),
+            onChanged: _pickedTime == null
+                ? null
+                : (v) => setState(() => _alarmEnabled = v),
+          ),
+          if (_alarmEnabled) ...[
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int>(
+              initialValue: _alarmOffsetMinutes,
+              decoration: InputDecoration(
+                labelText: '알람 시점',
+                labelStyle: labelStyle,
+                border: const OutlineInputBorder(),
               ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primaryContainer
-                      .withValues(alpha: 0.5),
-                  border: Border.all(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outlineVariant
-                        .withValues(alpha: 0.7),
-                  ),
+              items: _alarmOffsetChoices
+                  .map(
+                    (v) => DropdownMenuItem<int>(
+                      value: v,
+                      child: Text(_alarmOffsetLabel(v)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _alarmOffsetMinutes = v);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+          AppTextField(
+            controller: _titleCtrl,
+            focusNode: _titleFocus,
+            scrollPadding: keyboardScrollPadding(context),
+            decoration: InputDecoration(
+              labelText: '제목',
+              labelStyle: labelStyle,
+              border: const OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+            onTap: scheduleKeyboardScrollIntoView,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: cs.surface,
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.55),
+              ),
+            ),
+            child: ListTile(
+              dense: true,
+              leading: Icon(
+                Icons.business_outlined,
+                color: cs.primary,
+              ),
+              title: Text(
+                '현장 이름 불러오기',
+                style: tt.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
                 ),
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(
-                    Icons.business_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: Text(
-                    '현장 이름 불러오기',
-                    style: tt.bodySmall?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  subtitle: Text(
-                    '최근 등록된 현장 검색/정렬',
-                    style: tt.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              subtitle: Text(
+                '최근 등록된 현장 검색/정렬',
+                style: hintStyle,
+              ),
+              trailing: OutlinedButton.icon(
+                onPressed: _pickPlaceNameFromDialog,
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('선택'),
+                style: _sheetOutlinedButtonStyle(cs).copyWith(
+                  foregroundColor: WidgetStatePropertyAll(cs.primary),
+                  side: WidgetStatePropertyAll(
+                    BorderSide(
+                      color: cs.primary.withValues(alpha: 0.55),
                     ),
                   ),
-                  trailing: FilledButton.tonalIcon(
-                    onPressed: _pickPlaceNameFromDialog,
-                    icon: const Icon(Icons.search, size: 16),
-                    label: const Text('선택'),
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              KeyedSubtree(
-                key: _memoFieldKey,
-                child: TextField(
-                  controller: _memoCtrl,
-                  focusNode: _memoFocus,
-                  scrollPadding: keyboardScrollPadding(context, extra: 80),
-                  decoration: const InputDecoration(
-                    labelText: '내용',
-                    hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                  minLines: 3,
-                  maxLines: 6,
-                  onTap: scheduleKeyboardScrollIntoView,
-                ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          KeyedSubtree(
+            key: _memoFieldKey,
+            child: AppTextField(
+              controller: _memoCtrl,
+              focusNode: _memoFocus,
+              scrollPadding: keyboardScrollPadding(context, extra: 80),
+              decoration: InputDecoration(
+                labelText: '내용',
+                hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
+                labelStyle: labelStyle,
+                hintStyle: hintStyle,
+                border: const OutlineInputBorder(),
+                alignLabelWithHint: true,
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('취소'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _submit,
-                    child: const Text('저장'),
-                  ),
-                ],
+              minLines: 3,
+              maxLines: 6,
+              onTap: scheduleKeyboardScrollIntoView,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: _sheetOutlinedButtonStyle(cs),
+                child: const Text('취소'),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: _submit,
+                style: _sheetFilledButtonStyle(cs),
+                child: const Text('저장'),
               ),
             ],
           ),
+        ],
+      ),
     );
   }
 }
@@ -407,11 +470,15 @@ class _TaskTimePickerField extends StatelessWidget {
     required this.pickedTime,
     required this.onTapPicker,
     this.onClear,
+    this.labelStyle,
+    this.valueStyle,
   });
 
   final TimeOfDay? pickedTime;
   final Future<void> Function() onTapPicker;
   final VoidCallback? onClear;
+  final TextStyle? labelStyle;
+  final TextStyle? valueStyle;
 
   String _timeLabel() {
     if (pickedTime == null) return '시간 없음';
@@ -427,15 +494,15 @@ class _TaskTimePickerField extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('시간'),
+          title: Text('시간', style: labelStyle),
           subtitle: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_timeLabel()),
+              Text(_timeLabel(), style: valueStyle),
               if (hasTime && onClear != null) ...[
                 const SizedBox(width: 4),
                 InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                   onTap: onClear,
                   child: const Padding(
                     padding: EdgeInsets.all(2),
@@ -445,7 +512,10 @@ class _TaskTimePickerField extends StatelessWidget {
               ],
             ],
           ),
-          trailing: const Icon(Icons.access_time),
+          trailing: Icon(
+            Icons.access_time,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
           onTap: onTapPicker,
         ),
       ],
@@ -498,8 +568,8 @@ class _DashboardScheduleDatePickerDialogState
                 child: Text(
                   '날짜 선택',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ),
               ScrollableCalendarWidget(

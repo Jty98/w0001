@@ -11,17 +11,21 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kakao_flutter_sdk_common/kakao_flutter_sdk_common.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/auth_models.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/dashboard_schedule_view_model.dart';
+import 'package:w0001/presentation/viewmodel/large_text_mode_provider.dart';
 import 'package:w0001/presentation/viewmodel/theme_mode_providers.dart';
 import 'package:w0001/navigation/app_router.dart';
 import 'package:w0001/navigation/app_scaffold_messenger.dart';
 import 'package:w0001/theme/app_theme.dart';
 import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/alarm_ringing_overlay.dart';
+import 'package:w0001/ui/widget/stacked_toast_overlay.dart';
 import 'package:w0001/util/alarm_permission_helper.dart';
 import 'package:w0001/util/schedule_alarm_services.dart';
 import 'package:w0001/util/auth_bootstrap.dart';
@@ -29,6 +33,7 @@ import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/quill_native_bridge_safe_ios_wrapper.dart';
 import 'package:w0001/util/fcm/fcm_bootstrap.dart';
 import 'package:w0001/util/worker_dashboard_refresh.dart';
+import 'package:w0001/presentation/viewmodel/worker_schedule_notifier.dart';
 import 'package:w0001/util/fcm/firebase_messaging_background.dart';
 import 'package:w0001/firebase_options.dart';
 
@@ -45,10 +50,10 @@ Duration _alarmNativeSetupDefer() {
 
 Future<void> _initAlarmServicesSafely() async {
   try {
-    final initTimeout = (!kIsWeb &&
-            defaultTargetPlatform == TargetPlatform.android)
-        ? const Duration(seconds: 25)
-        : const Duration(seconds: 8);
+    final initTimeout =
+        (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+            ? const Duration(seconds: 25)
+            : const Duration(seconds: 8);
     await Alarm.init().timeout(initTimeout);
     await AlarmPermissionHelper.ensurePermissions()
         .timeout(const Duration(seconds: 45));
@@ -68,19 +73,47 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   installQuillNativeBridgeIosChannelFallback();
   await dotenv.load(fileName: '.env');
+  final kakaoJsKey = dotenv.env['kakao_javascript_key']?.trim() ?? '';
+  if (kakaoJsKey.isEmpty) {
+    throw StateError(
+      '.env에 kakao_javascript_key가 없습니다. 카카오 JavaScript 키를 설정해주세요.',
+    );
+  }
+  final kakaoNativeKey = dotenv.env['kakao_native_app_key']?.trim() ?? '';
+  final sdkNativeKey = kakaoNativeKey.isNotEmpty ? kakaoNativeKey : kakaoJsKey;
+  KakaoSdk.init(nativeAppKey: sdkNativeKey);
+  final rawBaseUrl = dotenv.env['base_url']?.trim() ?? '';
+  String? kakaoWebViewBaseUrl;
+  if (rawBaseUrl.isNotEmpty) {
+    final parsed = Uri.tryParse(rawBaseUrl);
+    if (parsed != null && parsed.hasScheme && parsed.hasAuthority) {
+      kakaoWebViewBaseUrl = parsed.origin;
+    }
+  }
+  AuthRepository.initialize(
+    appKey: kakaoJsKey,
+    baseUrl: kakaoWebViewBaseUrl,
+  );
   await AppHttpClient.I.init();
 
   final container = ProviderContainer();
   rootProviderContainer = container;
 
   final restored = await tryRestoreSessionIfAutoLoginEnabled(container);
-  final initialLocation = !restored ? '/login' : '/dashboard';
+  final initialLocation = switch (restored) {
+    false => '/login',
+    true =>
+      container.read(authSessionProvider).asData?.value?.isPendingApproval ==
+              true
+          ? '/pending-approval'
+          : '/dashboard',
+  };
   _appRouter = createAppRouter(
     container: container,
     initialLocation: initialLocation,
   );
   bindAppGoRouter(_appRouter);
-  
+
   // HTTP 클라이언트에 rootNavigatorKey 설정 (네트워크 오류 스낵바용)
   AppHttpClient.rootNavigatorKey = rootNavigatorKey;
 
@@ -134,20 +167,40 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
     final container = rootProviderContainer;
     if (container == null) return;
     final u = container.read(authSessionProvider).asData?.value;
     if (u == null) return;
-    if (u.isWorker) {
-      scheduleWorkerPersonalDashboardReload(container);
+
+    if (state == AppLifecycleState.resumed) {
+      if (u.isWorker) {
+        scheduleWorkerPersonalDashboardReload(container);
+        unawaited(
+          container
+              .read(workerScheduleNotifierProvider.notifier)
+              .syncWidgetSnapshotNow(),
+        );
+        return;
+      }
+      unawaited(
+        container
+            .read(dashboardScheduleProvider.notifier)
+            .syncWidgetSnapshotNow(),
+      );
       return;
     }
-    unawaited(
-      container
-          .read(dashboardScheduleProvider.notifier)
-          .syncWidgetSnapshotNow(),
-    );
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      if (u.isWorker) return;
+      unawaited(
+        container
+            .read(dashboardScheduleProvider.notifier)
+            .flushPendingDonePatches(),
+      );
+    }
   }
 
   @override
@@ -164,20 +217,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return Consumer(
       builder: (context, ref, _) {
         final themeMode = ref.watch(themeModeProvider);
-        
+        final largeTextMode = ref.watch(largeTextModeProvider);
+
         return MaterialApp.router(
-          scaffoldMessengerKey: appScaffoldMessengerKey,
           routerConfig: _appRouter,
           builder: (context, child) {
             final mq = MediaQuery.of(context);
-            return GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: MediaQuery(
-                data: mq.copyWith(
-                  textScaler: ResponsiveLayout.appTextScaler(mq),
+            return AppScaffoldMessenger(
+              key: appScaffoldMessengerKey,
+              child: StackedToastHost(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                  child: MediaQuery(
+                    data: mq.copyWith(
+                      textScaler: ResponsiveLayout.appTextScaler(
+                        mq,
+                        extraScale: largeTextMode ? 1.2 : 1.0,
+                      ),
+                    ),
+                    child: child!,
+                  ),
                 ),
-                child: child!,
               ),
             );
           },

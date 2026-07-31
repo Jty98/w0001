@@ -66,14 +66,16 @@ class WorkerGroupedListSheetBody extends StatefulWidget {
   final List<HumanModel> workers;
   final ScrollController scrollController;
   final void Function(HumanModel human) onWorkerTap;
-  final Widget Function(BuildContext context, HumanModel human)? personTileBuilder;
+  final Widget Function(BuildContext context, HumanModel human)?
+      personTileBuilder;
 
   @override
   State<WorkerGroupedListSheetBody> createState() =>
       _WorkerGroupedListSheetBodyState();
 }
 
-class _WorkerGroupedListSheetBodyState extends State<WorkerGroupedListSheetBody> {
+class _WorkerGroupedListSheetBodyState
+    extends State<WorkerGroupedListSheetBody> {
   int _groupMode = 0;
   String? _highlightSectionKey;
 
@@ -213,8 +215,7 @@ class _WorkerGroupedListSheetBodyState extends State<WorkerGroupedListSheetBody>
     final tt = Theme.of(context).textTheme;
     final sections = _buildSections();
     final orderedKeys = _orderedKeys(sections);
-    final chipKeys =
-        _groupMode == 0 ? _initialChipKeys(sections) : orderedKeys;
+    final chipKeys = _groupMode == 0 ? _initialChipKeys(sections) : orderedKeys;
 
     return SafeArea(
       child: Column(

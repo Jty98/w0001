@@ -24,7 +24,8 @@ class WorkerSignupResidentSection extends StatefulWidget {
       _WorkerSignupResidentSectionState();
 }
 
-class _WorkerSignupResidentSectionState extends State<WorkerSignupResidentSection> {
+class _WorkerSignupResidentSectionState
+    extends State<WorkerSignupResidentSection> {
   var _obscure = true;
 
   @override
@@ -32,9 +33,8 @@ class _WorkerSignupResidentSectionState extends State<WorkerSignupResidentSectio
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final value = widget.controller.text;
-    final formatMsg = value.trim().isEmpty
-        ? null
-        : residentRegistrationFormatMessage(value);
+    final formatMsg =
+        value.trim().isEmpty ? null : residentRegistrationFormatMessage(value);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -85,7 +85,9 @@ class _WorkerSignupResidentSectionState extends State<WorkerSignupResidentSectio
             tooltip: _obscure ? '번호 표시' : '번호 숨기기',
             onPressed: () => setState(() => _obscure = !_obscure),
             icon: Icon(
-              _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+              _obscure
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
             ),
           ),
           onChanged: (_) => widget.onChanged(),
