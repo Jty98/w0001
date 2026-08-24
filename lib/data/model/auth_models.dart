@@ -1,6 +1,5 @@
 import 'package:w0001/data/model/terms_models.dart';
 import 'package:w0001/data/model/worker_profile_model.dart';
-import 'package:w0001/util/career_input.dart';
 import 'package:w0001/util/phone_number_format.dart';
 import 'package:w0001/util/resident_registration_format.dart';
 import 'package:w0001/util/worker_skills_parse.dart';
@@ -317,8 +316,8 @@ class UserRead {
         approvalRaw is String ? approvalRaw : approvalRaw?.toString();
 
     final primarySpecialty = parseWorkerPrimarySpecialtyFromMap(json);
-    final rankRaw = json['worker_rank'] ?? json['workerRank'];
-    final careerRaw = json['career'];
+    final workerRank = pickWorkerRankFromMap(json);
+    final career = pickWorkerCareerFromMap(json);
     final phoneMaskedRaw = json['phone_masked'] ?? json['phoneMasked'];
     final phoneVerifiedRaw = json['phone_verified'] ?? json['phoneVerified'];
 
@@ -333,8 +332,8 @@ class UserRead {
       workerHid: parseWorkerHid(),
       primarySpecialty: primarySpecialty,
       specialties: const [],
-      workerRank: rankRaw is String ? rankRaw.trim() : '',
-      career: CareerInputUtils.parseWireField(careerRaw),
+      workerRank: workerRank,
+      career: career,
       phoneMasked: phoneMaskedRaw is String ? phoneMaskedRaw.trim() : null,
       phoneVerified: phoneVerifiedRaw == true,
     );

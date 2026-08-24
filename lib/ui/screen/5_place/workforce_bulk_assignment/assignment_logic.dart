@@ -45,6 +45,7 @@ BulkWorkforceAssignmentRequest buildBulkWorkforceAssignmentRequest({
   required Map<int, int> humanWages,
   String? fallbackWorkRole,
   List<Map<String, dynamic>>? siteInstructionBlocks,
+  Map<String, List<Map<String, dynamic>>>? processInstructionBlocks,
 }) {
   return BulkWorkforceAssignmentRequest(
     startDate: startDate,
@@ -58,5 +59,6 @@ BulkWorkforceAssignmentRequest buildBulkWorkforceAssignmentRequest({
       );
     }).toList(),
     siteInstructionBlocks: siteInstructionBlocks,
+    processInstructionBlocks: processInstructionBlocks,
   );
 }

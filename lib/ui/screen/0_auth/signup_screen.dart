@@ -56,13 +56,9 @@ String? signupUidFormatMessage(String uid) {
 }
 
 /// 비밀번호 형식 검증.
-/// 테스트 예외: "1234" 허용
-/// 실제 규칙: 8자 이상 + 대문자 1개 + 특수문자 1개
+/// 규칙: 8자 이상 + 대문자 1개 + 특수문자 1개
 String? signupPasswordFormatMessage(String password) {
   if (password.isEmpty) return null; // 빈 값은 별도 처리
-
-  // 테스트 예외: "1234"는 항상 허용
-  if (password == '1234') return null;
 
   // 최소 길이 체크
   if (password.length < 8) {

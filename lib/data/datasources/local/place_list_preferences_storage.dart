@@ -62,6 +62,12 @@ class PlaceListLocalPreferences {
       }
     }
 
+    // 보관은 설정에서만 관리 — 현장관리 탭 선호값이면 진행중으로 되돌림.
+    if (tab == PlaceState.archived) {
+      tab = PlaceState.incomplete;
+      sort = PlaceListSortMode.defaultFor(tab);
+    }
+
     return PlaceListLocalPreferences(
       placeState: tab,
       sortMode: sort,

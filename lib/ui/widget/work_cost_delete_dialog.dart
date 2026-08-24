@@ -28,15 +28,21 @@ Future<WorkCostDeleteChoice?> showWorkCostDeleteDialog(
     context: context,
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
+      final tt = Theme.of(ctx).textTheme;
       if (hasLinkedWorkDay) {
         return AlertDialog(
+          icon: Icon(
+            Icons.warning_amber_rounded,
+            color: cs.error,
+            size: 28,
+          ),
           title: const Text('인건비·작업 투입 삭제'),
           content: Text(
             '$workerName · $placeName\n$dateLabel$roleLine\n\n'
             '이 날짜에 등록된 작업지시(현장 투입) 내역이 있습니다.\n'
             '인건비만 지우면 작업 기록과 금액이 어긋날 수 있어, '
             '함께 삭제하는 것을 권장합니다.',
-            style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+            style: tt.bodyMedium?.copyWith(
                   height: 1.45,
                   color: cs.onSurfaceVariant,
                 ),
@@ -46,26 +52,29 @@ Future<WorkCostDeleteChoice?> showWorkCostDeleteDialog(
               onPressed: () => ctx.pop(WorkCostDeleteChoice.cancel),
               child: const Text('취소'),
             ),
-            TextButton(
-              onPressed: () => ctx.pop(WorkCostDeleteChoice.costAndWorkDay),
-              child: Text(
-                '함께 삭제',
-                style: TextStyle(
-                  color: cs.error,
-                  fontWeight: FontWeight.w700,
-                ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: cs.error,
+                foregroundColor: cs.onError,
               ),
+              onPressed: () => ctx.pop(WorkCostDeleteChoice.costAndWorkDay),
+              child: const Text('함께 삭제'),
             ),
           ],
         );
       }
 
       return AlertDialog(
+        icon: Icon(
+          Icons.delete_forever_rounded,
+          color: cs.error,
+          size: 28,
+        ),
         title: const Text('인건비 삭제'),
         content: Text(
           '$workerName · $placeName\n$dateLabel$roleLine\n\n'
           '이 인건비 항목을 삭제할까요?',
-          style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+          style: tt.bodyMedium?.copyWith(
                 height: 1.45,
                 color: cs.onSurfaceVariant,
               ),
@@ -75,15 +84,13 @@ Future<WorkCostDeleteChoice?> showWorkCostDeleteDialog(
             onPressed: () => ctx.pop(WorkCostDeleteChoice.cancel),
             child: const Text('취소'),
           ),
-          TextButton(
-            onPressed: () => ctx.pop(WorkCostDeleteChoice.costOnly),
-            child: Text(
-              '삭제',
-              style: TextStyle(
-                color: cs.error,
-                fontWeight: FontWeight.w700,
-              ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: cs.error,
+              foregroundColor: cs.onError,
             ),
+            onPressed: () => ctx.pop(WorkCostDeleteChoice.costOnly),
+            child: const Text('삭제'),
           ),
         ],
       );

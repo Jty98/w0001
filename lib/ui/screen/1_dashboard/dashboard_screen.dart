@@ -20,6 +20,7 @@ import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_global_announcemen
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_kpi_section.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/management_dashboard_section_shell.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_section_preview_tile.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/worker_dashboard_checklist_section.dart';
 import 'package:w0001/presentation/viewmodel/user_notifications_providers.dart';
 import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/ui/widget/notification_bell_button.dart';
@@ -119,6 +120,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       yearly: state.yearly,
       places: state.places,
       initialPlaceFilter: placeFilter,
+      initialYearly: state.kpiPeriodMode == DashboardKpiPeriodMode.yearly,
     );
   }
 
@@ -274,13 +276,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: ManagementDashboardSectionShell(
             icon: Icons.insights_outlined,
             title: '경영 지표',
-            subtitle: '월별·연도별 현장 실적 요약',
+            subtitle: '기간 발생분 · 미수는 현재 · 이익은 완료 현장',
             child: DashboardKpiSection(
               horizontalPadding: 0,
               onMetricChart: _showMetricChart,
               onOutstanding: _showOutstandingSheet,
             ),
           ),
+        );
+      case DashboardSectionIds.managementChecklist:
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: padH),
+          child: const WorkerDashboardChecklistSection(),
         );
       default:
         return const SizedBox.shrink();
@@ -297,6 +304,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return '작업자 공지 요약';
       case DashboardSectionIds.managementKpi:
         return '월별 지표 요약';
+      case DashboardSectionIds.managementChecklist:
+        return '현장별 체크리스트';
       default:
         return '';
     }
@@ -312,6 +321,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return DashboardSectionPreviewKind.announcement;
       case DashboardSectionIds.managementKpi:
         return DashboardSectionPreviewKind.kpi;
+      case DashboardSectionIds.managementChecklist:
+        return DashboardSectionPreviewKind.generic;
       default:
         return DashboardSectionPreviewKind.generic;
     }
@@ -649,7 +660,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('상황판'),
-        centerTitle: false,
+        centerTitle: true,
         scrolledUnderElevation: 0,
         backgroundColor: cs.surface,
         surfaceTintColor: Colors.transparent,
@@ -699,7 +710,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 if (visible.contains(DashboardSectionIds.managementSchedule)) {
                   await ref.read(dashboardScheduleProvider.notifier).refresh();
                 }
-                if (visible.contains(DashboardSectionIds.managementDailyQuote)) {
+                if (visible
+                    .contains(DashboardSectionIds.managementDailyQuote)) {
                   await ref.read(todayDailyQuoteProvider.notifier).refresh();
                 }
                 if (visible

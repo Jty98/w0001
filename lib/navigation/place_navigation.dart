@@ -108,5 +108,5 @@ class PlaceRouteBackScope extends StatelessWidget {
 
 /// 쉘 하단 탭을 숨길 현장·상세·하위 경로.
 bool shouldHideShellBottomNavForPath(String path) {
-  return path.startsWith('/place/detail');
+  return false;
 }

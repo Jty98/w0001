@@ -21,6 +21,7 @@ class DashboardSectionIds {
   static const managementSchedule = 'management_schedule';
   static const managementAnnouncement = 'management_announcement';
   static const managementKpi = 'management_kpi';
+  static const managementChecklist = 'management_checklist';
 
   static const workerWelcomeBanner = 'worker_welcome_banner';
   static const workerAnnouncement = 'worker_announcement';
@@ -123,6 +124,12 @@ class DashboardCustomizationRegistry {
       id: DashboardSectionIds.managementKpi,
       title: '경영 지표',
       icon: Icons.insights_outlined,
+      allowedRoles: {DashboardLayoutRoleScope.management},
+    ),
+    DashboardSectionDefinition(
+      id: DashboardSectionIds.managementChecklist,
+      title: '체크리스트',
+      icon: Icons.checklist_rounded,
       allowedRoles: {DashboardLayoutRoleScope.management},
     ),
     DashboardSectionDefinition(

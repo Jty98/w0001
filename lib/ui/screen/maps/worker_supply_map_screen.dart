@@ -100,7 +100,6 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
   LatLngBounds? _lastBounds;
   List<String> _lastCategories = const <String>[];
   String _lastSearchQuery = '';
-  WorkerSupplyResponseKind _lastResponseKind = WorkerSupplyResponseKind.items;
   int? _nextCursorTtlSeconds;
   int _lastSearchMapLevel = 14;
   var _latestSearchRequestId = 0;
@@ -144,7 +143,15 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
   }
 
   double? _distanceMetersFromMyLocation(WorkerSupplyPlace place) {
-    return place.distanceMeters;
+    final origin = _myLocationCenter;
+    if (origin == null) return null;
+    if (place.latitude == 0 && place.longitude == 0) return null;
+    return Geolocator.distanceBetween(
+      origin.latitude,
+      origin.longitude,
+      place.latitude,
+      place.longitude,
+    );
   }
 
   Color _categoryAccentColor(
@@ -330,12 +337,25 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
     return (15 - kakaoLevel).clamp(1, 14);
   }
 
+  List<WorkerSupplyPlace> _sortedByDistance(List<WorkerSupplyPlace> rows) {
+    final sorted = List<WorkerSupplyPlace>.from(rows);
+    sorted.sort((a, b) {
+      final da = _distanceMetersFromMyLocation(a);
+      final db = _distanceMetersFromMyLocation(b);
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da.compareTo(db);
+    });
+    return sorted;
+  }
+
   void _setPlacesByCategory(
     Map<WorkerSupplyCategory, List<WorkerSupplyPlace>> byCategory,
   ) {
     final normalized = <WorkerSupplyCategory, List<WorkerSupplyPlace>>{
       for (final category in WorkerSupplyCategory.values)
-        category: byCategory[category] ?? const [],
+        category: _sortedByDistance(byCategory[category] ?? const []),
     };
     final markerMap = <String, WorkerSupplyPlace>{};
     final markerCategoryMap = <String, WorkerSupplyCategory>{};
@@ -434,7 +454,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       _roundedCoord(ne.latitude),
       _roundedCoord(ne.longitude),
       'lvl${mapLevel ?? -1}',
-      'cluster:auto',
+      'cluster:false',
     ].join('|');
   }
 
@@ -666,6 +686,9 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       setState(() {
         _mapCenter = center;
         _myLocationCenter = center;
+        if (_places.isNotEmpty) {
+          _setPlacesByCategory(_placesByCategory);
+        }
       });
       if (moveMap) {
         if (_mapController != null && _mapReady) {
@@ -706,7 +729,6 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
             const <WorkerSupplyCategory, List<WorkerSupplyPlace>>{},
           );
           _clusters = const <WorkerSupplyCluster>[];
-          _lastResponseKind = WorkerSupplyResponseKind.items;
           _nextCursor = null;
           _nextCursorTtlSeconds = null;
           _lastSearchMapLevel = _currentMapLevel;
@@ -753,8 +775,9 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       if (!mounted || requestId != _latestSearchRequestId) return;
       setState(() {
         _setPlacesByCategory(rows.rowsByCategory);
-        _clusters = rows.clusters;
-        _lastResponseKind = rows.responseKind;
+        final hasItems =
+            rows.rowsByCategory.values.any((list) => list.isNotEmpty);
+        _clusters = hasItems ? const <WorkerSupplyCluster>[] : rows.clusters;
         _nextCursor = rows.nextCursor;
         _nextCursorTtlSeconds = rows.nextCursorTtlSeconds;
         _lastSearchUsedBounds = false;
@@ -808,7 +831,6 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
             const <WorkerSupplyCategory, List<WorkerSupplyPlace>>{},
           );
           _clusters = const <WorkerSupplyCluster>[];
-          _lastResponseKind = WorkerSupplyResponseKind.items;
           _nextCursor = null;
           _nextCursorTtlSeconds = null;
           _lastSearchMapLevel = _currentMapLevel;
@@ -844,7 +866,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
             limit: 40,
             sort: _serverSortMode(),
             sortDirection: WorkerSupplyServerSortDirection.asc,
-            clusterMode: WorkerSupplyClusterMode.auto,
+            clusterMode: WorkerSupplyClusterMode.forceItems,
           );
           return (
             rowsByCategory: _groupPlacesByCategory(
@@ -862,8 +884,9 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       if (!mounted || requestId != _latestSearchRequestId) return;
       setState(() {
         _setPlacesByCategory(rows.rowsByCategory);
-        _clusters = rows.clusters;
-        _lastResponseKind = rows.responseKind;
+        final hasItems =
+            rows.rowsByCategory.values.any((list) => list.isNotEmpty);
+        _clusters = hasItems ? const <WorkerSupplyCluster>[] : rows.clusters;
         _nextCursor = rows.nextCursor;
         _nextCursorTtlSeconds = rows.nextCursorTtlSeconds;
         _lastSearchUsedBounds = true;
@@ -926,7 +949,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
           limit: 40,
           sort: _serverSortMode(),
           sortDirection: WorkerSupplyServerSortDirection.asc,
-          clusterMode: WorkerSupplyClusterMode.auto,
+          clusterMode: WorkerSupplyClusterMode.forceItems,
           cursor: cursor,
         );
       } else {
@@ -946,14 +969,15 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       }
       if (!mounted || activeRequestId != _latestSearchRequestId) return;
       setState(() {
-        _lastResponseKind = page.responseKind;
-        _clusters = page.clusters;
-        if (page.responseKind == WorkerSupplyResponseKind.items) {
+        if (page.items.isNotEmpty) {
+          _clusters = const <WorkerSupplyCluster>[];
           final grouped = _groupPlacesByCategory(
             page.items,
             fallbackCategory: _selectedCategory,
           );
           _appendPlacesByCategory(grouped);
+        } else if (_places.isEmpty) {
+          _clusters = page.clusters;
         }
         _nextCursor = page.nextCursor;
         _nextCursorTtlSeconds = page.nextCursorTtlSeconds;
@@ -987,7 +1011,6 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       _showSearchInViewButton = false;
       _error = null;
       _clusters = const <WorkerSupplyCluster>[];
-      _lastResponseKind = WorkerSupplyResponseKind.items;
       _nextCursor = null;
       _nextCursorTtlSeconds = null;
       _lastSearchUsedBounds = false;
@@ -1024,44 +1047,52 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
     await _clearMapSearchContext();
   }
 
-  List<Marker> _buildMarkers() {
-    final markers = <Marker>[];
-    if (_lastResponseKind == WorkerSupplyResponseKind.clusters &&
-        _clusters.isNotEmpty) {
-      for (final cluster in _clusters) {
-        if (cluster.latitude == 0 || cluster.longitude == 0) continue;
-        markers.add(
-          Marker(
+  List<Marker> _buildPlaceMarkers() {
+    return _markerPlaceById.entries
+        .where(
+            (entry) => entry.value.latitude != 0 && entry.value.longitude != 0)
+        .map(
+      (entry) {
+        final category =
+            _markerCategoryById[entry.key] ?? WorkerSupplyCategory.hardware;
+        return Marker(
+          markerId: entry.key,
+          latLng: LatLng(entry.value.latitude, entry.value.longitude),
+          width: 34,
+          height: 44,
+          markerImageSrc: _categoryMarkerImageSrc(category),
+          offsetX: 17,
+          offsetY: 43,
+          infoWindowContent: '',
+          infoWindowRemovable: false,
+        );
+      },
+    ).toList(growable: false);
+  }
+
+  List<Marker> _buildFallbackClusterMarkers() {
+    return _clusters
+        .where((cluster) => cluster.latitude != 0 && cluster.longitude != 0)
+        .map(
+          (cluster) => Marker(
             markerId: '__cluster__:${cluster.id}',
             latLng: LatLng(cluster.latitude, cluster.longitude),
             width: 36,
             height: 44,
-            infoWindowContent: '${cluster.count}개',
+            infoWindowContent: '',
+            infoWindowRemovable: false,
           ),
-        );
-      }
-    } else {
-      markers.addAll(
-        _markerPlaceById.entries
-            .where((entry) =>
-                entry.value.latitude != 0 && entry.value.longitude != 0)
-            .map(
-          (entry) {
-            final category =
-                _markerCategoryById[entry.key] ?? WorkerSupplyCategory.hardware;
-            return Marker(
-              markerId: entry.key,
-              latLng: LatLng(entry.value.latitude, entry.value.longitude),
-              width: 34,
-              height: 44,
-              markerImageSrc: _categoryMarkerImageSrc(category),
-              offsetX: 17,
-              offsetY: 43,
-              infoWindowContent: '',
-            );
-          },
-        ),
-      );
+        )
+        .toList(growable: false);
+  }
+
+  List<Marker> _buildMarkers() {
+    final markers = <Marker>[];
+    final placeMarkers = _buildPlaceMarkers();
+    if (placeMarkers.isNotEmpty) {
+      markers.addAll(placeMarkers);
+    } else if (_clusters.isNotEmpty) {
+      markers.addAll(_buildFallbackClusterMarkers());
     }
     final my = _myLocationCenter;
     if (my != null) {
@@ -1075,6 +1106,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
           offsetX: 13,
           offsetY: 13,
           infoWindowContent: '',
+          infoWindowRemovable: false,
         ),
       );
     }
@@ -1129,6 +1161,34 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
     if (_sheetSelectedPlace == null) return false;
     _closeSheetPlaceDetail();
     return true;
+  }
+
+  Future<void> _zoomIntoClusterAndSearch(WorkerSupplyCluster cluster) async {
+    if (_isLoading || _mapController == null || !_mapReady) return;
+    HapticFeedback.selectionClick();
+    final target = LatLng(cluster.latitude, cluster.longitude);
+    final nextLevel =
+        _currentMapLevel > 5 ? 5 : (_currentMapLevel - 2).clamp(1, 14);
+    try {
+      _mapController!.setCenter(target);
+      _mapController!.setLevel(nextLevel);
+      setState(() {
+        _mapCenter = target;
+        _currentMapLevel = nextLevel;
+        _sheetSelectedPlace = null;
+        _sheetSelectedCategory = null;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 280));
+      if (!mounted) return;
+      final bounds = await _mapController!.getBounds();
+      if (!mounted) return;
+      setState(() {
+        _currentBounds = bounds;
+      });
+      await _searchInCurrentView();
+    } catch (_) {
+      _showTemporaryHint('지도를 확대한 뒤 다시 검색해 주세요.');
+    }
   }
 
   Future<void> _focusPlaceAndOpenActions(
@@ -1317,130 +1377,6 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
                   ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClusterResultCard(
-    BuildContext context,
-    WorkerSupplyCluster cluster,
-  ) {
-    final cs = Theme.of(context).colorScheme;
-    String categoryLabel(String key) {
-      final c = WorkerSupplyCategory.fromServerKey(key);
-      return c?.label ?? key;
-    }
-
-    final categoryRows = cluster.byCategory.entries.toList(growable: false)
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final topLabel = categoryRows.isEmpty
-        ? '카테고리 정보 없음'
-        : categoryRows
-            .take(3)
-            .map((e) => '${categoryLabel(e.key)} ${e.value}')
-            .join(' · ');
-
-    return Material(
-      color: cs.surfaceContainerHighest.withValues(alpha: 0.56),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          HapticFeedback.selectionClick();
-          if (_mapController != null && _mapReady) {
-            await _mapController!.setCenter(
-              LatLng(cluster.latitude, cluster.longitude),
-            );
-          }
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('지도를 확대한 뒤 재검색하면 상세 업체가 나옵니다.')),
-          );
-        },
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: context.rsi(10),
-            vertical: context.rsi(10),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: context.rsi(32),
-                height: context.rsi(32),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.hub_rounded, size: context.rsi(18)),
-              ),
-              SizedBox(width: context.rsi(9)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '이 구역 ${cluster.count}개',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    SizedBox(height: context.rsi(3)),
-                    Text(
-                      topLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                    ),
-                    if (cluster.minGasolinePrice != null) ...[
-                      SizedBox(height: context.rsi(4)),
-                      Text(
-                        '최저 휘발유 ${_formatFuelPrice(cluster.minGasolinePrice)}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: cs.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                    ],
-                    if (cluster.count > 0 && categoryRows.isNotEmpty) ...[
-                      SizedBox(height: context.rsi(6)),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Row(
-                          children: [
-                            for (final row in categoryRows)
-                              Expanded(
-                                flex: row.value,
-                                child: Container(
-                                  height: context.rsi(6),
-                                  color: (WorkerSupplyCategory.fromServerKey(
-                                                  row.key) ==
-                                              null
-                                          ? cs.outline
-                                          : _categoryAccentColor(
-                                              context,
-                                              WorkerSupplyCategory
-                                                  .fromServerKey(row.key)!,
-                                            ))
-                                      .withValues(alpha: 0.62),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.zoom_in_map_rounded,
-                size: context.rsi(18),
-                color: cs.onSurfaceVariant,
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1729,9 +1665,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
       ),
       SizedBox(height: context.rsi(4)),
       Text(
-        _lastSearchUsedBounds
-            ? '지도 중심 기준 $distanceLabel'
-            : '검색 중심 기준 $distanceLabel',
+        '내 위치 기준 $distanceLabel',
         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
       ),
       if (categoryLabel.isNotEmpty) ...[
@@ -1865,26 +1799,27 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
             places: _placesByCategory[selectedCategory] ?? const [],
           );
     final hasAnyItems = (section?.places.isNotEmpty ?? false);
-    final hasClusters =
-        _lastResponseKind == WorkerSupplyResponseKind.clusters &&
-            _clusters.isNotEmpty;
-    final hasAny = hasAnyItems || hasClusters;
-    final subtitle = hasClusters
-        ? '저줌에서는 클러스터로 표시됩니다. 확대 후 재검색해 상세 업체를 확인하세요.'
-        : '카테고리별 업체를 선택해 상세 액션을 열 수 있어요';
-    final visibleCountLabel = hasClusters ? '${_clusters.length}개 클러스터' : '';
+    final hasAny = hasAnyItems;
+    final resultCount = section?.places.length ?? 0;
+    final title = selectedCategory == null
+        ? '카테고리를 선택하면 주변 업체를 조회합니다'
+        : _lastSearchUsedBounds
+            ? '이 화면의 ${selectedCategory.label} (${resultCount}건)'
+            : '내 주변 ${selectedCategory.label} (${resultCount}건)';
+    final subtitle = selectedCategory == null
+        ? '카테고리를 선택해 가까운 순으로 업체를 확인할 수 있어요'
+        : '가까운 순으로 정렬되어 있어요';
+    final hasMoreResults =
+        _nextCursor != null && _nextCursor!.trim().isNotEmpty;
     final hasContext = _hasSearchContext(selectedCategory);
     final sheetProfile =
-        '${hasAny ? 'result' : 'empty'}-${hasClusters ? 'cluster' : 'item'}-${hasContext ? 'ctx' : 'idle'}';
+        '${hasAny ? 'result' : 'empty'}-item-${hasContext ? 'ctx' : 'idle'}';
     final bool compactState = !hasAny && !hasContext;
     final double minSheetSize = compactState ? 0.15 : 0.18;
-    final double initialSheetSize =
-        hasAny ? (hasClusters ? 0.34 : 0.38) : (hasContext ? 0.28 : 0.18);
-    final double maxSheetSize = hasClusters ? 0.76 : 0.86;
+    final double initialSheetSize = hasAny ? 0.38 : (hasContext ? 0.28 : 0.18);
+    const double maxSheetSize = 0.86;
     final List<double> snapSizes = hasAny
-        ? (hasClusters
-            ? const <double>[0.22, 0.34, 0.58, 0.76]
-            : const <double>[0.24, 0.38, 0.62, 0.86])
+        ? const <double>[0.24, 0.38, 0.62, 0.86]
         : (hasContext
             ? const <double>[0.18, 0.28, 0.5]
             : const <double>[0.15, 0.22, 0.36]);
@@ -1964,9 +1899,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
                           ),
                         ] else ...[
                           Text(
-                            selectedCategory == null
-                                ? '카테고리를 선택하면 주변 업체를 조회합니다'
-                                : '내 주변 ${selectedCategory.label} (${_places.length}건)',
+                            title,
                             style: Theme.of(context)
                                 .textTheme
                                 .titleSmall
@@ -1983,41 +1916,20 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
                                     ),
                           ),
                           SizedBox(height: context.rsi(8)),
-                          if (visibleCountLabel.isNotEmpty ||
-                              (_nextCursor != null &&
-                                  _nextCursor!.trim().isNotEmpty))
+                          if (hasMoreResults)
                             Wrap(
                               spacing: context.rsi(6),
                               runSpacing: context.rsi(6),
                               children: [
-                                if (visibleCountLabel.isNotEmpty)
-                                  _buildInfoBadge(
-                                    context,
-                                    icon: Icons.hub_rounded,
-                                    label: visibleCountLabel,
-                                  ),
-                                if (_nextCursor != null &&
-                                    _nextCursor!.trim().isNotEmpty)
-                                  _buildInfoBadge(
-                                    context,
-                                    icon: Icons.expand_circle_down_outlined,
-                                    label: '추가 결과 있음',
-                                  ),
+                                _buildInfoBadge(
+                                  context,
+                                  icon: Icons.expand_circle_down_outlined,
+                                  label: '추가 결과 있음',
+                                ),
                               ],
                             ),
-                          if (visibleCountLabel.isNotEmpty ||
-                              (_nextCursor != null &&
-                                  _nextCursor!.trim().isNotEmpty))
-                            SizedBox(height: context.rsi(10)),
+                          if (hasMoreResults) SizedBox(height: context.rsi(10)),
                           if (hasAny) ...[
-                            if (hasClusters) ...[
-                              for (var i = 0; i < _clusters.length; i++) ...[
-                                _buildClusterResultCard(context, _clusters[i]),
-                                if (i != _clusters.length - 1)
-                                  SizedBox(height: context.rsi(8)),
-                              ],
-                              SizedBox(height: context.rsi(8)),
-                            ],
                             if (section != null)
                               _buildCategoryResultSection(
                                 context,
@@ -2164,17 +2076,7 @@ class _WorkerSupplyMapScreenState extends ConsumerState<WorkerSupplyMapScreen> {
                       final target =
                           _clusters.where((row) => row.id == clusterId);
                       if (target.isNotEmpty) {
-                        final cluster = target.first;
-                        _mapController?.setCenter(
-                          LatLng(cluster.latitude, cluster.longitude),
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('지도를 더 확대한 뒤 재검색해 상세 목록을 확인하세요.'),
-                            ),
-                          );
-                        }
+                        _zoomIntoClusterAndSearch(target.first);
                       }
                       return;
                     }

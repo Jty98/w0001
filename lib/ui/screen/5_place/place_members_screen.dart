@@ -252,7 +252,7 @@ class _PlaceMembersScreenState extends ConsumerState<PlaceMembersScreen> {
                             ),
                             SizedBox(height: context.rsi(8)),
                             Text(
-                              '작업자를 초대하면 이 현장의 공지와 정보를 받을 수 있습니다.',
+                              '작업자를 초대하면 작업지시를 하지 않아도\n이 현장의 공지와 정보를 받을 수 있습니다.',
                               textAlign: TextAlign.center,
                               style: tt.bodyMedium?.copyWith(
                                 color: cs.onSurfaceVariant,

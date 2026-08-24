@@ -120,7 +120,7 @@ class _DetailBody extends StatelessWidget {
         _DetailHeader(entry: entry),
         SizedBox(height: context.rsi(24)),
 
-        // 이미지 갤러리 (자재사전, 베스트/워스트 사례)
+        // 이미지 갤러리 (철물 사전, 베스트/워스트 사례)
         if (entry.type.hasImages && entry.imageUrls.isNotEmpty) ...[
           AppSectionCard(
             title: '이미지',
@@ -158,7 +158,10 @@ class _DetailBody extends StatelessWidget {
         ],
 
         // 태그
-        if (entry.tags.isNotEmpty) ...[
+        if (entry.tags.isNotEmpty &&
+            !(entry.type == KnowledgeEntryType.material &&
+                KnowledgeCategories.hardwareKindOf(entry.categories) ==
+                    HardwareDictionaryKind.tool)) ...[
           _TagSection(tags: entry.tags),
           SizedBox(height: context.rsi(20)),
         ],
@@ -212,7 +215,7 @@ class _DetailHeader extends StatelessWidget {
               ),
               SizedBox(width: context.rsi(6)),
               Text(
-                entry.type.displayName,
+                KnowledgeCategories.entryKindLabel(entry),
                 style: tt.labelMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                   color: _getTypeColor(entry.type, cs),
@@ -229,6 +232,25 @@ class _DetailHeader extends StatelessWidget {
             height: 1.3,
           ),
         ),
+        if (entry.type == KnowledgeEntryType.material &&
+            KnowledgeCategories.primarySubcategory(entry.categories) !=
+                null) ...[
+          SizedBox(height: context.rsi(10)),
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: context.rsi(10),
+              vertical: context.rsi(5),
+            ),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              KnowledgeCategories.primarySubcategory(entry.categories)!,
+              style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -236,7 +258,7 @@ class _DetailHeader extends StatelessWidget {
   IconData _getTypeIcon(KnowledgeEntryType type) {
     switch (type) {
       case KnowledgeEntryType.material:
-        return Icons.inventory_2_outlined;
+        return Icons.hardware_outlined;
       case KnowledgeEntryType.term:
         return Icons.menu_book_outlined;
       case KnowledgeEntryType.constructionCase:
@@ -465,7 +487,7 @@ class _RelatedCard extends StatelessWidget {
                     ),
                     SizedBox(height: context.rsi(4)),
                     Text(
-                      entry.type.displayName,
+                      KnowledgeCategories.entryKindLabel(entry),
                       style: tt.labelSmall?.copyWith(
                         color: cs.onSurfaceVariant,
                         fontWeight: FontWeight.w600,

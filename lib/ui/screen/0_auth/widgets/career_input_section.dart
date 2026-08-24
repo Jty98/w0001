@@ -31,6 +31,7 @@ class CareerInputSectionState extends State<CareerInputSection> {
   late CareerInputMode _mode;
   late int _years;
   late int _startYear;
+  var _noCareerSelected = false;
   late FixedExtentScrollController _yearsController;
   late FixedExtentScrollController _startYearController;
   String? _lastEmittedCareer;
@@ -45,16 +46,18 @@ class CareerInputSectionState extends State<CareerInputSection> {
   @override
   void initState() {
     super.initState();
-    final wasEmpty = widget.initialCareer.trim().isEmpty;
-    _applyCareer(widget.initialCareer, notify: false);
+    _noCareerSelected = widget.initialCareer.trim().isEmpty;
+    if (_noCareerSelected) {
+      _years = 0;
+      _startYear = CareerInputUtils.defaultStartYear;
+    } else {
+      _applyCareer(widget.initialCareer, notify: false);
+    }
     _mode = CareerInputMode.directYears;
     _yearsController = FixedExtentScrollController(initialItem: _years);
     _startYearController = FixedExtentScrollController(
       initialItem: CareerInputUtils.startYearToIndex(_startYear),
     );
-    if (wasEmpty && _years > 0) {
-      SchedulerBinding.instance.addPostFrameCallback((_) => _emit());
-    }
   }
 
   void _applyCareer(String career, {required bool notify}) {
@@ -75,7 +78,13 @@ class CareerInputSectionState extends State<CareerInputSection> {
       return;
     }
 
-    _applyCareer(widget.initialCareer, notify: false);
+    _noCareerSelected = widget.initialCareer.trim().isEmpty;
+    if (_noCareerSelected) {
+      _years = 0;
+      _startYear = CareerInputUtils.defaultStartYear;
+    } else {
+      _applyCareer(widget.initialCareer, notify: false);
+    }
     _syncControllerToState(_yearsController, _years);
     _syncControllerToState(
       _startYearController,
@@ -94,7 +103,7 @@ class CareerInputSectionState extends State<CareerInputSection> {
   String get career => CareerInputUtils.formatYears(_years);
 
   void _emit() {
-    final value = career;
+    final value = _noCareerSelected ? '' : career;
     _lastEmittedCareer = value;
     widget.onChanged(value);
   }
@@ -128,6 +137,7 @@ class CareerInputSectionState extends State<CareerInputSection> {
   void _setYears(int years) {
     final clamped = years.clamp(0, CareerInputUtils.maxYears);
     if (_years == clamped) return;
+    _noCareerSelected = false;
     _years = clamped;
     _startYear = CareerInputUtils.startYearFromYears(_years);
     if (!_pickerScrolling) {
@@ -143,6 +153,7 @@ class CareerInputSectionState extends State<CareerInputSection> {
     );
     final years = CareerInputUtils.yearsFromStartYear(clamped);
     if (_startYear == clamped && _years == years) return;
+    _noCareerSelected = false;
     _startYear = clamped;
     _years = years;
     if (!_pickerScrolling) {
@@ -174,50 +185,97 @@ class CareerInputSectionState extends State<CareerInputSection> {
           ),
           SizedBox(height: context.rsi(6)),
         ],
-        if (widget.allowStartYearMode) ...[
-          SegmentedButton<CareerInputMode>(
-            segments: const [
-              ButtonSegment(
-                value: CareerInputMode.directYears,
-                label: Text('경력 년수'),
-              ),
-              ButtonSegment(
-                value: CareerInputMode.startYear,
-                label: Text('시작 연도'),
-              ),
-            ],
-            selected: {_mode},
-            onSelectionChanged: (selection) => _onModeChanged(selection.first),
-          ),
-          SizedBox(height: context.rsi(10)),
-        ],
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: _mode == CareerInputMode.directYears
-              ? _iosStylePicker(
-                  key: const ValueKey('career-years'),
-                  context: context,
-                  controller: _yearsController,
-                  itemCount: CareerInputUtils.maxYears + 1,
-                  labelBuilder: CareerInputUtils.pickerLabelForYears,
-                  onSelected: _setYears,
-                )
-              : _iosStylePicker(
-                  key: const ValueKey('career-start-year'),
-                  context: context,
-                  controller: _startYearController,
-                  itemCount: _startYearItemCount,
-                  labelBuilder: (index) =>
-                      '${CareerInputUtils.indexToStartYear(index)}년',
-                  onSelected: (index) =>
-                      _setStartYear(CareerInputUtils.indexToStartYear(index)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.36),
+              borderRadius: BorderRadius.circular(context.rsi(12)),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.8)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _CareerToggleButton(
+                    label: '선택 안함',
+                    selected: _noCareerSelected,
+                    onTap: () {
+                      if (_noCareerSelected) return;
+                      setState(() => _noCareerSelected = true);
+                      _emit();
+                    },
+                  ),
                 ),
+                Container(
+                  width: 1,
+                  height: context.rsi(34),
+                  color: cs.outlineVariant.withValues(alpha: 0.65),
+                ),
+                Expanded(
+                  child: _CareerToggleButton(
+                    label: '경력 선택',
+                    selected: !_noCareerSelected,
+                    onTap: () {
+                      if (!_noCareerSelected) return;
+                      setState(() => _noCareerSelected = false);
+                      _emit();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         SizedBox(height: context.rsi(8)),
+        if (!_noCareerSelected) ...[
+          if (widget.allowStartYearMode) ...[
+            SegmentedButton<CareerInputMode>(
+              segments: const [
+                ButtonSegment(
+                  value: CareerInputMode.directYears,
+                  label: Text('경력 년수'),
+                ),
+                ButtonSegment(
+                  value: CareerInputMode.startYear,
+                  label: Text('시작 연도'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (selection) => _onModeChanged(selection.first),
+            ),
+            SizedBox(height: context.rsi(10)),
+          ],
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _mode == CareerInputMode.directYears
+                ? _iosStylePicker(
+                    key: const ValueKey('career-years'),
+                    context: context,
+                    controller: _yearsController,
+                    itemCount: CareerInputUtils.maxYears + 1,
+                    labelBuilder: CareerInputUtils.pickerLabelForYears,
+                    onSelected: _setYears,
+                  )
+                : _iosStylePicker(
+                    key: const ValueKey('career-start-year'),
+                    context: context,
+                    controller: _startYearController,
+                    itemCount: _startYearItemCount,
+                    labelBuilder: (index) =>
+                        '${CareerInputUtils.indexToStartYear(index)}년',
+                    onSelected: (index) =>
+                        _setStartYear(CareerInputUtils.indexToStartYear(index)),
+                  ),
+          ),
+          SizedBox(height: context.rsi(8)),
+        ],
         Text(
-          _mode == CareerInputMode.directYears
-              ? '경력 ${CareerInputUtils.formatYears(_years)}'
-              : '$_startYear년부터 · 경력 ${CareerInputUtils.formatYears(_years)}',
+          _noCareerSelected
+              ? '경력을 입력하지 않습니다.'
+              : (_mode == CareerInputMode.directYears
+                  ? '경력 ${CareerInputUtils.formatYears(_years)}'
+                  : '$_startYear년부터 · 경력 ${CareerInputUtils.formatYears(_years)}'),
           style: tt.bodySmall?.copyWith(
             color: cs.onSurfaceVariant,
             fontWeight: FontWeight.w600,
@@ -304,6 +362,51 @@ class CareerInputSectionState extends State<CareerInputSection> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CareerToggleButton extends StatelessWidget {
+  const _CareerToggleButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(context.rsi(11)),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: selected ? cs.primaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(context.rsi(11)),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: context.rsi(10),
+            vertical: context.rsi(10),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: tt.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+            ),
+          ),
         ),
       ),
     );

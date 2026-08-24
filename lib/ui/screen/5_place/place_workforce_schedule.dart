@@ -256,11 +256,11 @@ abstract final class PlaceWorkforceSchedule {
   }
 }
 
-/// 인력·투입 화면 캘린더 — [ScrollableCalendarWidget.adaptiveHeightForWeekModes] 상한 힌트.
+/// 작업지시 화면 캘린더 — 기본 2주 모드에 맞춘 높이 상한 힌트.
 double workforceCalendarHeight(BuildContext context) {
   final h = MediaQuery.sizeOf(context).height;
   if (h < 720) {
-    return (h * 0.30).clamp(220.0, 300.0);
+    return (h * 0.28).clamp(200.0, 280.0);
   }
-  return (h * 0.34).clamp(260.0, 380.0);
+  return (h * 0.32).clamp(240.0, 340.0);
 }

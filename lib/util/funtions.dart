@@ -5,6 +5,19 @@ String formatDateTimeToKorean(DateTime dateTime) {
   return ('${dateTime.year}년 ${dateTime.month}월 ${dateTime.day}일');
 }
 
+/// 화면용 짧은 날짜 — `8월 21일 (금)`.
+String formatMonthDayWeek(DateTime d) =>
+    '${d.month}월 ${d.day}일 (${getWeekDay(d.weekday)})';
+
+/// 같은 날이면 하루, 기간이면 `8월 21일 ~ 8월 25일 (5일)`.
+String formatMonthDayRange(DateTime start, DateTime end) {
+  final s = DateTime(start.year, start.month, start.day);
+  final e = DateTime(end.year, end.month, end.day);
+  if (!e.isAfter(s)) return formatMonthDayWeek(s);
+  final days = e.difference(s).inDays + 1;
+  return '${s.month}월 ${s.day}일 ~ ${e.month}월 ${e.day}일 ($days일)';
+}
+
 String formatDateTimeToStringByDot(DateTime dateTime) {
   String month = dateTime.month.toString().padLeft(2, '0');
   String day = dateTime.day.toString().padLeft(2, '0');

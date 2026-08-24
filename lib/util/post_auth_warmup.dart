@@ -10,6 +10,7 @@ import 'package:w0001/presentation/viewmodel/dashboard_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/worker_personal_dashboard_notifier.dart';
 import 'package:w0001/presentation/viewmodel/worker_rank_wage_settings_providers.dart';
+import 'package:w0001/presentation/viewmodel/work_instruction_overview_notifier.dart';
 import 'package:w0001/presentation/viewmodel/worker_schedule_notifier.dart';
 
 /// 로그인·자동 로그인으로 [authSessionProvider]에 사용자가 확정된 직후,
@@ -36,6 +37,11 @@ Future<void> warmUpUserScopedData(
 
   unawaited(
     container.read(workerRankWageSettingsUseCaseProvider).warmUp(),
+  );
+  unawaited(
+    container
+        .read(workInstructionOverviewProvider.notifier)
+        .ensureRange(DateTime.now()),
   );
 
   await Future.wait<void>([

@@ -124,7 +124,8 @@ final class SuperAdminRemoteApi {
       places.create(body);
   Future<PlaceRead> placePatch(int pid, Map<String, dynamic> body) =>
       places.patch(pid, body);
-  Future<void> placeDelete(int pid) => places.delete(pid);
+  Future<void> placeDelete(int pid, {bool permanent = false}) =>
+      places.delete(pid, permanent: permanent);
 
   Future<List<HumanRead>> humansList() => humans.list();
   Future<List<HumanRead>> humansQuery(ListQuery query) => humans.listAll(query);

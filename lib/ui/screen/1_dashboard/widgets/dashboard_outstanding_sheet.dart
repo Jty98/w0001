@@ -59,8 +59,8 @@ class _DashboardOutstandingSheetBody extends ConsumerWidget {
           rsV(context, 4),
           Text(
             rows.isEmpty
-                ? '미수금이 없습니다.'
-                : '총 ${rows.length}곳 · 탭하면 수금 관리로 이동합니다.',
+                ? '현재 미수 잔액이 없습니다.'
+                : '현재 잔액 기준 · 선택 월·연과 무관 · 총 ${rows.length}곳 · 탭하면 수금 관리로 이동합니다.',
             style: tt.labelSmall?.copyWith(
               color: cs.onSurfaceVariant,
               fontWeight: FontWeight.w600,

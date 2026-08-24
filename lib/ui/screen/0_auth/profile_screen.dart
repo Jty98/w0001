@@ -13,6 +13,7 @@ import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/clear_user_providers.dart';
 import 'package:w0001/util/fcm/fcm_token_registration_cache.dart';
 import 'package:w0001/util/notifications/local_notification_inbox_store.dart';
+import 'package:w0001/util/app_toast.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -34,11 +35,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       await ref.read(authUseCaseProvider).logout(allDevices: choice.allDevices);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('로그아웃 요청 중 오류: $e')),
-        );
-      }
+      AppToast.show('로그아웃 처리 중 문제가 있었지만, 이 기기에서는 안전하게 로그아웃할게요.');
     } finally {
       await PendingPostAuthNavigation.clear();
       if (uid != null && uid.isNotEmpty) {
@@ -52,6 +49,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ref.read(authSessionProvider.notifier).clearSession();
       if (mounted) {
         setState(() => _loggingOut = false);
+        AppToast.show('로그아웃이 완료되었습니다. 다음에 또 만나요!');
         context.go('/login');
       }
     }

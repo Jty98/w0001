@@ -20,7 +20,8 @@ Future<CrossPlaceConflictChoice?> showCrossPlaceWorkDayConflictDialog(
       final lines = <Widget>[
         Text(
           '$workdateLabel · 「$currentPlaceName」에 투입하려는 인력 중 '
-          '아래 분은 같은 날 다른 현장에 이미 등록되어 있습니다.',
+          '아래 분은 같은 날 다른 현장에 이미 등록되어 있습니다.\n'
+          '그래도 투입하면 작업지시는 추가되고, 인건비는 그날 1공수만 유지됩니다.',
           style: Theme.of(ctx).textTheme.bodyMedium,
         ),
         SizedBox(height: ctx.rsi(12)),

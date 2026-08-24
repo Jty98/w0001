@@ -144,7 +144,7 @@ class _WorkerDashboardChecklistSectionState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('항목 삭제'),
-        content: Text('"${item.title}" 항목을 삭제할까요?'),
+        content: Text('"${item.displayTitle}" 항목을 삭제할까요?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -576,7 +576,7 @@ class _DashboardChecklistItemTile extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         ),
         title: Text(
-          item.title,
+          item.displayTitle,
           style: tt.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
             decoration: deferred || checked ? TextDecoration.lineThrough : null,

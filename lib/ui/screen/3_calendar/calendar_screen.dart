@@ -11,8 +11,8 @@ import 'package:w0001/ui/screen/3_calendar/widgets/calendar_day_cost_list_skelet
 import 'package:w0001/ui/screen/3_calendar/widgets/calendar_place_cost_summary_row.dart';
 import 'package:w0001/ui/widget/calendar/my_calendar.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
-import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/work_cost_delete_dialog.dart';
+import 'package:w0001/ui/widget/work_unit_price_apply_panel.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:w0001/ui/widget/total_cost_card.dart';
@@ -30,6 +30,47 @@ class CalendarScreen extends ConsumerStatefulWidget {
 
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   late final ScrollController _listScroll;
+
+  Future<bool> _showCostDeleteConfirmDialog(
+    BuildContext context, {
+    required TotalCostModel item,
+  }) async {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          Icons.delete_forever_rounded,
+          color: cs.error,
+          size: context.rs(26),
+        ),
+        title: const Text('지출 내역 삭제'),
+        content: Text(
+          '${item.name}\n${item.date}\n\n삭제한 내역은 복구할 수 없습니다.',
+          style: tt.bodyMedium?.copyWith(
+            height: 1.45,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: cs.error,
+              foregroundColor: cs.onError,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
 
   @override
   void initState() {
@@ -64,6 +105,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           orElse: () => false,
         );
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('캘린더'),
+      ),
       body: Column(
         children: [
           const CalendarWidget(),
@@ -255,13 +299,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                 icon: Icons.delete,
                                 label: '삭제',
                                 onPressed: (slidableCtx) async {
+                                  final rootCtx = context;
                                   if (element.category == 'w') {
                                     final pwdid = await vm
                                         .placeWorkDayPwdidForWorkCost(element);
-                                    if (!slidableCtx.mounted) return;
                                     final choice =
                                         await showWorkCostDeleteDialog(
-                                      slidableCtx,
+                                      rootCtx,
                                       placeName: element.pname,
                                       workerName: element.name,
                                       dateLabel: element.date,
@@ -270,31 +314,51 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                     );
                                     if (choice == null ||
                                         choice == WorkCostDeleteChoice.cancel ||
-                                        !slidableCtx.mounted) {
+                                        !rootCtx.mounted) {
                                       return;
                                     }
-                                    await vm.deleteWorkCostLinked(
-                                      wid: element.id,
-                                      pwdid: choice ==
-                                              WorkCostDeleteChoice
-                                                  .costAndWorkDay
-                                          ? pwdid
-                                          : null,
-                                    );
+                                    try {
+                                      await vm.deleteWorkCostLinked(
+                                        wid: element.id,
+                                        pwdid: choice ==
+                                                WorkCostDeleteChoice
+                                                    .costAndWorkDay
+                                            ? pwdid
+                                            : null,
+                                      );
+                                    } catch (_) {
+                                      if (!rootCtx.mounted) return;
+                                      ScaffoldMessenger.of(rootCtx)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            '삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+                                          ),
+                                        ),
+                                      );
+                                    }
                                     return;
                                   }
-                                  await showDialog<void>(
-                                    context: slidableCtx,
-                                    builder: (dialogCtx) => deleteDialog(
-                                      onPressed: () async {
-                                        await vm.deleteCost(
-                                            element.category, element.id);
-                                        if (dialogCtx.mounted) {
-                                          Navigator.of(dialogCtx).pop();
-                                        }
-                                      },
-                                    ),
+                                  final ok = await _showCostDeleteConfirmDialog(
+                                    rootCtx,
+                                    item: element,
                                   );
+                                  if (!ok || !rootCtx.mounted) return;
+                                  try {
+                                    await vm.deleteCost(
+                                      element.category,
+                                      element.id,
+                                    );
+                                  } catch (_) {
+                                    if (!rootCtx.mounted) return;
+                                    ScaffoldMessenger.of(rootCtx).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          '삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
                               ),
                             ],
@@ -351,113 +415,198 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       color: cs.outlineVariant.withValues(alpha: 0.45),
                     ),
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      context.rsi(16),
-                      context.rsi(14),
-                      context.rsi(16),
-                      context.rsi(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '지출 내역 수정',
-                          style: tt.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        context.rsi(16),
+                        context.rsi(14),
+                        context.rsi(16),
+                        context.rsi(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            element.category == 'w' ? '인건비 금액 수정' : '지출 내역 수정',
+                            style: tt.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: context.rsi(4)),
-                        Text(
-                          '날짜/항목/금액을 수정하고 저장하세요.',
-                          style: tt.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
+                          SizedBox(height: context.rsi(4)),
+                          Text(
+                            element.category == 'w'
+                                ? '공수를 고르거나 금액을 직접 수정해 저장하세요.'
+                                : '날짜/항목/금액을 수정하고 저장하세요.',
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: context.rsi(10)),
-                        _readOnlyDialogDateCalendar(
-                          context,
-                          dialogState.dialogDateTime,
-                        ),
-                        if (element.category != 'w') ...[
-                          SizedBox(height: context.rsi(8)),
-                          SizedBox(
-                            height: 60,
-                            child: DropdownSearch<String>(
-                              items: categoryList,
-                              onChanged: (value) =>
-                                  dialogVm.categoryChangeAction(value!),
-                              selectedItem:
-                                  dialogState.dropDownSelectedCategory,
-                              dropdownDecoratorProps: DropDownDecoratorProps(
-                                dropdownSearchDecoration: InputDecoration(
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                          SizedBox(height: context.rsi(10)),
+                          _readOnlyDialogDateCalendar(
+                            context,
+                            dialogState.dialogDateTime,
+                          ),
+                          if (element.category != 'w') ...[
+                            SizedBox(height: context.rsi(8)),
+                            SizedBox(
+                              height: 60,
+                              child: DropdownSearch<String>(
+                                items: categoryList,
+                                onChanged: (value) =>
+                                    dialogVm.categoryChangeAction(value!),
+                                selectedItem:
+                                    dialogState.dropDownSelectedCategory,
+                                dropdownDecoratorProps: DropDownDecoratorProps(
+                                  dropdownSearchDecoration: InputDecoration(
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
+                          ],
+                          SizedBox(height: context.rsi(8)),
+                          AddTextField(
+                            tController: dialogVm.mNameController,
+                            labelText: '항목',
+                            isPrice: false,
+                            height: 60,
+                            keyboardType: TextInputType.text,
+                            readOnly: element.category == 'w' ? true : false,
+                            onChanged: (value) => dialogVm.clearEditAlert(),
                           ),
-                        ],
-                        SizedBox(height: context.rsi(8)),
-                        AddTextField(
-                          tController: dialogVm.mNameController,
-                          labelText: '항목',
-                          isPrice: false,
-                          height: 60,
-                          keyboardType: TextInputType.text,
-                          readOnly: element.category == 'w' ? true : false,
-                          onChanged: (value) => dialogVm.clearEditAlert(),
-                        ),
-                        SizedBox(height: context.rsi(4)),
-                        AddTextField(
-                          tController: dialogVm.mPriceController,
-                          labelText: '금액',
-                          isPrice: true,
-                          height: 60,
-                          keyboardType: TextInputType.number,
-                          readOnly: false,
-                          onChanged: (value) => dialogVm.clearEditAlert(),
-                        ),
-                        if (dialogState.alertText.isNotEmpty) ...[
-                          SizedBox(height: context.rsi(6)),
-                          Text(
-                            dialogState.alertText,
-                            style: tt.bodySmall?.copyWith(color: cs.error),
-                          ),
-                        ],
-                        SizedBox(height: context.rsi(8)),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  dialogVm.clearEditAlert();
-                                  Navigator.of(dialogContext).pop();
-                                },
-                                child: const Text('취소'),
-                              ),
-                            ),
-                            SizedBox(width: context.rsi(8)),
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: () async {
-                                  final ok = await dialogVm.updateCost(
-                                    element.category,
-                                    element.id,
-                                    dialogState.dialogDateTime.toString(),
-                                  );
-                                  if (ok && dialogContext.mounted) {
-                                    Navigator.of(dialogContext).pop();
-                                  }
-                                },
-                                child: const Text('수정 저장'),
-                              ),
+                          if (element.category == 'w') ...[
+                            SizedBox(height: context.rsi(10)),
+                            WorkUnitPriceApplyPanel(
+                              priceController: dialogVm.mPriceController,
+                              currentPrice: element.price,
+                              workerHid: element.whid,
+                              onApplied: dialogVm.clearEditAlert,
                             ),
                           ],
-                        ),
-                      ],
+                          SizedBox(height: context.rsi(4)),
+                          AddTextField(
+                            tController: dialogVm.mPriceController,
+                            labelText: '금액',
+                            isPrice: true,
+                            height: 60,
+                            keyboardType: TextInputType.number,
+                            readOnly: false,
+                            onChanged: (value) => dialogVm.clearEditAlert(),
+                          ),
+                          if (dialogState.alertText.isNotEmpty) ...[
+                            SizedBox(height: context.rsi(6)),
+                            Text(
+                              dialogState.alertText,
+                              style: tt.bodySmall?.copyWith(color: cs.error),
+                            ),
+                          ],
+                          if (element.category == 'w' &&
+                              element.whid != null &&
+                              element.wpid != null &&
+                              element.wpid! > 0) ...[
+                            SizedBox(height: context.rsi(8)),
+                            OutlinedButton.icon(
+                              icon: Icon(
+                                Icons.remove_circle_outline_rounded,
+                                color: cs.error,
+                                size: context.rsi(18),
+                              ),
+                              label: const Text('이 현장 투입 빼기'),
+                              onPressed: () async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('현장 투입 빼기'),
+                                    content: Text(
+                                      '${element.name} · ${element.pname}\n'
+                                      '${formatDateTimeWeekDayToString(dialogState.dialogDateTime)}\n\n'
+                                      '이 현장 투입만 제거합니다.\n'
+                                      '다른 현장 투입이 남아 있으면 인건비(1공수)는 유지됩니다.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(false),
+                                        child: const Text('취소'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(true),
+                                        child: const Text('현장 빼기'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (ok != true) return;
+                                try {
+                                  await dialogVm
+                                      .unassignSameDayPlaceFromWorkCost(
+                                    element,
+                                  );
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                } catch (_) {
+                                  if (!dialogContext.mounted) return;
+                                  ScaffoldMessenger.of(dialogContext)
+                                      .showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        '현장 투입을 빼지 못했습니다. 잠시 후 다시 시도해 주세요.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                          SizedBox(height: context.rsi(8)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    dialogVm.clearEditAlert();
+                                    Navigator.of(dialogContext).pop();
+                                  },
+                                  child: const Text('취소'),
+                                ),
+                              ),
+                              SizedBox(width: context.rsi(8)),
+                              Expanded(
+                                child: FilledButton(
+                                  onPressed: () async {
+                                    try {
+                                      final ok = await dialogVm.updateCost(
+                                        element.category,
+                                        element.id,
+                                        dialogState.dialogDateTime.toString(),
+                                      );
+                                      if (ok && dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    } catch (_) {
+                                      if (!dialogContext.mounted) return;
+                                      ScaffoldMessenger.of(dialogContext)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            '수정에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: const Text('수정 저장'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

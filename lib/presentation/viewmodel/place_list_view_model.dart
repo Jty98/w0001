@@ -17,6 +17,7 @@ import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/domain/use_case/human_use_case.dart';
 import 'package:w0001/domain/use_case/place_use_case.dart';
 import 'package:w0001/domain/place_list_display.dart';
+import 'package:w0001/domain/place_delete_error.dart';
 import 'package:w0001/domain/place_work_period_display.dart';
 import 'package:w0001/enums.dart';
 import 'package:w0001/data/datasources/remote/http_client.dart';
@@ -207,9 +208,14 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     if (!ref.mounted) return;
     _prefsRestored = true;
     _prefsUid = uid;
+    final restoredState = prefs.placeState == PlaceState.archived
+        ? PlaceState.incomplete
+        : prefs.placeState;
     state = state.copyWith(
-      placeState: prefs.placeState,
-      sortMode: prefs.sortMode,
+      placeState: restoredState,
+      sortMode: prefs.placeState == PlaceState.archived
+          ? PlaceListSortMode.defaultFor(PlaceState.incomplete)
+          : prefs.sortMode,
       favoritePids: prefs.favoritePids,
     );
   }
@@ -238,7 +244,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
   ListQuery _buildListQuery({String? cursor}) {
     final q = state.searchQuery.trim();
     return ListQuery(
-      pcomplete: state.placeState == PlaceState.complete ? 1 : 0,
+      pcomplete: pcompleteQueryForPlaceState(state.placeState),
       q: q.isEmpty ? null : q,
       limit: kPlaceListPageSize,
       cursor: cursor,
@@ -566,8 +572,11 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
 
   void stateValueChanged(PlaceState? value) {
     if (value == null || value == state.placeState) return;
+    // 보관은 설정 → 보관 현장에서만 관리.
+    if (value == PlaceState.archived) return;
     state = state.copyWith(
       placeState: value,
+      sortMode: PlaceListSortMode.defaultFor(value),
       placeList: const [],
       filteredPlaceList: const [],
       clearNextCursor: true,
@@ -576,6 +585,23 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     );
     unawaited(_persistLocalPreferences());
     unawaited(refreshPlaces(force: true));
+  }
+
+  /// 보관(pcomplete=2) 현장을 진행중(0) 또는 완료(1)로 복구.
+  Future<void> restoreArchivedPlace(
+    int index, {
+    required int toPcomplete,
+  }) async {
+    if (toPcomplete != 0 && toPcomplete != 1) return;
+    final current = state.filteredPlaceList[index];
+    if (current.pid == null || current.pcomplete != 2) return;
+    final endDate = pendWhenTogglingToComplete(current);
+    await _useCase.updatePlaceCompletionStatus(
+      current.pid!,
+      toPcomplete,
+      endDate,
+    );
+    await refreshPlaces(force: true);
   }
 
   void setSearchQuery(String query) {
@@ -642,9 +668,10 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     await fetchAllPlace();
   }
 
-  Future<void> deletePlace(int pid) async {
+  /// soft delete (`pcomplete=2`) 또는 [permanent] 영구삭제.
+  Future<void> deletePlace(int pid, {bool permanent = false}) async {
     try {
-      await _useCase.deletePlace(pid);
+      await _useCase.deletePlace(pid, permanent: permanent);
       await PlaceContractDeadlineStorage.remove(pid);
       if (ref.mounted) {
         final next = Map<int, String>.from(state.contractPendByPid);
@@ -655,7 +682,7 @@ class PlaceListViewModel extends Notifier<PlaceListState> {
     } catch (e, st) {
       debugPrint('deletePlace failed: $e\n$st');
       state = state.copyWith(
-        updateText: '현장 삭제에 실패했습니다. 네트워크를 확인해 주세요.',
+        updateText: userMessageForPlaceDeleteFailure(e),
       );
       rethrow;
     }

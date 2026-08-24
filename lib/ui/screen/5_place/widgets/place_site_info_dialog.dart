@@ -4,8 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/data/model/place_site_guide_model.dart';
+import 'package:w0001/presentation/viewmodel/worker_supply_map_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_site_guide_providers.dart';
+import 'package:w0001/ui/widget/map_route_action_buttons.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/map_navigation_launcher.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
@@ -141,6 +144,31 @@ class _PlaceSiteInfoDialogBodyState
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('주소를 복사했습니다.')),
     );
+  }
+
+  Future<void> _openKakaoRoute({required String address}) async {
+    final query = navigablePlaceAddress(address);
+    if (query.isEmpty) return;
+    final kakaoLocal = ref.read(kakaoLocalMapApiProvider);
+    final resolved = await kakaoLocal.resolveBestMatch(address: query);
+    if (!mounted) return;
+    if (resolved != null) {
+      await MapNavigationLauncher.openKakaoNaviRoute(
+        destinationName: query,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('경로 좌표를 찾지 못해 카카오내비 안내를 시작할 수 없습니다.')),
+    );
+  }
+
+  Future<void> _openTmapRoute({required String address}) async {
+    final query = navigablePlaceAddress(address);
+    if (query.isEmpty) return;
+    await MapNavigationLauncher.openTmapSearch(query);
   }
 
   String _formatSavedAt(DateTime dt) {
@@ -290,6 +318,12 @@ class _PlaceSiteInfoDialogBodyState
                       place: widget.place,
                       onCopyAddress:
                           addr.isEmpty ? null : () => _copyAddress(addr),
+                      onKakaoRoute: addr.isEmpty
+                          ? null
+                          : () => _openKakaoRoute(address: addr),
+                      onTmapRoute: addr.isEmpty
+                          ? null
+                          : () => _openTmapRoute(address: addr),
                     ),
                     rsV(context, 18),
                     Text(
@@ -408,6 +442,8 @@ class _UnifiedInfoSection extends StatelessWidget {
     required this.showMoney,
     required this.place,
     required this.onCopyAddress,
+    required this.onKakaoRoute,
+    required this.onTmapRoute,
   });
 
   final String address;
@@ -415,6 +451,8 @@ class _UnifiedInfoSection extends StatelessWidget {
   final bool showMoney;
   final PlaceInfoModel place;
   final VoidCallback? onCopyAddress;
+  final VoidCallback? onKakaoRoute;
+  final VoidCallback? onTmapRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -453,6 +491,15 @@ class _UnifiedInfoSection extends StatelessWidget {
                       visualDensity: VisualDensity.compact,
                     ),
             ),
+            if (!addrEmpty && onKakaoRoute != null && onTmapRoute != null) ...[
+              rsV(context, 8),
+              MapRouteActionButtons(
+                compact: true,
+                onCopyAddress: onCopyAddress,
+                onKakao: onKakaoRoute!,
+                onTmap: onTmapRoute!,
+              ),
+            ],
             rsV(context, 8),
             _InfoLine(
               icon: Icons.date_range_outlined,

@@ -51,8 +51,8 @@ class PlaceUseCase {
     return _repository.updatePlaceCompletionStatus(pid, pcomplete, endDate);
   }
 
-  Future<void> deletePlace(int pid) {
-    return _repository.deletePlace(pid);
+  Future<void> deletePlace(int pid, {bool permanent = false}) {
+    return _repository.deletePlace(pid, permanent: permanent);
   }
 
   Future<List<PlaceModel>> getIncompletePlaces() {

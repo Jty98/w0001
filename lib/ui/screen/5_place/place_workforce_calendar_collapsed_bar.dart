@@ -35,10 +35,10 @@ class PlaceWorkforceCalendarCollapsedBar extends StatelessWidget {
       color: cs.surfaceContainerLow,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          context.rsi(2),
-          context.rsi(2),
           context.rsi(4),
-          context.rsi(2),
+          context.rsi(4),
+          context.rsi(4),
+          context.rsi(4),
         ),
         child: Row(
           children: [
@@ -46,57 +46,55 @@ class PlaceWorkforceCalendarCollapsedBar extends StatelessWidget {
               tooltip: '이전 날',
               onPressed: onPreviousDay,
               visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints(
-                minWidth: context.rs(36),
-                minHeight: context.rs(36),
-              ),
               icon: Icon(Icons.chevron_left_rounded, size: context.rs(26)),
             ),
             Expanded(
-              child: InkWell(
-                onTap: onExpand,
-                borderRadius: BorderRadius.circular(context.rs(8)),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: context.rsi(6)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.calendar_month_outlined,
-                        size: context.rs(18),
-                        color: cs.primary,
-                      ),
-                      SizedBox(width: context.rsi(6)),
-                      Flexible(
-                        child: Text.rich(
-                          TextSpan(
+              child: Material(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(context.rs(12)),
+                child: InkWell(
+                  onTap: onExpand,
+                  borderRadius: BorderRadius.circular(context.rs(12)),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: context.rsi(12),
+                      vertical: context.rsi(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.calendar_month_outlined,
+                          size: context.rs(18),
+                          color: cs.primary,
+                        ),
+                        SizedBox(width: context.rsi(8)),
+                        Flexible(
+                          child: Text(
+                            _dayLabel(selectedDay),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
                             style: tt.labelLarge?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
-                            children: [
-                              TextSpan(text: _dayLabel(selectedDay)),
-                              TextSpan(
-                                text: ' · 펼치기',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.primary,
-                                ),
-                              ),
-                            ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
                         ),
-                      ),
-                      SizedBox(width: context.rsi(2)),
-                      Icon(
-                        Icons.expand_more_rounded,
-                        size: context.rs(20),
-                        color: cs.primary,
-                      ),
-                    ],
+                        SizedBox(width: context.rsi(6)),
+                        Text(
+                          '펼치기',
+                          style: tt.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: cs.primary,
+                          ),
+                        ),
+                        Icon(
+                          Icons.expand_more_rounded,
+                          size: context.rs(18),
+                          color: cs.primary,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -105,11 +103,6 @@ class PlaceWorkforceCalendarCollapsedBar extends StatelessWidget {
               tooltip: '다음 날',
               onPressed: onNextDay,
               visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints(
-                minWidth: context.rs(36),
-                minHeight: context.rs(36),
-              ),
               icon: Icon(Icons.chevron_right_rounded, size: context.rs(26)),
             ),
           ],
@@ -119,7 +112,7 @@ class PlaceWorkforceCalendarCollapsedBar extends StatelessWidget {
   }
 }
 
-/// 캘린더 펼침 시 — 바로 아래 전체 너비 「캘린더 접기」 (접힌 바와 대칭).
+/// 캘린더 펼침 시 — 바로 아래 「캘린더 접기」.
 class PlaceWorkforceCalendarCollapseBar extends StatelessWidget {
   const PlaceWorkforceCalendarCollapseBar({
     super.key,
@@ -134,7 +127,7 @@ class PlaceWorkforceCalendarCollapseBar extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     return Material(
-      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
       child: InkWell(
         onTap: onCollapse,
         child: Padding(
@@ -147,12 +140,12 @@ class PlaceWorkforceCalendarCollapseBar extends StatelessWidget {
             children: [
               Icon(
                 Icons.keyboard_arrow_up_rounded,
-                size: context.rs(22),
+                size: context.rs(20),
                 color: cs.primary,
               ),
               SizedBox(width: context.rsi(4)),
               Text(
-                '캘린더 접기',
+                '캘린더 접기 · 목록 공간 확보',
                 style: tt.labelLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                   color: cs.primary,

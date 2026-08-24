@@ -147,6 +147,34 @@ class _OperatorSettingsScreenState
                 ),
               ),
 
+              SizedBox(height: context.rsi(20)),
+              const ProfileSectionTitle('현장'),
+              SizedBox(height: context.rsi(8)),
+              ProfileInsetPanel(
+                padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(
+                    Icons.inventory_2_outlined,
+                    color: colorScheme.primary,
+                    size: context.rsi(22),
+                  ),
+                  title: Text(
+                    '삭제 현장',
+                    style: TextStyle(fontSize: context.rs(14)),
+                  ),
+                  subtitle: Text(
+                    '숨긴 현장 복구',
+                    style: TextStyle(fontSize: context.rs(12)),
+                  ),
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    size: context.rsi(20),
+                  ),
+                  onTap: () => context.push('/settings/archived-places'),
+                ),
+              ),
+
               // 작업자 관리 섹션
               if (canAccessWorkerMgmt) ...[
                 SizedBox(height: context.rsi(20)),
@@ -156,6 +184,32 @@ class _OperatorSettingsScreenState
                   padding: EdgeInsets.symmetric(vertical: context.rsi(2)),
                   child: Column(
                     children: [
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.badge_outlined,
+                          color: colorScheme.primary,
+                          size: context.rsi(22),
+                        ),
+                        title: Text(
+                          '인력 관리',
+                          style: TextStyle(fontSize: context.rs(14)),
+                        ),
+                        subtitle: Text(
+                          '회원/비회원 인력 등록 및 정보 수정',
+                          style: TextStyle(fontSize: context.rs(12)),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rsi(20),
+                        ),
+                        onTap: () => context.push('/work/human'),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: context.rsi(48),
+                        color: colorScheme.outlineVariant,
+                      ),
                       ListTile(
                         dense: true,
                         leading: Icon(
@@ -191,11 +245,11 @@ class _OperatorSettingsScreenState
                           size: context.rsi(22),
                         ),
                         title: Text(
-                          '역할별 기본 일당',
+                          '역할별 금액 · 공수 설정',
                           style: TextStyle(fontSize: context.rs(14)),
                         ),
                         subtitle: Text(
-                          '조공·준기공·기공·반장·감리 역할별 인건비',
+                          '역할별 기본 일당(1공수) · ×배율 / +가산',
                           style: TextStyle(fontSize: context.rs(12)),
                         ),
                         trailing: Icon(

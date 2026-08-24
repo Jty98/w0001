@@ -16,7 +16,6 @@ import 'package:w0001/domain/data_change_event.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/ui/widget/add_text_field.dart';
-import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/auth_models.dart';
@@ -26,6 +25,7 @@ import 'package:w0001/domain/place_list_display.dart';
 import 'package:w0001/domain/place_work_period_display.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'package:w0001/ui/screen/5_place/widgets/place_delete_options_dialog.dart';
 import 'package:w0001/ui/widget/paged_list_footer.dart';
 import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
@@ -509,7 +509,9 @@ class PlaceScreen extends ConsumerWidget {
     return Padding(
       padding: ResponsiveLayout.symmetric(context, vertical: 10),
       child: CupertinoSlidingSegmentedControl<PlaceState>(
-        groupValue: state.placeState,
+        groupValue: state.placeState == PlaceState.archived
+            ? PlaceState.incomplete
+            : state.placeState,
         children: const {
           PlaceState.incomplete: Text('진행중'),
           PlaceState.complete: Text('완료'),
@@ -1006,9 +1008,13 @@ class PlaceScreen extends ConsumerWidget {
                       rsV(context, 10),
                       Builder(
                         builder: (context) {
-                          final remainder = element.pcontractTotal -
-                              element.wTotal -
-                              element.mTotal;
+                          final collectedRevenue = element.pfirstrevenue +
+                              element.totalAdditionalRevenue;
+                          final remainder = (element.pcontractTotal -
+                                  collectedRevenue) <
+                              0
+                              ? 0
+                              : (element.pcontractTotal - collectedRevenue);
                           final remainderColor = remainder < 0
                               ? Theme.of(context).colorScheme.error
                               : null;
@@ -1186,17 +1192,18 @@ class PlaceScreen extends ConsumerWidget {
               backgroundColor: cs.error,
               icon: Icons.delete,
               label: '삭제',
-              onPressed: (slidableCtx) => showDialog<void>(
-                context: slidableCtx,
-                builder: (dialogCtx) => deleteDialog(
-                  onPressed: () =>
-                      viewModel.deletePlace(element.pid!).then((value) {
+              onPressed: (slidableCtx) async {
+                final pid = element.pid!;
+                await showPlaceDeleteOptionsDialog(
+                  context: slidableCtx,
+                  placeName: element.pname,
+                  onDelete: ({required bool permanent}) async {
+                    await viewModel.deletePlace(pid, permanent: permanent);
                     FetchData.onDataChanged(DataChangeEvent.placeSaved);
                     ref.read(addCostProvider.notifier).clearSelectedPlace();
-                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-                  }),
-                ),
-              ),
+                  },
+                );
+              },
             ),
           ],
         ),

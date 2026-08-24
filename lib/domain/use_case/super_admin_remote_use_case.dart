@@ -87,7 +87,8 @@ class SuperAdminRemoteUseCase {
       _repository.placeCreate(body);
   Future<PlaceRead> placePatch(int pid, Map<String, dynamic> body) =>
       _repository.placePatch(pid, body);
-  Future<void> placeDelete(int pid) => _repository.placeDelete(pid);
+  Future<void> placeDelete(int pid, {bool permanent = false}) =>
+      _repository.placeDelete(pid, permanent: permanent);
 
   // Humans
   Future<List<HumanRead>> humansList() => _repository.humansList();

@@ -34,9 +34,10 @@ class PlaceChecklistRemoteRepository implements PlaceChecklistRepository {
     if (trimmedTitle.isEmpty) {
       throw ArgumentError('체크리스트 제목이 비어 있습니다.');
     }
+    final trimmedGroup = item.processGroup.trim();
     final normalized = item.copyWith(
       title: trimmedTitle,
-      processGroup: item.processGroup.trim(),
+      processGroup: trimmedGroup.isEmpty ? trimmedTitle : trimmedGroup,
     );
     if (normalized.id.isEmpty) {
       return _api.createItem(pid: placeId, item: normalized);

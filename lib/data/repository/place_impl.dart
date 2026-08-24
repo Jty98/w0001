@@ -15,6 +15,7 @@ import 'package:w0001/data/model/remote/super_admin_dtos.dart';
 import 'package:w0001/data/model/total_cost_model.dart';
 import 'package:w0001/domain/repository/dashboard_remote_abst.dart';
 import 'package:w0001/domain/cost_place_picker_filter.dart';
+import 'package:w0001/domain/place_archive.dart';
 import 'package:w0001/domain/repository/place_abst.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
 import 'package:w0001/data/datasources/remote/list_query.dart';
@@ -522,8 +523,8 @@ class PlaceRepositoryImpl implements PlaceRepository {
   }
 
   @override
-  Future<void> deletePlace(int pid) {
-    return _sa.placeDelete(pid);
+  Future<void> deletePlace(int pid, {bool permanent = false}) {
+    return _sa.placeDelete(pid, permanent: permanent);
   }
 
   @override
@@ -614,7 +615,7 @@ class PlaceRepositoryImpl implements PlaceRepository {
           : w.wrole.trim();
       out.add(
         TotalCostModel(
-          pname: p0.pname,
+          pname: formatPlaceDisplayName(p0.pname, pcomplete: p0.pcomplete),
           pcomplete: p0.pcomplete,
           name: h.hname,
           date: w.wdate,
@@ -633,7 +634,7 @@ class PlaceRepositoryImpl implements PlaceRepository {
       if (m.mpid != pid) continue;
       out.add(
         TotalCostModel(
-          pname: p0.pname,
+          pname: formatPlaceDisplayName(p0.pname, pcomplete: p0.pcomplete),
           pcomplete: p0.pcomplete,
           name: m.mname,
           date: m.mdate,

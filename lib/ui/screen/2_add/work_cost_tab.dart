@@ -7,13 +7,16 @@ import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
-import 'package:w0001/ui/screen/2_add/add_worker_dialog.dart';
+import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
+import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
+import 'package:w0001/ui/screen/4_human/widgets/human_editor_dialog.dart';
 import 'package:w0001/ui/screen/2_add/place_recent_workers_sheet.dart';
 import 'package:w0001/ui/screen/2_add/work_role_chip_panel.dart';
 import 'package:w0001/ui/screen/2_add/work_role_suggestions.dart';
 import 'package:w0001/ui/widget/date_card_widget.dart';
 import 'package:w0001/ui/widget/keyboard_aware.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/human_work_assignability.dart';
 import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
@@ -64,10 +67,28 @@ class _WorkCostTabState extends ConsumerState<WorkCostTab> {
                       height: context.rs(48),
                       width: context.rs(48),
                       child: OutlinedButton(
-                        onPressed: () => showDialog<void>(
-                          context: context,
-                          builder: (_) => const AddWorkerDialog(),
-                        ).then((_) => vm.clearDialogText()),
+                        onPressed: () async {
+                          if (ref.read(addCostProvider).selectedPlace == null) {
+                            ScaffoldMessenger.of(context).clearSnackBars();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('현장을 먼저 선택해주세요.'),
+                              ),
+                            );
+                            return;
+                          }
+                          ref
+                              .read(workerProvider.notifier)
+                              .cancelHumanEditorForm();
+                          final added = await showHumanEditorDialog(
+                            context: context,
+                            ref: ref,
+                          );
+                          if (added == null || !context.mounted) return;
+                          final selected =
+                              ref.read(addCostProvider).selectedWorkers;
+                          await vm.workersChangeAction([...selected, added]);
+                        },
                         style: OutlinedButton.styleFrom(
                           padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
@@ -141,7 +162,13 @@ Widget _placeRecentWorkersSection(BuildContext context, WidgetRef ref) {
   final state = ref.watch(addCostProvider);
   final vm = ref.read(addCostProvider.notifier);
   final cs = Theme.of(context).colorScheme;
-  final recent = state.placeRecentWorkers;
+  final blocked =
+      ref.watch(nonAssignableMemberUidsProvider).asData?.value ??
+          const <String>{};
+  final recent = filterAssignableHumans(
+    state.placeRecentWorkers,
+    blockedMemberUids: blocked,
+  );
 
   if (state.selectedPlace == null) {
     return Padding(
@@ -687,17 +714,23 @@ Widget humanDropdownSearch(BuildContext context, WidgetRef ref) {
   final tt = Theme.of(context).textTheme;
   final cs = Theme.of(context).colorScheme;
 
+  Future<List<HumanModel>> loadAssignable(String text) async {
+    final q = text.trim();
+    final uc = ref.read(humanUseCaseProvider);
+    final raw = q.isEmpty
+        ? await uc.getAllWorkers()
+        : await uc.searchWorkers(q: q);
+    var blocked = const <String>{};
+    try {
+      blocked = await ref.read(nonAssignableMemberUidsProvider.future);
+    } catch (_) {}
+    return filterAssignableHumans(raw, blockedMemberUids: blocked);
+  }
+
   return SizedBox(
     height: context.rs(48),
     child: DropdownSearch<HumanModel>.multiSelection(
-      asyncItems: (text) {
-        final q = text.trim();
-        final uc = ref.read(humanUseCaseProvider);
-        if (q.isEmpty) {
-          return uc.getAllWorkers();
-        }
-        return uc.searchWorkers(q: q);
-      },
+      asyncItems: loadAssignable,
       itemAsString: (item) => item.hname,
       compareFn: (a, b) => a.hid != null && b.hid != null && a.hid == b.hid,
       onChanged: (values) async {
@@ -709,7 +742,21 @@ Widget humanDropdownSearch(BuildContext context, WidgetRef ref) {
           );
           return;
         }
-        await vm.workersChangeAction(values);
+        var blocked = const <String>{};
+        try {
+          blocked = await ref.read(nonAssignableMemberUidsProvider.future);
+        } catch (_) {}
+        final assignable =
+            filterAssignableHumans(values, blockedMemberUids: blocked);
+        if (assignable.length < values.length && context.mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('활동 정지·미승인 회원은 선택할 수 없습니다.'),
+            ),
+          );
+        }
+        await vm.workersChangeAction(assignable);
       },
       // multiSelection 기본은 선택된 항목을 파란 Chip 형태로 필드에 노출한다.
       // 이 화면에서는 Summary 카드에서만 보여주므로, 필드는 "N명 선택됨" 텍스트로만 표시.

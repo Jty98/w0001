@@ -229,37 +229,20 @@ class WorkerPersonalDashboardNotifier
   WorkerDashboardTotals? yearTotals = s.yearTotals;
 
   if (monthTotals == null && query.isMonthly && s.workDays.isNotEmpty) {
-    var e = 0, pd = 0, o = 0;
-    for (final w in s.workDays) {
-      e += w.effectiveWorkedAmount;
-      pd += w.effectiveSettledAmount;
-      o += w.effectiveUnsettledAmount;
-    }
-    monthTotals = WorkerDashboardTotals(
-      totalEarned: e,
-      totalPaid: pd,
-      totalOutstanding: o,
-    );
+    monthTotals = workerDashboardTotalsFromWorkDays(s.workDays);
   }
 
   if (yearTotals == null && !query.isMonthly && s.workDays.isNotEmpty) {
-    var e = 0, pd = 0, o = 0;
-    for (final w in s.workDays) {
-      e += w.effectiveWorkedAmount;
-      pd += w.effectiveSettledAmount;
-      o += w.effectiveUnsettledAmount;
-    }
-    yearTotals = WorkerDashboardTotals(
-      totalEarned: e,
-      totalPaid: pd,
-      totalOutstanding: o,
-    );
+    yearTotals = workerDashboardTotalsFromWorkDays(s.workDays);
   }
 
   final chartLabels = List.generate(12, (i) => '${i + 1}월');
   final counts = List<double>.filled(12, 0);
+  final seenDay = <String>{};
   for (final w in chartWorkDays) {
-    final mo = _monthOfIso(w.dateKey);
+    final k = w.dateKey;
+    if (k.isEmpty || !seenDay.add(k)) continue;
+    final mo = _monthOfIso(k);
     if (mo == null || mo < 1 || mo > 12) continue;
     counts[mo - 1] += 1;
   }
@@ -286,7 +269,9 @@ List<WorkerDashboardPlaceRollup> _resolvePlaceRollups({
     return monthSummary.placeRollups;
   }
   if (query.isMonthly) {
-    final fromMonth = _rollupPlacesByPid(monthSummary.workDays);
+    final fromMonth = workerDashboardPlaceRollupsFromWorkDays(
+      monthSummary.workDays,
+    );
     if (fromMonth.isNotEmpty) return fromMonth;
   }
   if (yearSummary.placeRollups.isNotEmpty) {
@@ -295,39 +280,7 @@ List<WorkerDashboardPlaceRollup> _resolvePlaceRollups({
   final days = query.isMonthly
       ? monthSummary.workDays
       : _workDaysForChartYear(yearSummary, query.year);
-  return _rollupPlacesByPid(days);
-}
-
-/// `work_days`를 현장(pid)별 금액으로 합산.
-List<WorkerDashboardPlaceRollup> _rollupPlacesByPid(
-  Iterable<WorkerDashboardWorkDay> workDays,
-) {
-  final byPid = <int, _WorkDayPidAgg>{};
-  for (final w in workDays) {
-    final pid = _rollupPidKey(w);
-    if (pid == 0) continue;
-    final agg = byPid.putIfAbsent(pid, () => _WorkDayPidAgg());
-    if (agg.placeName.isEmpty && w.placeName.trim().isNotEmpty) {
-      agg.placeName = w.placeName.trim();
-    }
-    agg.worked += w.effectiveWorkedAmount;
-    agg.settled += w.effectiveSettledAmount;
-    agg.unsettled += w.effectiveUnsettledAmount;
-  }
-  final out = byPid.entries
-      .map(
-        (e) => WorkerDashboardPlaceRollup(
-          pid: e.key,
-          placeName:
-              e.value.placeName.isEmpty ? '현장 #${e.key}' : e.value.placeName,
-          workedTotal: e.value.worked,
-          settledTotal: e.value.settled,
-          unsettledTotal: e.value.unsettled,
-        ),
-      )
-      .toList(growable: false)
-    ..sort((a, b) => a.placeName.compareTo(b.placeName));
-  return out;
+  return workerDashboardPlaceRollupsFromWorkDays(days);
 }
 
 /// 월별 차트용: [summary]의 `work_days` 중 [year] 연도인 행만 (날짜 키 기준).
@@ -341,20 +294,6 @@ List<WorkerDashboardWorkDay> _workDaysForChartYear(
     if (y == year) out.add(w);
   }
   return out;
-}
-
-int _rollupPidKey(WorkerDashboardWorkDay w) {
-  if (w.pid > 0) return w.pid;
-  final name = w.placeName.trim();
-  if (name.isEmpty) return 0;
-  return -name.hashCode;
-}
-
-class _WorkDayPidAgg {
-  String placeName = '';
-  int worked = 0;
-  int settled = 0;
-  int unsettled = 0;
 }
 
 int? _yearOfIso(String key) {

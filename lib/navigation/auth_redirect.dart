@@ -93,6 +93,7 @@ String? authRedirect(ProviderContainer container, GoRouterState state) {
     if (loc == '/profile') {
       return '/dashboard/profile';
     }
+    // 관리자 /add 브랜치는 작업지시 탭이다.
   }
 
   return null;

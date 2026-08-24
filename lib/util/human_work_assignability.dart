@@ -98,6 +98,22 @@ String humanWorkAssignBlockMessage(
   return '작업에 투입할 수 없는 회원입니다.';
 }
 
+/// 삭제되지 않았고 작업 투입 가능한 인력만.
+List<HumanModel> filterAssignableHumans(
+  Iterable<HumanModel> humans, {
+  Set<String> blockedMemberUids = const {},
+}) {
+  return humans
+      .where((h) => h.hdelete == 0)
+      .where(
+        (h) => humanCanBeAssignedToWork(
+          h,
+          blockedMemberUids: blockedMemberUids,
+        ),
+      )
+      .toList();
+}
+
 /// `GET /users/search` — 투입 불가 회원 uid 집합 (서버가 humans에 상태를 안 줄 때 폴백).
 Future<Set<String>> fetchNonAssignableMemberUids(
   SuperAdminRemoteUseCase uc,

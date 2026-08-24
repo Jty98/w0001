@@ -9,6 +9,7 @@ import 'package:w0001/data/model/worker_announcement_models.dart';
 import 'package:w0001/presentation/viewmodel/field_knowledge_providers.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_quill_codec.dart';
 import 'package:w0001/ui/screen/announcements/worker_announcement_rich_quill.dart';
+import 'package:w0001/ui/screen/extras/hardware_dictionary_style.dart';
 import 'package:w0001/ui/screen/extras/widgets/construction_examples_editor.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
 import 'package:w0001/util/image_attachment/upload_image_remote.dart';
@@ -21,10 +22,12 @@ class FieldKnowledgeEditorScreen extends ConsumerStatefulWidget {
     super.key,
     required this.type,
     this.existingEntry,
+    this.initialHardwareKind,
   });
 
   final KnowledgeEntryType type;
   final KnowledgeEntry? existingEntry;
+  final HardwareDictionaryKind? initialHardwareKind;
 
   @override
   ConsumerState<FieldKnowledgeEditorScreen> createState() =>
@@ -39,6 +42,7 @@ class _FieldKnowledgeEditorScreenState
   late final TextEditingController _tagController;
   late bool _isActive;
   final List<String> _categories = [];
+  late HardwareDictionaryKind _hardwareKind;
   final List<String> _tags = [];
   final List<String> _imageUrls = [];
   final List<ConstructionExample> _bestExamples = [];
@@ -50,6 +54,18 @@ class _FieldKnowledgeEditorScreenState
   // Quill 에디터 (공정 가이드용)
   late quill.QuillController _quillController;
   late FocusNode _quillFocusNode;
+
+  String get _editorTitle {
+    if (widget.type == KnowledgeEntryType.material) {
+      return _hardwareKind.label;
+    }
+    return widget.type.displayName;
+  }
+
+  bool get _isHardwareEditor => widget.type == KnowledgeEntryType.material;
+
+  bool get _isToolEditor =>
+      _isHardwareEditor && _hardwareKind == HardwareDictionaryKind.tool;
 
   @override
   void initState() {
@@ -76,7 +92,18 @@ class _FieldKnowledgeEditorScreenState
     }
 
     if (entry != null) {
-      _categories.addAll(entry.categories);
+      _hardwareKind = widget.type == KnowledgeEntryType.material
+          ? KnowledgeCategories.hardwareKindOf(entry.categories)
+          : HardwareDictionaryKind.material;
+      if (widget.type == KnowledgeEntryType.material) {
+        final subcategory = KnowledgeCategories.primarySubcategory(
+          entry.categories,
+          kind: _hardwareKind,
+        );
+        if (subcategory != null) _categories.add(subcategory);
+      } else {
+        _categories.addAll(entry.categories);
+      }
       _tags.addAll(entry.tags);
       _imageUrls.addAll(entry.imageUrls);
       final examples = entry.constructionExamples;
@@ -84,6 +111,9 @@ class _FieldKnowledgeEditorScreenState
         _bestExamples.addAll(examples.bestExamples);
         _worstExamples.addAll(examples.worstExamples);
       }
+    } else {
+      _hardwareKind =
+          widget.initialHardwareKind ?? HardwareDictionaryKind.material;
     }
   }
 
@@ -100,7 +130,7 @@ class _FieldKnowledgeEditorScreenState
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    // 카테고리 검증 (자재사전, 용어사전, 공정 가이드)
+    // 카테고리 검증 (철물 사전, 용어사전, 공정 가이드)
     if (widget.type != KnowledgeEntryType.constructionCase &&
         _categories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,6 +174,13 @@ class _FieldKnowledgeEditorScreenState
       plainContent = _contentController.text.trim();
     }
 
+    final categories = widget.type == KnowledgeEntryType.material
+        ? KnowledgeCategories.composeHardwareCategories(
+            kind: _hardwareKind,
+            subcategories: _categories,
+          )
+        : List<String>.from(_categories);
+
     final entry = KnowledgeEntry(
       id: widget.existingEntry?.id ?? 0,
       type: widget.type,
@@ -151,8 +188,11 @@ class _FieldKnowledgeEditorScreenState
       content: plainContent,
       isActive: _isActive,
       imageUrls: _imageUrls,
-      categories: _categories,
-      tags: _tags,
+      categories: categories,
+      tags: widget.type == KnowledgeEntryType.material &&
+              _hardwareKind == HardwareDictionaryKind.tool
+          ? const <String>[]
+          : _tags,
       contentType: contentType,
       contentBlocks: contentBlocks,
       constructionExamples: widget.type == KnowledgeEntryType.constructionCase
@@ -345,8 +385,8 @@ class _FieldKnowledgeEditorScreenState
       appBar: AppBar(
         title: Text(
           widget.existingEntry == null
-              ? '${widget.type.displayName} 추가'
-              : '${widget.type.displayName} 수정',
+              ? '${_editorTitle} 추가'
+              : '${_editorTitle} 수정',
         ),
         actions: [
           if (_isSaving)
@@ -469,29 +509,61 @@ class _FieldKnowledgeEditorScreenState
               SizedBox(height: context.rsi(16)),
             ],
 
-            // 카테고리 (자재사전, 용어사전만)
+            // 카테고리 (철물 사전, 용어사전, 공정 가이드)
             if (widget.type != KnowledgeEntryType.constructionCase) ...[
               Text(
-                '카테고리 *',
+                _isHardwareEditor ? '카테고리 *  ·  1개만 선택' : '카테고리 *',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
               ),
               SizedBox(height: context.rsi(8)),
+              if (_isHardwareEditor) ...[
+                Row(
+                  children: [
+                    for (final kind in HardwareDictionaryKind.values) ...[
+                      if (kind != HardwareDictionaryKind.values.first)
+                        SizedBox(width: context.rsi(8)),
+                      Expanded(
+                        child: _HardwareKindToggle(
+                          kind: kind,
+                          selected: _hardwareKind == kind,
+                          onTap: () {
+                            if (_hardwareKind == kind) return;
+                            setState(() {
+                              _hardwareKind = kind;
+                              _categories.clear();
+                              if (kind == HardwareDictionaryKind.tool) {
+                                _tags.clear();
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                SizedBox(height: context.rsi(12)),
+              ],
               _CategorySelector(
-                type: widget.type,
+                availableCategories: _isHardwareEditor
+                    ? KnowledgeCategories.forHardwareKind(_hardwareKind)
+                    : KnowledgeCategories.forType(widget.type),
                 selectedCategories: _categories,
+                singleSelect: _isHardwareEditor,
+                showIcons: _isHardwareEditor,
                 onCategoriesChanged: (categories) {
                   setState(() {
-                    _categories.clear();
-                    _categories.addAll(categories);
+                    _categories
+                      ..clear()
+                      ..addAll(categories);
                   });
                 },
               ),
               SizedBox(height: context.rsi(16)),
             ],
 
-            // 이미지 (자재사전만, 공정 가이드는 Quill에서 처리)
+            // 이미지 (철물 사전만, 공정 가이드는 Quill에서 처리)
             if (widget.type == KnowledgeEntryType.material) ...[
               Text(
                 '이미지',
@@ -528,47 +600,49 @@ class _FieldKnowledgeEditorScreenState
               SizedBox(height: context.rsi(16)),
             ],
 
-            // 태그
-            Text(
-              '태그',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            SizedBox(height: context.rsi(8)),
-            Row(
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    controller: _tagController,
-                    decoration: const InputDecoration(
-                      hintText: '태그 입력 (예: 목재, 친환경)',
+            // 태그 (공구는 사용하지 않음)
+            if (!_isToolEditor) ...[
+              Text(
+                '태그',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
-                    onSubmitted: (_) => _addTag(),
+              ),
+              SizedBox(height: context.rsi(8)),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppTextField(
+                      controller: _tagController,
+                      decoration: const InputDecoration(
+                        hintText: '태그 입력 (예: 목재, 친환경)',
+                      ),
+                      onSubmitted: (_) => _addTag(),
+                    ),
                   ),
-                ),
-                SizedBox(width: context.rsi(8)),
-                IconButton(
-                  onPressed: _addTag,
-                  icon: const Icon(Icons.add_rounded),
+                  SizedBox(width: context.rsi(8)),
+                  IconButton(
+                    onPressed: _addTag,
+                    icon: const Icon(Icons.add_rounded),
+                  ),
+                ],
+              ),
+              if (_tags.isNotEmpty) ...[
+                SizedBox(height: context.rsi(10)),
+                Wrap(
+                  spacing: context.rsi(8),
+                  runSpacing: context.rsi(8),
+                  children: _tags.map((tag) {
+                    return Chip(
+                      label: Text('#$tag'),
+                      onDeleted: () => _removeTag(tag),
+                      deleteIcon: const Icon(Icons.close_rounded),
+                    );
+                  }).toList(),
                 ),
               ],
-            ),
-            if (_tags.isNotEmpty) ...[
-              SizedBox(height: context.rsi(10)),
-              Wrap(
-                spacing: context.rsi(8),
-                runSpacing: context.rsi(8),
-                children: _tags.map((tag) {
-                  return Chip(
-                    label: Text('#$tag'),
-                    onDeleted: () => _removeTag(tag),
-                    deleteIcon: const Icon(Icons.close_rounded),
-                  );
-                }).toList(),
-              ),
+              SizedBox(height: context.rsi(16)),
             ],
-            SizedBox(height: context.rsi(16)),
 
             // 활성 상태
             SwitchListTile(
@@ -647,20 +721,83 @@ class _FieldKnowledgeEditorScreenState
 // 카테고리 선택기
 // ────────────────────────────────────────────────────────────────────────────
 
-class _CategorySelector extends StatelessWidget {
-  const _CategorySelector({
-    required this.type,
-    required this.selectedCategories,
-    required this.onCategoriesChanged,
+class _HardwareKindToggle extends StatelessWidget {
+  const _HardwareKindToggle({
+    required this.kind,
+    required this.selected,
+    required this.onTap,
   });
 
-  final KnowledgeEntryType type;
-  final List<String> selectedCategories;
-  final ValueChanged<List<String>> onCategoriesChanged;
+  final HardwareDictionaryKind kind;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final availableCategories = KnowledgeCategories.forType(type);
+    final cs = Theme.of(context).colorScheme;
+    final accent = HardwareDictionaryStyle.accentFor(kind);
+    return Material(
+      color: selected ? accent.withValues(alpha: 0.12) : cs.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.rsi(10),
+            vertical: context.rsi(12),
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected
+                  ? accent.withValues(alpha: 0.7)
+                  : cs.outlineVariant.withValues(alpha: 0.7),
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                HardwareDictionaryStyle.iconForKind(kind),
+                color: selected ? accent : cs.onSurfaceVariant,
+                size: context.rsi(20),
+              ),
+              SizedBox(width: context.rsi(8)),
+              Expanded(
+                child: Text(
+                  kind.label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: selected ? accent : cs.onSurface,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategorySelector extends StatelessWidget {
+  const _CategorySelector({
+    required this.availableCategories,
+    required this.selectedCategories,
+    required this.onCategoriesChanged,
+    this.singleSelect = false,
+    this.showIcons = false,
+  });
+
+  final List<String> availableCategories;
+  final List<String> selectedCategories;
+  final ValueChanged<List<String>> onCategoriesChanged;
+  final bool singleSelect;
+  final bool showIcons;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
     if (availableCategories.isEmpty) {
@@ -675,10 +812,23 @@ class _CategorySelector extends StatelessWidget {
           runSpacing: context.rsi(8),
           children: availableCategories.map((category) {
             final isSelected = selectedCategories.contains(category);
-            return FilterChip(
+            return ChoiceChip(
+              avatar: showIcons
+                  ? Icon(
+                      HardwareDictionaryStyle.iconForCategory(category),
+                      size: 16,
+                    )
+                  : null,
               label: Text(category),
               selected: isSelected,
+              showCheckmark: !showIcons,
               onSelected: (selected) {
+                if (singleSelect) {
+                  if (selected) {
+                    onCategoriesChanged(<String>[category]);
+                  }
+                  return;
+                }
                 final newList = List<String>.from(selectedCategories);
                 if (selected) {
                   newList.add(category);
@@ -688,14 +838,13 @@ class _CategorySelector extends StatelessWidget {
                 onCategoriesChanged(newList);
               },
               selectedColor: cs.primaryContainer,
-              checkmarkColor: cs.onPrimaryContainer,
             );
           }).toList(),
         ),
         if (selectedCategories.isEmpty) ...[
           SizedBox(height: context.rsi(8)),
           Text(
-            '최소 1개 이상의 카테고리를 선택해주세요.',
+            singleSelect ? '카테고리를 1개 선택해주세요.' : '최소 1개 이상의 카테고리를 선택해주세요.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: cs.error,
                 ),

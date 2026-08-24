@@ -40,8 +40,11 @@ List<String> editorProcessGroupOptions({
   return processGroupsScheduledOn(schedule, day);
 }
 
-String checklistItemGroupKey(PlaceChecklistItem item) =>
-    item.processGroup.trim();
+String checklistItemGroupKey(PlaceChecklistItem item) {
+  final g = item.processGroup.trim();
+  if (g.isNotEmpty) return g;
+  return item.title.trim();
+}
 
 String checklistGroupSectionTitle(String groupKey) =>
     groupKey.isEmpty ? kChecklistCustomGroupChipLabel : groupKey;
@@ -113,56 +116,82 @@ class _PlaceChecklistItemEditorSheet extends StatefulWidget {
 class _PlaceChecklistItemEditorSheetState
     extends State<_PlaceChecklistItemEditorSheet> {
   late final TextEditingController _titleCtrl;
-  late final TextEditingController _customGroupCtrl;
   late bool _customMode;
   String? _selectedScheduled;
 
   @override
   void initState() {
     super.initState();
-    _titleCtrl = TextEditingController(text: widget.existing?.title ?? '');
     final scheduled = widget.scheduledProcessGroups;
-    final existingGroup = widget.existing?.processGroup.trim() ?? '';
+    final existing = widget.existing;
+    final existingTitle = existing?.displayTitle ?? '';
+    final existingGroup = existing?.processGroup.trim() ?? '';
     final initialGroup = widget.initialProcessGroup?.trim() ?? '';
     final prefer = existingGroup.isNotEmpty ? existingGroup : initialGroup;
 
     if (prefer.isNotEmpty && scheduled.contains(prefer)) {
       _customMode = false;
       _selectedScheduled = prefer;
-      _customGroupCtrl = TextEditingController();
+      _titleCtrl = TextEditingController(
+        text: existingTitle.isNotEmpty ? existingTitle : prefer,
+      );
     } else if (prefer.isNotEmpty) {
       _customMode = true;
       _selectedScheduled = null;
-      _customGroupCtrl = TextEditingController(text: prefer);
+      _titleCtrl = TextEditingController(
+        text: existingTitle.isNotEmpty ? existingTitle : prefer,
+      );
     } else if (scheduled.isNotEmpty) {
       _customMode = false;
       _selectedScheduled = scheduled.first;
-      _customGroupCtrl = TextEditingController();
+      _titleCtrl = TextEditingController(text: scheduled.first);
     } else {
       _customMode = true;
       _selectedScheduled = null;
-      _customGroupCtrl = TextEditingController();
+      _titleCtrl = TextEditingController(text: existingTitle);
     }
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
-    _customGroupCtrl.dispose();
     super.dispose();
   }
 
-  String? _resolvedProcessGroup() {
-    if (_customMode) return _customGroupCtrl.text.trim();
-    return _selectedScheduled?.trim();
+  String _resolvedProcessGroup(String title) {
+    if (_customMode) return title;
+    final selected = _selectedScheduled?.trim() ?? '';
+    return selected.isNotEmpty ? selected : title;
+  }
+
+  void _selectScheduled(String group) {
+    final prev = _selectedScheduled;
+    final current = _titleCtrl.text.trim();
+    setState(() {
+      _customMode = false;
+      _selectedScheduled = group;
+      if (current.isEmpty || current == prev) {
+        _titleCtrl.text = group;
+        _titleCtrl.selection = TextSelection.collapsed(offset: group.length);
+      }
+    });
+  }
+
+  void _selectCustom() {
+    setState(() {
+      _customMode = true;
+      _selectedScheduled = null;
+    });
   }
 
   void _submit() {
     final title = _titleCtrl.text.trim();
-    final group = _resolvedProcessGroup();
-    if (title.isEmpty || group == null || group.isEmpty) return;
+    if (title.isEmpty) return;
     Navigator.of(context).pop(
-      PlaceChecklistEditorResult(title: title, processGroup: group),
+      PlaceChecklistEditorResult(
+        title: title,
+        processGroup: _resolvedProcessGroup(title),
+      ),
     );
   }
 
@@ -173,8 +202,7 @@ class _PlaceChecklistItemEditorSheetState
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     final isEdit = widget.existing != null;
     final scheduled = widget.scheduledProcessGroups;
-    final canSubmit = _titleCtrl.text.trim().isNotEmpty &&
-        (_resolvedProcessGroup()?.isNotEmpty ?? false);
+    final canSubmit = _titleCtrl.text.trim().isNotEmpty;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -196,12 +224,12 @@ class _PlaceChecklistItemEditorSheetState
           rsV(context, 6),
           if (scheduled.isEmpty)
             Text(
-              '당일 공정표에 예정된 공정이 없습니다. 직접 입력해 주세요.',
+              '당일 공정표에 예정된 공정이 없습니다. 항목만 입력하면 됩니다.',
               style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             )
           else
             Text(
-              '당일 공정표 예정 공정만 선택할 수 있습니다.',
+              '공정을 고르면 항목이 채워집니다. 필요하면 내용만 고치면 됩니다.',
               style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           rsV(context, 8),
@@ -213,42 +241,24 @@ class _PlaceChecklistItemEditorSheetState
                 FilterChip(
                   label: Text(g),
                   selected: !_customMode && _selectedScheduled == g,
-                  onSelected: (_) => setState(() {
-                    _customMode = false;
-                    _selectedScheduled = g;
-                  }),
+                  onSelected: (_) => _selectScheduled(g),
                 ),
               FilterChip(
                 label: const Text(kChecklistCustomGroupChipLabel),
                 selected: _customMode,
-                onSelected: (_) => setState(() => _customMode = true),
+                onSelected: (_) => _selectCustom(),
               ),
             ],
           ),
-          if (_customMode) ...[
-            rsV(context, 12),
-            TextField(
-              controller: _customGroupCtrl,
-              autofocus: scheduled.isEmpty && !isEdit,
-              style: AppInputStyles.fieldText(context),
-              decoration: const InputDecoration(
-                labelText: '공정명 직접 입력',
-                hintText: '예: 덕트시공',
-                border: OutlineInputBorder(),
-              ),
-              textInputAction: TextInputAction.next,
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
           rsV(context, 16),
           TextField(
             controller: _titleCtrl,
-            autofocus: isEdit || (!_customMode && scheduled.isNotEmpty),
+            autofocus: true,
             style: AppInputStyles.fieldText(context),
-            decoration: const InputDecoration(
-              labelText: '작업 내용',
-              hintText: '예: 덕트시공, 배관설비',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: '항목',
+              hintText: _customMode ? '예: 덕트시공' : '예: 덕트 설치, 배관 점검',
+              border: const OutlineInputBorder(),
             ),
             textInputAction: TextInputAction.done,
             onChanged: (_) => setState(() {}),
@@ -346,7 +356,7 @@ class _PlaceChecklistDeferSheetState extends State<_PlaceChecklistDeferSheet> {
           ),
           rsV(context, 8),
           Text(
-            '"${widget.item.title}" 항목을\n${periodDropdownLabel(toDay)} 체크리스트로 옮깁니다.',
+            '"${widget.item.displayTitle}" 항목을\n${periodDropdownLabel(toDay)} 체크리스트로 옮깁니다.',
             style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
           ),
           rsV(context, 16),

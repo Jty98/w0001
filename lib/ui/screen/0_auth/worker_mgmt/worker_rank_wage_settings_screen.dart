@@ -4,6 +4,7 @@ import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/worker_rank_wage_settings.dart';
+import 'package:w0001/data/model/work_unit_preset.dart';
 import 'package:w0001/presentation/viewmodel/worker_rank_wage_settings_providers.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -14,7 +15,7 @@ import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
 
-/// 설정 → 작업자 관리 — 현장 역할별 기본 일당.
+/// 설정 → 작업자 관리 — 현장 역할별 기본 일당 · 공수 설정.
 class WorkerRankWageSettingsScreen extends ConsumerStatefulWidget {
   const WorkerRankWageSettingsScreen({super.key});
 
@@ -26,7 +27,10 @@ class WorkerRankWageSettingsScreen extends ConsumerStatefulWidget {
 class _WorkerRankWageSettingsScreenState
     extends ConsumerState<WorkerRankWageSettingsScreen> {
   final _controllers = <String, TextEditingController>{};
+  final _unitValueControllers = <String, TextEditingController>{};
   final _rankOrder = <String>[];
+  var _workUnits = List<WorkUnitPreset>.from(WorkUnitPreset.defaults);
+  var _defaultWorkUnitId = WorkUnitPreset.defaultId;
   var _dirty = false;
   var _saving = false;
   int? _appliedUpdatedAtMs;
@@ -36,7 +40,28 @@ class _WorkerRankWageSettingsScreenState
     for (final c in _controllers.values) {
       c.dispose();
     }
+    for (final c in _unitValueControllers.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _syncUnitControllers(List<WorkUnitPreset> units) {
+    final keep = units.map((u) => u.id).toSet();
+    for (final id in _unitValueControllers.keys.toList()) {
+      if (!keep.contains(id)) {
+        _unitValueControllers.remove(id)?.dispose();
+      }
+    }
+    for (final u in units) {
+      final text = WorkUnitPreset.formatAdjustValue(
+        u.value,
+        mode: u.adjustMode,
+      );
+      final c =
+          _unitValueControllers.putIfAbsent(u.id, TextEditingController.new);
+      if (c.text != text) c.text = text;
+    }
   }
 
   void _applySettingsIfNeeded(WorkerRankWageSettings settings) {
@@ -46,6 +71,7 @@ class _WorkerRankWageSettingsScreenState
 
     final ranks = settings.orderedRanks();
     final wages = settings.normalizedWages();
+    final units = List<WorkUnitPreset>.from(settings.workUnits);
     setState(() {
       _rankOrder
         ..clear()
@@ -56,6 +82,9 @@ class _WorkerRankWageSettingsScreenState
         final formatted = wage > 0 ? formatIntegerWithComma(wage) : '';
         if (c.text != formatted) c.text = formatted;
       }
+      _workUnits = units;
+      _defaultWorkUnitId = settings.defaultWorkUnitId;
+      _syncUnitControllers(units);
       _appliedUpdatedAtMs = stamp;
     });
   }
@@ -70,12 +99,74 @@ class _WorkerRankWageSettingsScreenState
     };
   }
 
+  List<WorkUnitPreset> _collectWorkUnits() {
+    return [
+      for (final u in _workUnits)
+        u.copyWith(
+          value: double.tryParse(
+                (_unitValueControllers[u.id]?.text ?? '')
+                    .trim()
+                    .replaceAll(',', ''),
+              ) ??
+              u.value,
+        ),
+    ];
+  }
+
+  void _setUnitMode(String unitId, WorkUnitAdjustMode mode) {
+    final idx = _workUnits.indexWhere((u) => u.id == unitId);
+    if (idx < 0) return;
+    final prev = _workUnits[idx];
+    if (prev.adjustMode == mode) return;
+
+    final nextValue = mode == WorkUnitAdjustMode.multiply
+        ? (prev.id == '1'
+            ? 1.0
+            : prev.id == '0.5'
+                ? 0.5
+                : prev.id == '1.5'
+                    ? 1.5
+                    : prev.id == '2'
+                        ? 2.0
+                        : 1.0)
+        : 0.0;
+    final next = prev.copyWith(adjustMode: mode, value: nextValue);
+    setState(() {
+      _workUnits = [
+        for (var i = 0; i < _workUnits.length; i++)
+          if (i == idx) next else _workUnits[i],
+      ];
+      final c = _unitValueControllers[unitId];
+      if (c != null) {
+        c.text = WorkUnitPreset.formatAdjustValue(nextValue, mode: mode);
+      }
+      _dirty = true;
+    });
+  }
+
   Future<void> _save() async {
     if (_saving || _rankOrder.isEmpty) return;
+    final units = _collectWorkUnits();
+    for (final u in units) {
+      if (u.adjustMode == WorkUnitAdjustMode.multiply && u.value <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${u.label} 배율(×)은 0보다 커야 합니다.')),
+        );
+        return;
+      }
+      if (u.adjustMode == WorkUnitAdjustMode.add && u.value < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${u.label} 가산액(+)은 0 이상이어야 합니다.')),
+        );
+        return;
+      }
+    }
     setState(() => _saving = true);
     final ok = await ref.read(workerRankWageSettingsProvider.notifier).save(
           rankOrder: List<String>.from(_rankOrder),
           wagesByRank: _collectWages(),
+          workUnits: units,
+          defaultWorkUnitId: _defaultWorkUnitId,
         );
     if (!mounted) return;
     setState(() {
@@ -87,7 +178,7 @@ class _WorkerRankWageSettingsScreenState
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok ? '역할별 기본 일당을 저장했습니다.' : '저장에 실패했습니다.'),
+        content: Text(ok ? '역할별 일당·공수 설정을 저장했습니다.' : '저장에 실패했습니다.'),
       ),
     );
   }
@@ -194,6 +285,10 @@ class _WorkerRankWageSettingsScreenState
     });
   }
 
+  void _markDirty() {
+    if (!_dirty) setState(() => _dirty = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(workerRankWageSettingsProvider);
@@ -217,7 +312,7 @@ class _WorkerRankWageSettingsScreenState
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
-        title: const Text('역할별 기본 일당'),
+        title: const Text('역할별 금액 · 공수 설정'),
         actions: [
           TextButton(
             onPressed: _saving || !_dirty ? null : _save,
@@ -273,19 +368,52 @@ class _WorkerRankWageSettingsScreenState
               context.rsi(24),
             ),
             children: [
-              AppInsetTile(
-                backgroundColor: cs.appIconBadge,
-                padding: EdgeInsets.all(context.rsi(14)),
-                child: Text(
-                  '현장 역할을 선택하면 인력 일당 기본값으로 적용됩니다. '
-                  '목록을 길게 눌러 순서를 바꿀 수 있고, 하단에서 역할을 추가할 수 있습니다.',
-                  style: tt.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    height: 1.45,
-                  ),
-                ),
+              SizedBox(height: context.rsi(20)),
+              Text(
+                '공수 설정',
+                style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
-              SizedBox(height: context.rsi(16)),
+              SizedBox(height: context.rsi(6)),
+              Text(
+                '기본값은 1공수입니다. ×는 배율, +는 기준 일당에 더할 금액(원)입니다.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              SizedBox(height: context.rsi(12)),
+              for (final unit in _workUnits) ...[
+                _WorkUnitAdjustRow(
+                  unit: unit,
+                  isDefault: unit.id == _defaultWorkUnitId,
+                  controller: _unitValueControllers.putIfAbsent(
+                    unit.id,
+                    () => TextEditingController(
+                      text: WorkUnitPreset.formatAdjustValue(
+                        unit.value,
+                        mode: unit.adjustMode,
+                      ),
+                    ),
+                  ),
+                  onChanged: _markDirty,
+                  onSetDefault: () {
+                    setState(() {
+                      _defaultWorkUnitId = unit.id;
+                      _dirty = true;
+                    });
+                  },
+                  onModeChanged: (mode) => _setUnitMode(unit.id, mode),
+                ),
+                SizedBox(height: context.rsi(10)),
+              ],
+              SizedBox(height: context.rsi(12)),
+              Text(
+                '역할별 기본 일당 (1공수)',
+                style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: context.rsi(6)),
+              Text(
+                '목록을 길게 눌러 순서를 바꿀 수 있고, 하단에서 역할을 추가할 수 있습니다.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              SizedBox(height: context.rsi(12)),
               if (_rankOrder.isEmpty)
                 Padding(
                   padding: EdgeInsets.symmetric(vertical: context.rsi(24)),
@@ -312,9 +440,7 @@ class _WorkerRankWageSettingsScreenState
                         rank,
                         TextEditingController.new,
                       ),
-                      onChanged: () {
-                        if (!_dirty) setState(() => _dirty = true);
-                      },
+                      onChanged: _markDirty,
                       onDelete: () => _removeRank(rank),
                     );
                   },
@@ -342,6 +468,241 @@ class _WorkerRankWageSettingsScreenState
           ),
         ),
       ),
+    );
+  }
+}
+
+class _WorkUnitAdjustRow extends StatelessWidget {
+  const _WorkUnitAdjustRow({
+    required this.unit,
+    required this.isDefault,
+    required this.controller,
+    required this.onChanged,
+    required this.onSetDefault,
+    required this.onModeChanged,
+  });
+
+  final WorkUnitPreset unit;
+  final bool isDefault;
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final VoidCallback onSetDefault;
+  final ValueChanged<WorkUnitAdjustMode> onModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final isAdd = unit.adjustMode == WorkUnitAdjustMode.add;
+
+    return AppInsetTile(
+      borderRadius: BorderRadius.circular(context.rsi(14)),
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(12),
+        context.rsi(10),
+        context.rsi(10),
+        context.rsi(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: context.rsi(44),
+                height: context.rsi(44),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isDefault
+                      ? cs.primary.withValues(alpha: 0.12)
+                      : cs.appIconBadge,
+                  borderRadius: BorderRadius.circular(context.rsi(12)),
+                ),
+                child: Text(
+                  unit.label.replaceAll('공수', '').replaceAll('품', ''),
+                  style: tt.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: isDefault ? cs.primary : cs.onSurface,
+                  ),
+                ),
+              ),
+              SizedBox(width: context.rsi(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            unit.label,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (isDefault) ...[
+                          SizedBox(width: context.rsi(6)),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: context.rsi(6),
+                              vertical: context.rsi(2),
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withValues(alpha: 0.12),
+                              borderRadius:
+                                  BorderRadius.circular(context.rsi(6)),
+                            ),
+                            child: Text(
+                              '기본',
+                              style: tt.labelSmall?.copyWith(
+                                color: cs.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(height: context.rsi(2)),
+                    Text(
+                      isDefault ? '신규·기본 적용 단위' : '별 아이콘으로 기본 지정',
+                      style:
+                          tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              InkWell(
+                onTap: isDefault ? null : onSetDefault,
+                borderRadius: BorderRadius.circular(context.rsi(8)),
+                child: Padding(
+                  padding: EdgeInsets.all(context.rsi(4)),
+                  child: Icon(
+                    isDefault ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: context.rs(20),
+                    color: isDefault ? cs.primary : cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: context.rsi(10)),
+          Row(
+            children: [
+              _ModeToggle(
+                selected: unit.adjustMode,
+                onChanged: onModeChanged,
+              ),
+              SizedBox(width: context.rsi(8)),
+              Expanded(
+                child: AppTextField(
+                  controller: controller,
+                  keyboardType: isAdd
+                      ? TextInputType.number
+                      : const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: isAdd
+                      ? [
+                          FilteringTextInputFormatter.digitsOnly,
+                          CurrencyTextInputFormatter.currency(
+                            locale: 'ko',
+                            symbol: '',
+                            decimalDigits: 0,
+                          ),
+                        ]
+                      : [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                  textAlign: TextAlign.right,
+                  style: tt.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixText: '${unit.adjustMode.symbol} ',
+                    prefixStyle: tt.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    suffixText: isAdd ? '원' : null,
+                    suffixStyle: tt.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                    hintText: isAdd ? '0' : '1',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(context.rsi(10)),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: context.rsi(10),
+                      vertical: context.rsi(10),
+                    ),
+                  ),
+                  onChanged: (_) => onChanged(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final WorkUnitAdjustMode selected;
+  final ValueChanged<WorkUnitAdjustMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    Widget chip(WorkUnitAdjustMode mode, String label) {
+      final on = selected == mode;
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onChanged(mode),
+          borderRadius: BorderRadius.circular(context.rsi(8)),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            padding: EdgeInsets.symmetric(
+              horizontal: context.rsi(10),
+              vertical: context.rsi(8),
+            ),
+            decoration: BoxDecoration(
+              color: on
+                  ? cs.primary
+                  : cs.surfaceContainerHighest.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(context.rsi(8)),
+              border: Border.all(
+                color: on
+                    ? cs.primary
+                    : cs.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Text(
+              label,
+              style: tt.labelLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: on ? cs.onPrimary : cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        chip(WorkUnitAdjustMode.multiply, '×'),
+        SizedBox(width: context.rsi(4)),
+        chip(WorkUnitAdjustMode.add, '+'),
+      ],
     );
   }
 }

@@ -11,7 +11,6 @@ import 'package:w0001/theme/app_input_styles.dart';
 import 'package:w0001/util/career_input.dart';
 import 'package:w0001/util/human_contact_display.dart';
 import 'package:w0001/util/phone_number_format.dart';
-import 'package:w0001/theme/app_colors.dart';
 import 'package:w0001/theme/app_theme_colors.dart';
 import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
@@ -53,6 +52,10 @@ class _HumanEditorFormFieldsState extends ConsumerState<HumanEditorFormFields> {
         ref.watch(workerProvider.select((s) => s.humanFormCareerYears));
     final editHuman = vm.humanEditorSeed;
     final isEdit = editHuman?.hid != null && editHuman!.hid! > 0;
+    final selectedChipColor = cs.primaryContainer;
+    final selectedLabelColor = cs.onPrimaryContainer;
+    final unselectedChipColor = cs.surfaceContainerHighest;
+    final unselectedLabelColor = cs.onSurfaceVariant;
 
     return Material(
       color: cs.surface,
@@ -171,20 +174,54 @@ class _HumanEditorFormFieldsState extends ConsumerState<HumanEditorFormFields> {
               child: Row(
                 children: [
                   FilterChip(
-                    showCheckmark: false,
+                    showCheckmark: true,
+                    checkmarkColor: selectedLabelColor,
+                    selectedColor: selectedChipColor,
+                    backgroundColor: unselectedChipColor,
+                    side: BorderSide(
+                      color: (siteRank == null || siteRank.isEmpty)
+                          ? cs.primary.withValues(alpha: 0.72)
+                          : cs.outlineVariant,
+                      width: (siteRank == null || siteRank.isEmpty) ? 1.4 : 1.0,
+                    ),
                     padding: EdgeInsets.symmetric(horizontal: context.rsi(4)),
-                    visualDensity: VisualDensity.compact,
-                    label: Text('미선택', style: tt.labelSmall),
+                    visualDensity: VisualDensity.standard,
+                    label: Text(
+                      '미선택',
+                      style: tt.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: (siteRank == null || siteRank.isEmpty)
+                            ? selectedLabelColor
+                            : unselectedLabelColor,
+                      ),
+                    ),
                     selected: siteRank == null || siteRank.isEmpty,
                     onSelected: (_) => vm.humanFormSelectWorkerRank(null),
                   ),
                   for (final rank in kWorkerRankOptions) ...[
                     SizedBox(width: context.rsi(6)),
                     FilterChip(
-                      showCheckmark: false,
+                      showCheckmark: true,
+                      checkmarkColor: selectedLabelColor,
+                      selectedColor: selectedChipColor,
+                      backgroundColor: unselectedChipColor,
+                      side: BorderSide(
+                        color: siteRank == rank
+                            ? cs.primary.withValues(alpha: 0.72)
+                            : cs.outlineVariant,
+                        width: siteRank == rank ? 1.4 : 1.0,
+                      ),
                       padding: EdgeInsets.symmetric(horizontal: context.rsi(4)),
-                      visualDensity: VisualDensity.compact,
-                      label: Text(rank, style: tt.labelSmall),
+                      visualDensity: VisualDensity.standard,
+                      label: Text(
+                        rank,
+                        style: tt.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: siteRank == rank
+                              ? selectedLabelColor
+                              : unselectedLabelColor,
+                        ),
+                      ),
                       selected: siteRank == rank,
                       onSelected: (_) => vm.humanFormSelectWorkerRank(rank),
                     ),

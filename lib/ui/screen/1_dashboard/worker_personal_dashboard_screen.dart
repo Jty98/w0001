@@ -868,8 +868,8 @@ class _WorkerPersonalDashboardScreenState
                               child: SizedBox(
                                 width: double.infinity,
                                 child: FilledButton.icon(
-                                  onPressed: () =>
-                                      _showAddSectionSheet(context, layoutState),
+                                  onPressed: () => _showAddSectionSheet(
+                                      context, layoutState),
                                   icon: const Icon(Icons.add),
                                   label: const Text('섹션 추가'),
                                 ),
@@ -1126,19 +1126,17 @@ class _TodayMemoTile extends ConsumerWidget {
                           compact: true,
                           onCopyAddress: () => _copyAddress(context),
                           onKakao: () async {
-                            final address = assignmentAddress.trim();
-                            final query = '${memo.title} $address'.trim();
+                            final query =
+                                navigablePlaceAddress(assignmentAddress);
+                            if (query.isEmpty) return;
                             final kakaoLocal =
                                 ref.read(kakaoLocalMapApiProvider);
                             final resolved = await kakaoLocal.resolveBestMatch(
-                              address: address,
-                              keyword: memo.title,
+                              address: query,
                             );
                             if (resolved != null) {
                               await MapNavigationLauncher.openKakaoNaviRoute(
-                                destinationName: resolved.name.trim().isEmpty
-                                    ? query
-                                    : resolved.name,
+                                destinationName: query,
                                 latitude: resolved.latitude,
                                 longitude: resolved.longitude,
                               );
@@ -1154,7 +1152,8 @@ class _TodayMemoTile extends ConsumerWidget {
                           },
                           onTmap: () async {
                             final query =
-                                '${memo.title} ${assignmentAddress.trim()}';
+                                navigablePlaceAddress(assignmentAddress);
+                            if (query.isEmpty) return;
                             await MapNavigationLauncher.openTmapSearch(query);
                           },
                         ),

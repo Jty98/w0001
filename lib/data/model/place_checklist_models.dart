@@ -33,17 +33,25 @@ class PlaceChecklistItem {
   });
 
   final String id;
-  final String workDate;
 
   /// `YYYY-MM-DD`
+  final String workDate;
   final String title;
 
-  /// 공정표 행 이름(예: 주방설비). 직접 입력 시 사용자가 입력한 문자열.
+  /// 공정표 행 이름(예: 주방설비). 항목과 같으면 `title`과 동일.
+  /// 직접 입력만 한 경우에도 `title`과 같은 값을 넣는다.
   final String processGroup;
   final int sortOrder;
   final PlaceChecklistItemStatus status;
   final int createdAtMs;
   final int updatedAtMs;
+
+  /// 화면에 보여줄 한 줄. `title`이 비면 레거시 `process_group`으로 보완.
+  String get displayTitle {
+    final t = title.trim();
+    if (t.isNotEmpty) return t;
+    return processGroup.trim();
+  }
 
   bool get isChecked => status == PlaceChecklistItemStatus.checked;
   bool get isDeferred => status == PlaceChecklistItemStatus.deferred;

@@ -33,8 +33,9 @@ abstract class PlaceRepository {
     String endDate,
   );
 
-  /// 현장 영구 삭제 (DELETE /places/{pid})
-  Future<void> deletePlace(int pid);
+  /// 현장 삭제.
+  /// [permanent] false → soft (`pcomplete=2`), true → 영구삭제(연관 데이터 있으면 409).
+  Future<void> deletePlace(int pid, {bool permanent = false});
 
   Future<List<PlaceModel>> getIncompletePlaces();
 

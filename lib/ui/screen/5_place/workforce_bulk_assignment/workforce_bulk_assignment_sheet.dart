@@ -21,7 +21,8 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart'
     show placeUseCaseProvider, humanUseCaseProvider;
 import 'package:w0001/presentation/viewmodel/place_members_providers.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
-import 'package:w0001/ui/screen/2_add/add_worker_dialog.dart';
+import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
+import 'package:w0001/ui/screen/4_human/widgets/human_editor_dialog.dart';
 import 'package:w0001/ui/screen/2_add/place_recent_workers_sheet.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_work_instruction_editor_sheet.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -613,9 +614,6 @@ class _BulkWorkforceAssignmentSheetState
       setState(() {
         _blockedMemberUids = uids;
         _blockedUidsLoaded = true;
-        _recentWorkers = _assignableWorkers(_recentWorkers);
-        _searchResults = _assignableWorkers(_searchResults);
-        _allWorkersCache = _assignableWorkers(_allWorkersCache);
         _selectedHumans = _assignableWorkers(_selectedHumans);
       });
     } catch (_) {
@@ -649,16 +647,13 @@ class _BulkWorkforceAssignmentSheetState
               q: query,
               limit: 50,
             );
-        candidates = _assignableWorkers(
-          page.items.where((h) => h.hdelete == 0),
-        );
+        candidates = page.items.where((h) => h.hdelete == 0).toList();
       } else {
         if (_allWorkersCache.isEmpty) {
-          _allWorkersCache = _assignableWorkers(
-            await ref.read(humanUseCaseProvider).fetchAllWorkers(
-                  const ListQuery(),
-                ),
-          );
+          _allWorkersCache =
+              await ref.read(humanUseCaseProvider).fetchAllWorkers(
+                    const ListQuery(),
+                  );
         }
         candidates = _allWorkersCache.where((human) {
           switch (_searchType) {
@@ -746,7 +741,7 @@ class _BulkWorkforceAssignmentSheetState
 
       if (mounted) {
         setState(() {
-          _recentWorkers = _assignableWorkers(workers);
+          _recentWorkers = workers.where((h) => h.hdelete == 0).toList();
           _loadingRecentWorkers = false;
         });
       }
@@ -758,11 +753,12 @@ class _BulkWorkforceAssignmentSheetState
     }
   }
 
-  /// 인원 즉시 추가 다이얼로그
+  /// 인력관리와 동일한 비회원 등록 다이얼로그
   Future<void> _showAddWorkerDialog(BuildContext context) async {
-    await showDialog<void>(
+    ref.read(workerProvider.notifier).cancelHumanEditorForm();
+    await showHumanEditorDialog(
       context: context,
-      builder: (_) => const AddWorkerDialog(),
+      ref: ref,
     );
     // 다이얼로그가 닫힌 후 최근 작업자 목록 다시 로드
     if (mounted) {
@@ -1525,6 +1521,17 @@ class _BulkWorkforceAssignmentSheetState
         return BulkWorkerGridItem(
           name: human.hname,
           isSelected: isSelected,
+          blockedLabel: humanCanBeAssignedToWork(
+            human,
+            blockedMemberUids: _blockedMemberUids,
+          )
+              ? null
+              : (humanWorkAssignBlockMessage(
+                  human,
+                  blockedMemberUids: _blockedMemberUids,
+                ).contains('정지')
+                  ? '정지'
+                  : '불가'),
           workRole: isSelected ? workrole : null,
           wageLabel:
               isSelected ? '${(wage / 10000).toStringAsFixed(0)}만원' : null,
@@ -1542,6 +1549,23 @@ class _BulkWorkforceAssignmentSheetState
   }
 
   void _toggleWorkerSelection(HumanModel human, bool isSelected) {
+    if (!isSelected &&
+        !humanCanBeAssignedToWork(
+          human,
+          blockedMemberUids: _blockedMemberUids,
+        )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            humanWorkAssignBlockMessage(
+              human,
+              blockedMemberUids: _blockedMemberUids,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     setState(() {
       if (isSelected) {
         _selectedHumans.removeWhere((h) => h.hid == human.hid);
@@ -1630,7 +1654,9 @@ class _BulkWorkforceAssignmentSheetState
         workers: selectedWorkerDetails,
         dayCount: _dayCount,
       ),
-      workInstruction: _buildWorkInstructionSection(context),
+      // TODO(작업지시탭 이관): 일괄 투입 작업지시 섹션 — 삭제 예정
+      // workInstruction: _buildWorkInstructionSection(context),
+      workInstruction: const SizedBox.shrink(),
       saveError: _saveError,
     );
   }

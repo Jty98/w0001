@@ -58,7 +58,7 @@ abstract class SuperAdminRemoteRepository {
   Future<PlaceRead> placeGet(int pid);
   Future<PlaceRead> placeCreate(Map<String, dynamic> body);
   Future<PlaceRead> placePatch(int pid, Map<String, dynamic> body);
-  Future<void> placeDelete(int pid);
+  Future<void> placeDelete(int pid, {bool permanent = false});
 
   // Humans
   Future<List<HumanRead>> humansList();

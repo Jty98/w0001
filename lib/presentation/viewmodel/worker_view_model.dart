@@ -405,7 +405,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
   ) {
     final pid = state.workCostPlacePid;
     if (pid == 0) return list;
-    return list.where((e) => e.wpid == pid).toList();
+    return list.where((e) => e.involvesPlace(pid)).toList();
   }
 
   List<PlaceDropDownModel> _placesFromWorkCostItems(
@@ -413,6 +413,13 @@ class WorkerViewModel extends Notifier<WorkerState> {
   ) {
     final seen = <int, String>{};
     for (final e in items) {
+      if (e.sameDayPlaces.isNotEmpty) {
+        for (final p in e.sameDayPlaces) {
+          if (p.pid == 0) continue;
+          seen[p.pid] = p.name;
+        }
+        continue;
+      }
       if (e.wpid == 0) continue;
       seen[e.wpid] = e.pname;
     }
@@ -1198,6 +1205,24 @@ class WorkerViewModel extends Notifier<WorkerState> {
   }) async {
     await _workCostUseCase.deleteWorkCostLinked(wid: wid, pwdid: pwdid);
     await FetchData.onDataChanged(DataChangeEvent.workCostSaved);
+  }
+
+  Future<int?> unassignSameDayPlace({
+    required int hid,
+    required String dateKey,
+    required int pidToRemove,
+    required int workCostWid,
+    required int workCostWpid,
+  }) async {
+    final nextWpid = await _workCostUseCase.unassignSameDayPlace(
+      hid: hid,
+      dateKey: dateKey,
+      pidToRemove: pidToRemove,
+      workCostWid: workCostWid,
+      workCostWpid: workCostWpid,
+    );
+    await FetchData.onDataChanged(DataChangeEvent.workCostSaved);
+    return nextWpid;
   }
 
   Future<void> changeDateTime(BuildContext context) async {
@@ -2056,7 +2081,7 @@ class WorkerViewModel extends Notifier<WorkerState> {
     );
   }
 
-  Future<void> editButtonAction(BuildContext context) async {
+  Future<HumanModel?> editButtonAction(BuildContext context) async {
     HumanModel? saved;
     if (state.isEditing) {
       final override = _editingHumanOverride;
@@ -2068,10 +2093,11 @@ class WorkerViewModel extends Notifier<WorkerState> {
     } else {
       saved = await insertWorker(context);
     }
-    if (saved == null) return;
+    if (saved == null) return null;
     _mergeHumanInState(saved);
     await FetchData.onDataChanged(DataChangeEvent.humanSaved);
     _mergeHumanInState(saved);
+    return saved;
   }
 
   /// 수정 다이얼로그 닫을 때 — 폼만 초기화 (저장 직후 전체 reload 방지).

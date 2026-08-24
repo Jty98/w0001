@@ -35,7 +35,7 @@ enum TaxState { taxOn, taxOff }
 
 enum WCompleteState { incomplete, whole }
 
-enum PlaceState { complete, incomplete }
+enum PlaceState { complete, incomplete, archived }
 
 enum TotalSegment { place, duration }
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:w0001/navigation/place_navigation.dart';
+import 'package:w0001/navigation/work_instruction_navigation.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
 
 const _kExitConfirmDuration = Duration(seconds: 2);
@@ -55,6 +56,18 @@ bool tryPopLocalNavigatorOverlay(BuildContext context) {
   return true;
 }
 
+/// 작업지시 작성처럼 [rootNavigator]에 올린 전체 화면을 한 단계 닫는다.
+///
+/// 브랜치 Navigator와 루트가 같으면 쉘 자체를 pop할 수 있어 건너뛴다.
+bool tryPopRootNavigatorOverlay(BuildContext context) {
+  final root = Navigator.maybeOf(context, rootNavigator: true);
+  final local = Navigator.maybeOf(context);
+  if (root == null || !root.canPop()) return false;
+  if (identical(root, local)) return false;
+  root.pop();
+  return true;
+}
+
 /// 메인 쉘·탭 루트에서 Android 시스템 뒤로가기 / 예측 백 제스처 처리.
 ///
 /// `true`를 반환하면 이벤트를 소비했다(앱 즉시 종료 방지).
@@ -75,6 +88,11 @@ bool handleAppShellSystemBack({
   }
 
   if (shellBranchIndex == 1 && handlePlaceTabSystemBack(router)) {
+    resetShellExitBackRequest();
+    return true;
+  }
+
+  if (shellBranchIndex == 2 && consumeWorkInstructionHubBackNavigation()) {
     resetShellExitBackRequest();
     return true;
   }
@@ -123,6 +141,12 @@ class ShellTabRootBackScope extends StatelessWidget {
     _shellBackHandling = true;
     try {
       final router = GoRouter.of(context);
+      // 작업지시 작성 등 루트 Navigator 전체 화면이 위에 있으면 먼저 닫는다.
+      if (tryPopRootNavigatorOverlay(context)) {
+        consumeDedupedBackEvent();
+        resetShellExitBackRequest();
+        return;
+      }
       // 탭 루트 + 열린 바텀시트/다이얼로그 — 브랜치 Navigator만 pop (체크리스트 FAB 등).
       if (isShellTabRootPath(router.state.uri.path) &&
           tryPopLocalNavigatorOverlay(context)) {

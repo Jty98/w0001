@@ -1,3 +1,4 @@
+import 'package:w0001/domain/place_archive.dart';
 import 'package:w0001/util/funtions.dart';
 
 /// TotalCost Model (WorkCost + MaterialCost)
@@ -33,8 +34,11 @@ class TotalCostModel {
   });
 
   TotalCostModel.fromMap(Map<String, dynamic> res)
-      : pname = '${res['pname'] ?? ''}',
-        pcomplete = _asInt(res['pcomplete']) ?? 0,
+      : pcomplete = _asInt(res['pcomplete']) ?? 0,
+        pname = formatPlaceDisplayName(
+          '${res['pname'] ?? ''}',
+          pcomplete: _asInt(res['pcomplete']) ?? 0,
+        ),
         name = '${res['name'] ?? ''}',
         date = '${res['date'] ?? ''}',
         price = _asInt(res['price']) ?? 0,

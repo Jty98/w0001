@@ -17,13 +17,12 @@ import 'package:w0001/presentation/viewmodel/place_process_schedule_notifier.dar
 import 'package:w0001/ui/screen/2_add/work_role_suggestions.dart';
 import 'package:w0001/ui/widget/delete_dialog.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
-import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/ui/screen/2_add/add_cost_date_picker_dialog.dart';
 import 'package:w0001/domain/data_change_event.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 
-/// 금액 추가 탭에서 현장이 선택된 상태의 **시스템 뒤로가기** — 선택 해제 후 `true`.
+/// 금액 추가 화면에서 현장이 선택된 상태의 **시스템 뒤로가기** — 선택 해제 후 `true`.
 ///
 /// 탭 전환에는 호출하지 않는다. ([GoRoute.onExit]에 두면 다른 탭으로 나갈 때
 /// 현장만 초기화되고 쉘 인덱스와 탭바가 어긋날 수 있음.)
@@ -169,10 +168,6 @@ class AddCostViewModel extends Notifier<AddCostState> {
   late final _materialCostUseCase = ref.read(materialCostUseCaseProvider);
   late final _workCostUseCase = ref.read(workCostUseCaseProvider);
 
-  final TextEditingController hNameController = TextEditingController();
-  final TextEditingController hNumController = TextEditingController();
-  final TextEditingController hMemoController = TextEditingController();
-  final TextEditingController hDailyWageController = TextEditingController();
   final TextEditingController mNameController = TextEditingController();
   final FocusNode mNameFocus = FocusNode();
   final TextEditingController mPriceController = TextEditingController();
@@ -180,10 +175,6 @@ class AddCostViewModel extends Notifier<AddCostState> {
   @override
   AddCostState build() {
     ref.onDispose(() {
-      hNameController.dispose();
-      hNumController.dispose();
-      hMemoController.dispose();
-      hDailyWageController.dispose();
       mNameController.dispose();
       mNameFocus.dispose();
       mPriceController.dispose();
@@ -659,63 +650,6 @@ class AddCostViewModel extends Notifier<AddCostState> {
       TextPosition(offset: mNameController.text.length),
     );
     mNameFocus.requestFocus();
-  }
-
-  void clearDialogText() {
-    state = state.copyWith(alertText: '');
-    hMemoController.clear();
-    hNameController.clear();
-    hNumController.clear();
-    hDailyWageController.clear();
-  }
-
-  void clearWorkerDialogAlert() {
-    state = state.copyWith(alertText: '');
-  }
-
-  Future<bool> insertWorker({String hdefaultRole = ''}) async {
-    final hName = hNameController.text.trim();
-    final hNum = hNumController.text.trim();
-    final hMemo =
-        hMemoController.text.isEmpty ? null : hMemoController.text.trim();
-    final wageText =
-        hDailyWageController.text.trim().replaceAll(RegExp(r'[,원\s]'), '');
-    final hdailyWage = int.tryParse(wageText) ?? 0;
-    if (hName.isEmpty) {
-      state = state.copyWith(alertText: '이름을 입력해주세요.');
-      return false;
-    }
-    final dupes = await _humanUseCase.searchWorkers(q: hName, limit: 5);
-    if (dupes.any(
-      (e) => e.hname.toLowerCase() == hName.toLowerCase(),
-    )) {
-      state = state.copyWith(alertText: '중복된 이름입니다.');
-      return false;
-    }
-
-    final worker = HumanModel(
-      hname: hName,
-      hnumber: hNum,
-      hmemo: hMemo,
-      hdailyWage: hdailyWage,
-      hdefaultRole: hdefaultRole.trim(),
-      hstar: 0,
-      hdelete: 0,
-    );
-    final added = await _humanUseCase.addWorker(worker);
-
-    state = state.copyWith(selectedWorker: added);
-
-    final c = rootProviderContainer;
-    if (c != null) {
-      await c.read(workerProvider.notifier).fetchWorkerInfo();
-    }
-    hNameController.clear();
-    hNumController.clear();
-    hMemoController.clear();
-    hDailyWageController.clear();
-    state = state.copyWith(alertText: '');
-    return true;
   }
 
   Future<void> changeDateTime(BuildContext context) async {

@@ -5,6 +5,26 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:kakao_flutter_sdk_navi/kakao_flutter_sdk_navi.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// 저장된 현장 주소에서 네비게이션 검색에 쓸 도로명·지번만 남긴다.
+///
+/// 현장명은 호출부에서 붙이지 말고, 층·호·상호 같은 상세주소는 여기서 뺀다.
+String navigablePlaceAddress(String storedAddress) {
+  final t = storedAddress.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (t.isEmpty) return '';
+
+  final road = RegExp(
+    r'^(.+?(?:대로|로|길)(?:\s+\d+(?:-\d+)?(?:번)?길)?\s+\d+(?:-\d+)?)',
+  ).firstMatch(t);
+  if (road != null) return road.group(1)!.trim();
+
+  final jibun = RegExp(
+    r'^(.+?(?:동|리|가|읍|면)\s+(?:산\s+)?\d+(?:-\d+)?)',
+  ).firstMatch(t);
+  if (jibun != null) return jibun.group(1)!.trim();
+
+  return t;
+}
+
 abstract final class MapNavigationLauncher {
   static Uri _androidStore(String pkg) => Uri.parse('market://details?id=$pkg');
 

@@ -103,7 +103,7 @@ class AssignmentInstructionSheetHeader extends ConsumerWidget {
     final pname = placeName.trim().isEmpty ? '현장' : placeName.trim();
     final role = workrole.trim();
     final address = placeAddress.trim();
-    final query = '$pname $address'.trim();
+    final query = navigablePlaceAddress(address);
 
     return AppInsetCard(
       padding: ResponsiveLayout.symmetric(
@@ -230,14 +230,11 @@ class AssignmentInstructionSheetHeader extends ConsumerWidget {
                             final kakaoLocal =
                                 ref.read(kakaoLocalMapApiProvider);
                             final resolved = await kakaoLocal.resolveBestMatch(
-                              address: address,
-                              keyword: pname,
+                              address: query,
                             );
                             if (resolved != null) {
                               await MapNavigationLauncher.openKakaoNaviRoute(
-                                destinationName: resolved.name.trim().isEmpty
-                                    ? query
-                                    : resolved.name,
+                                destinationName: query,
                                 latitude: resolved.latitude,
                                 longitude: resolved.longitude,
                               );

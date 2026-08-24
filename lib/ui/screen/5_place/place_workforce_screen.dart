@@ -29,6 +29,8 @@ import 'package:w0001/ui/screen/5_place/widgets/place_work_instruction_editor_sh
 import 'package:w0001/ui/screen/5_place/workforce_bulk_assignment/workforce_bulk_assignment_sheet.dart';
 import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/ui/widget/scrollable_calendar/scrollable_calendar_widget.dart';
+import 'package:scrollable_calendar_package/calendar.dart'
+    show CalendarViewMode;
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -574,7 +576,7 @@ class _PlaceWorkforceScreenState extends ConsumerState<PlaceWorkforceScreen> {
       final calendarH = workforceCalendarHeight(context);
       final cs = Theme.of(context).colorScheme;
       return Scaffold(
-        appBar: AppBar(title: Text('${p.pname} · 인력·투입')),
+        appBar: AppBar(title: Text('${p.pname} · 작업지시')),
         body: Skeletonizer(
           enabled: true,
           child: Column(
@@ -652,7 +654,7 @@ class _PlaceWorkforceScreenState extends ConsumerState<PlaceWorkforceScreen> {
 
     if (wf.loadError != null && wf.rows.isEmpty && wf.humans.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text('${p.pname} · 인력·투입')),
+        appBar: AppBar(title: Text('${p.pname} · 작업지시')),
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(context.rsi(24)),
@@ -830,7 +832,7 @@ class _PlaceWorkforceScreenState extends ConsumerState<PlaceWorkforceScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${p.pname} · 인력·투입'),
+        title: Text('${p.pname} · 작업지시'),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -868,6 +870,7 @@ class _PlaceWorkforceScreenState extends ConsumerState<PlaceWorkforceScreen> {
               height: calendarH,
               useSingleDaySelection: true,
               showViewModeToggle: true,
+              initialCalendarViewMode: CalendarViewMode.twoWeeks,
               disableDateSelectionHighlight: true,
               initialSelectedDay: selectedDay,
               initialRangeStart: calendarStart,
@@ -885,6 +888,8 @@ class _PlaceWorkforceScreenState extends ConsumerState<PlaceWorkforceScreen> {
             ),
           ],
           PlaceWorkforceDayToolbar(
+            selectedDay: selectedDay,
+            daySummary: collapseSummary,
             rosterListExpanded: _rosterListExpanded,
             onToggleRosterList: () =>
                 setState(() => _rosterListExpanded = !_rosterListExpanded),
@@ -893,11 +898,13 @@ class _PlaceWorkforceScreenState extends ConsumerState<PlaceWorkforceScreen> {
             onAddWorkforceOnly: () => unawaited(_onAddWorkforceOnlyTapped()),
             siteInstructionLoading: _siteInstructionLoading,
             siteInstructionBlocks: _siteInstructionBlocks,
-            onEditSiteInstruction: canEdit
-                ? () => unawaited(
-                      _openSiteInstructionEditor(context, selectedIso),
-                    )
-                : null,
+            // TODO(작업지시탭 이관): 전체 작업지시 편집 — 삭제 예정
+            onEditSiteInstruction: null,
+            // onEditSiteInstruction: canEdit
+            //     ? () => unawaited(
+            //           _openSiteInstructionEditor(context, selectedIso),
+            //         )
+            //     : null,
           ),
           Expanded(
             child: AppRefreshIndicator(

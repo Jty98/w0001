@@ -10,6 +10,7 @@ import 'package:w0001/presentation/viewmodel/dashboard_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_workforce_notifier.dart';
+import 'package:w0001/presentation/viewmodel/work_instruction_overview_notifier.dart';
 import 'package:w0001/presentation/viewmodel/worker_mgmt_view_model.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/util/worker_dashboard_refresh.dart';
@@ -112,7 +113,8 @@ class FetchData {
     } else if (event.refreshCalendar) {
       final cal = container.read(calendarProvider.notifier);
       futures.add(cal.fetchTotalCost());
-      if (event.kind == DataChangeKind.workCost) {
+      if (event.kind == DataChangeKind.workCost ||
+          event.kind == DataChangeKind.materialCost) {
         futures.add(cal.refreshCalendarMarkers());
       }
     }
@@ -139,6 +141,14 @@ class FetchData {
       if (container.exists(wf)) {
         futures.add(container.read(wf.notifier).reload(silent: true));
       }
+    }
+
+    if (!isWorker && event.kind == DataChangeKind.workCost) {
+      futures.add(
+        container
+            .read(workInstructionOverviewProvider.notifier)
+            .reload(around: event.date),
+      );
     }
 
     await Future.wait(futures);

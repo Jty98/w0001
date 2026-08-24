@@ -1,3 +1,5 @@
+import 'package:w0001/domain/same_day_work_cost.dart';
+
 class TotalWorkCostModel {
   final String hname;
   final int hid;
@@ -11,6 +13,9 @@ class TotalWorkCostModel {
   final int wcomplete;
   final int price;
   final String? wcompletedAt;
+
+  /// 같은 날 투입된 모든 현장. 비어 있으면 [wpid]/[pname]만 사용.
+  final List<SameDayPlaceRef> sameDayPlaces;
 
   /// 해당 일 작업지시·공정표 연동 공정명 (`place-work-days.workrole` 우선).
   final String workrole;
@@ -45,6 +50,7 @@ class TotalWorkCostModel {
     this.workerRank = '',
     this.primarySpecialty,
     this.specialties = const [],
+    this.sameDayPlaces = const [],
   });
 
   TotalWorkCostModel.fromMap(Map<String, dynamic> res)
@@ -66,7 +72,8 @@ class TotalWorkCostModel {
         workerRank = (res['workerRank'] ?? res['worker_rank'] ?? '').toString(),
         primarySpecialty = res['primarySpecialty'] as String? ??
             res['primary_specialty'] as String?,
-        specialties = const [];
+        specialties = const [],
+        sameDayPlaces = const [];
 
   TotalWorkCostModel copyWith({
     String? hname,
@@ -87,6 +94,7 @@ class TotalWorkCostModel {
     String? workerRank,
     String? primarySpecialty,
     List<String>? specialties,
+    List<SameDayPlaceRef>? sameDayPlaces,
   }) {
     return TotalWorkCostModel(
       hname: hname ?? this.hname,
@@ -107,7 +115,16 @@ class TotalWorkCostModel {
       workerRank: workerRank ?? this.workerRank,
       primarySpecialty: primarySpecialty ?? this.primarySpecialty,
       specialties: specialties ?? this.specialties,
+      sameDayPlaces: sameDayPlaces ?? this.sameDayPlaces,
     );
+  }
+
+  bool involvesPlace(int pid) {
+    if (wpid == pid) return true;
+    for (final p in sameDayPlaces) {
+      if (p.pid == pid) return true;
+    }
+    return false;
   }
 
   get dotDate => date.replaceAll('-', '.');

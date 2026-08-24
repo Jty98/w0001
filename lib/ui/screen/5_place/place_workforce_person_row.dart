@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:w0001/theme/app_colors.dart';
 import 'package:w0001/theme/app_theme_colors.dart';
 import 'package:w0001/theme/app_section_card.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
-/// 인력·투입 화면 하단 리스트의 한 명 행.
+/// 작업지시 화면 하단 리스트의 한 명 행.
 class PlaceWorkforcePersonRow extends StatelessWidget {
   const PlaceWorkforcePersonRow({
     super.key,
@@ -132,14 +131,15 @@ class PlaceWorkforcePersonRow extends StatelessWidget {
                             : cs.onErrorContainer,
                         compact: compact,
                       ),
-                      if (hasWorkInstruction)
-                        _InfoChip(
-                          icon: Icons.edit_note_rounded,
-                          label: '작업 내용',
-                          color: cs.appIconBadge,
-                          onColor: cs.primary,
-                          compact: compact,
-                        ),
+                      // TODO(작업지시탭 이관): 인력 행 작업지시 표시 — 삭제 예정
+                      // if (hasWorkInstruction)
+                      //   _InfoChip(
+                      //     icon: Icons.edit_note_rounded,
+                      //     label: '작업 내용',
+                      //     color: cs.appIconBadge,
+                      //     onColor: cs.primary,
+                      //     compact: compact,
+                      //   ),
                     ],
                   ),
                 ],

@@ -37,6 +37,24 @@ class MonthlySummaryModel {
     required this.completedProfitAmount,
   });
 
+  /// 차트 X축(1~12월) 정렬용 빈 달.
+  factory MonthlySummaryModel.zero({
+    required int year,
+    required int month,
+  }) {
+    return MonthlySummaryModel(
+      year: year,
+      month: month.clamp(1, 12),
+      contractAmount: 0,
+      collectionAmount: 0,
+      costAmount: 0,
+      newProjectCount: 0,
+      completedProjectCount: 0,
+      completedContractMarginPct: 0,
+      completedProfitAmount: 0,
+    );
+  }
+
   /// 수금 − 원가 (현금 관점 월별, 대시보드 상단 KPI와 무관).
   int get profitOnCash => collectionAmount - costAmount;
 

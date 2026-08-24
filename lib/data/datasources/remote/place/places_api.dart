@@ -54,8 +54,11 @@ final class PlacesRemoteApi {
     return PlaceRead.fromJson(saParseObject(r.data));
   }
 
-  Future<void> delete(int pid) async {
-    await _http.delete<dynamic>(ApiEndpoint.placesPid(pid));
+  Future<void> delete(int pid, {bool permanent = false}) async {
+    await _http.delete<dynamic>(
+      ApiEndpoint.placesPid(pid),
+      queryParameters: permanent ? const <String, dynamic>{'permanent': true} : null,
+    );
   }
 
   /// 기간별 일괄 인력투입

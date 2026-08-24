@@ -405,15 +405,12 @@ class _WorkerScheduleScreenState extends ConsumerState<WorkerScheduleScreen> {
   ({int earned, int paid, int outstanding}) _totalsFromWorkDays(
     Iterable<WorkerDashboardWorkDay> days,
   ) {
-    var earned = 0;
-    var paid = 0;
-    var outstanding = 0;
-    for (final day in days) {
-      earned += day.effectiveWorkedAmount;
-      paid += day.effectiveSettledAmount;
-      outstanding += day.effectiveUnsettledAmount;
-    }
-    return (earned: earned, paid: paid, outstanding: outstanding);
+    final t = workerDashboardTotalsFromWorkDays(days);
+    return (
+      earned: t.totalEarned,
+      paid: t.totalPaid,
+      outstanding: t.totalOutstanding,
+    );
   }
 
   ({int earned, int paid, int outstanding}) _monthTotals(
@@ -502,7 +499,7 @@ class _WorkerScheduleScreenState extends ConsumerState<WorkerScheduleScreen> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text('내 작업 일정'),
+        title: const Text('내 일정'),
       ),
       body: AppRefreshIndicator(
         enabled: !(asyncMemos.isLoading && !asyncMemos.hasValue),
@@ -881,7 +878,7 @@ class _WorkerScheduleScreenState extends ConsumerState<WorkerScheduleScreen> {
                                       ),
                                       SizedBox(height: context.rsi(4)),
                                       Text(
-                                        '일당 ${getPrice(price: wageInfo.effectiveWorkedAmount, isTaxApply: isTaxApply, isContainWon: false)}',
+                                        '일당 ${getPrice(price: wageInfo.displayDailyRate, isTaxApply: isTaxApply, isContainWon: false)}',
                                         style: tt.labelMedium?.copyWith(
                                           color: cs.onSurfaceVariant,
                                           fontWeight: FontWeight.w800,
@@ -950,22 +947,20 @@ class _WorkerScheduleScreenState extends ConsumerState<WorkerScheduleScreen> {
                                     );
                                   },
                                   onKakao: () async {
-                                    final address = assignmentAddress.trim();
-                                    final query = '${m.title} $address'.trim();
+                                    final query = navigablePlaceAddress(
+                                      assignmentAddress,
+                                    );
+                                    if (query.isEmpty) return;
                                     final kakaoLocal =
                                         ref.read(kakaoLocalMapApiProvider);
                                     final resolved =
                                         await kakaoLocal.resolveBestMatch(
-                                      address: address,
-                                      keyword: m.title,
+                                      address: query,
                                     );
                                     if (resolved != null) {
                                       await MapNavigationLauncher
                                           .openKakaoNaviRoute(
-                                        destinationName:
-                                            resolved.name.trim().isEmpty
-                                                ? query
-                                                : resolved.name,
+                                        destinationName: query,
                                         latitude: resolved.latitude,
                                         longitude: resolved.longitude,
                                       );
@@ -981,8 +976,10 @@ class _WorkerScheduleScreenState extends ConsumerState<WorkerScheduleScreen> {
                                     );
                                   },
                                   onTmap: () async {
-                                    final query =
-                                        '${m.title} ${assignmentAddress.trim()}';
+                                    final query = navigablePlaceAddress(
+                                      assignmentAddress,
+                                    );
+                                    if (query.isEmpty) return;
                                     await MapNavigationLauncher.openTmapSearch(
                                       query,
                                     );
@@ -1190,8 +1187,8 @@ class _WorkerMonthlyTotalCompactBar extends StatelessWidget {
                                   child: _filterChip(
                                     context: context,
                                     label: '토탈',
-                                    selected:
-                                        highlightMode == _PayHighlightMode.total,
+                                    selected: highlightMode ==
+                                        _PayHighlightMode.total,
                                     activeBg: cs.primaryContainer,
                                     activeFg: cs.onPrimaryContainer,
                                     onPressed: onHighlightTotal,

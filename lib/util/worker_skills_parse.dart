@@ -1,3 +1,5 @@
+import 'package:w0001/util/career_input.dart';
+
 /// API JSON(회원·인력·worker_profile 중첩)에서 주특기 필드 추출.
 String? parseWorkerPrimarySpecialtyFromMap(Map<String, dynamic> m) {
   String? primary = _pickPrimary(m);
@@ -33,6 +35,23 @@ String pickWorkerRankFromMap(Map<String, dynamic> m) {
     if (nested is Map<String, dynamic>) {
       final v = nested['worker_rank'] ?? nested['workerRank'];
       if (v is String && v.trim().isNotEmpty) return v.trim();
+    }
+  }
+  return '';
+}
+
+/// API JSON에서 경력(`career`) 추출.
+String pickWorkerCareerFromMap(Map<String, dynamic> m) {
+  Object? top = m['career'] ?? m['career_years'] ?? m['careerYears'];
+  final topCareer = CareerInputUtils.parseWireField(top);
+  if (topCareer.isNotEmpty) return topCareer;
+
+  for (final key in ['worker_profile', 'workerProfile']) {
+    final nested = m[key];
+    if (nested is Map<String, dynamic>) {
+      top = nested['career'] ?? nested['career_years'] ?? nested['careerYears'];
+      final nestedCareer = CareerInputUtils.parseWireField(top);
+      if (nestedCareer.isNotEmpty) return nestedCareer;
     }
   }
   return '';

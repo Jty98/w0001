@@ -431,8 +431,9 @@ class CalendarViewModel extends Notifier<CalendarState> {
   /// [FetchData] 등 — 현재 포커스 월 마커만 갱신.
   Future<void> refreshCalendarMarkers() async {
     final anchor = state.focusedDay;
-    final range = calendarMarkerRangeAroundMonth(anchor);
-    _loadedMarkerRangeKeys.remove(_markerRangeKey(range.from, range.to));
+    // 기존 구현은 마커를 누적(OR/addAll)만 해서 삭제 후 점이 남을 수 있다.
+    // 갱신 시 캐시를 비우고 현재 포커스 월 범위를 다시 받아 정확히 재구성한다.
+    _clearMarkerCache();
     await _ensureCalendarMarkersLoaded(anchor);
   }
 
@@ -553,7 +554,8 @@ class CalendarViewModel extends Notifier<CalendarState> {
   Future<void> _syncLikeFetchAllData({required DataChangeKind kind}) async {
     _invalidateDayCostCache(state.focusedDay);
     await fetchTotalCost();
-    if (kind == DataChangeKind.workCost) {
+    if (kind == DataChangeKind.workCost ||
+        kind == DataChangeKind.materialCost) {
       await refreshCalendarMarkers();
     }
     FetchData.onDataChanged(
@@ -598,6 +600,22 @@ class CalendarViewModel extends Notifier<CalendarState> {
     await _syncLikeFetchAllData(kind: DataChangeKind.workCost);
   }
 
+  Future<void> unassignSameDayPlaceFromWorkCost(TotalCostModel item) async {
+    final hid = item.whid;
+    final pid = item.wpid;
+    if (hid == null || pid == null || pid <= 0) return;
+    final dateKey =
+        item.date.length >= 10 ? item.date.substring(0, 10) : item.date;
+    await _workCostUseCase.unassignSameDayPlace(
+      hid: hid,
+      dateKey: dateKey,
+      pidToRemove: pid,
+      workCostWid: item.id,
+      workCostWpid: pid,
+    );
+    await _syncLikeFetchAllData(kind: DataChangeKind.workCost);
+  }
+
   Future<bool> updateCost(String category, int id, String date) async {
     var priceString = mPriceController.text.trim();
     priceString = priceString.replaceAll(RegExp(r'[,원]'), '');
@@ -630,14 +648,8 @@ class CalendarViewModel extends Notifier<CalendarState> {
       return false;
     }
     state = state.copyWith(alertText: '');
-    final workCost = WorkCostModel(
-      wid: id,
-      wdate: date,
-      wprice: price,
-      wcomplete: -1,
-      wpid: 1,
-    );
-    await _workCostUseCase.updateWorkCostItem(workCost);
+    // 인건비 다이얼로그는 날짜 읽기 전용 — 금액만 패치(인건비 탭과 동일).
+    await _workCostUseCase.updateWorkCostPrice(id, price);
     await _syncLikeFetchAllData(kind: DataChangeKind.workCost);
     return true;
   }

@@ -127,6 +127,22 @@ class WorkCostUseCase {
     return _repository.deleteWorkCostLinked(wid: wid, pwdid: pwdid);
   }
 
+  Future<int?> unassignSameDayPlace({
+    required int hid,
+    required String dateKey,
+    required int pidToRemove,
+    required int workCostWid,
+    required int workCostWpid,
+  }) {
+    return _repository.unassignSameDayPlace(
+      hid: hid,
+      dateKey: dateKey,
+      pidToRemove: pidToRemove,
+      workCostWid: workCostWid,
+      workCostWpid: workCostWpid,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getWorkCostDetailsForCsv(
     DateTime startDate,
     DateTime endDate,

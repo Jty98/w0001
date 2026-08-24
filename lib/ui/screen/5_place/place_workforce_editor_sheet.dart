@@ -18,7 +18,8 @@ import 'package:w0001/presentation/viewmodel/place_detail_view_model.dart'
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_members_providers.dart';
 import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
-import 'package:w0001/ui/screen/2_add/add_worker_dialog.dart';
+import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
+import 'package:w0001/ui/screen/4_human/widgets/human_editor_dialog.dart';
 import 'package:w0001/ui/screen/2_add/place_recent_workers_sheet.dart';
 import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/domain/data_change_event.dart';
@@ -26,6 +27,9 @@ import 'package:w0001/domain/place_work_day_cross_place_conflict.dart';
 import 'package:w0001/ui/screen/5_place/widgets/cross_place_workday_conflict_dialog.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_work_instruction_editor_sheet.dart';
 import 'package:w0001/ui/widget/human_picker/human_search_pick_sheet.dart';
+import 'package:w0001/data/model/work_unit_preset.dart';
+import 'package:w0001/presentation/viewmodel/worker_rank_wage_settings_providers.dart';
+import 'package:w0001/ui/widget/work_unit_chip_selector.dart';
 import 'package:w0001/util/fetch_data.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/worker_skills_display.dart';
@@ -86,6 +90,8 @@ class _PlaceWorkforceEditorSheetState
   TextEditingController? _editWageCtrl;
   TextEditingController? _editCustomRoleCtrl;
   String? _editRoleChoice;
+  String? _editWorkUnitId;
+  int _editBaseWage = 0;
 
   /// 신규 등록 시에만 사용. [DropdownSearch.multiSelection]과 동기화.
   final List<WorkforcePendingPick> _picks = [];
@@ -498,46 +504,110 @@ class _PlaceWorkforceEditorSheetState
       decimalDigits: 0,
       symbol: '',
     );
+    final settings = ref.read(workerRankWageSettingsProvider).value;
+    final units = settings?.workUnits ?? WorkUnitPreset.defaults;
+    final defaultId = settings?.defaultWorkUnitId ?? WorkUnitPreset.defaultId;
+    final baseWage = WorkUnitPreset.resolveBaseWage(
+      hdailyWage: pick.human.hdailyWage,
+      currentAmount: pick.wprice,
+    );
     final ctrl = TextEditingController(
       text: initFmt.formatString('${pick.wprice}'),
     );
+    var selectedId = WorkUnitPreset.matchId(
+          baseWage: baseWage,
+          amount: pick.wprice,
+          units: units,
+        ) ??
+        defaultId;
+
     final next = await showDialog<int?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('일당 · ${pick.human.hname}'),
-        content: AppTextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.right,
-          decoration: const InputDecoration(
-            labelText: '일당(원)',
-            border: OutlineInputBorder(),
-            suffixText: '원',
-          ),
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            fieldFmt,
-            LengthLimitingTextInputFormatter(13),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final v = int.tryParse(
-                    ctrl.text.replaceAll(RegExp(r'[^\d]'), ''),
-                  ) ??
-                  0;
-              Navigator.pop(ctx, v);
-            },
-            child: const Text('적용'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final cs = Theme.of(ctx).colorScheme;
+            final tt = Theme.of(ctx).textTheme;
+            return AlertDialog(
+              title: Text('일당 · ${pick.human.hname}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      baseWage > 0
+                          ? '기준 금액(현재 지정액=1공수) ${getPrice(price: baseWage)}'
+                          : '기준 금액이 없습니다. 금액을 직접 입력하세요.',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    SizedBox(height: ctx.rsi(12)),
+                    WorkUnitChipSelector(
+                      units: units,
+                      selectedId: selectedId,
+                      enabled: baseWage > 0,
+                      dense: true,
+                      onSelected: (unit) {
+                        if (baseWage <= 0) return;
+                        final amount = unit.amountFromBase(baseWage);
+                        setModalState(() {
+                          selectedId = unit.id;
+                          ctrl.text = fieldFmt.formatDouble(amount.toDouble());
+                        });
+                      },
+                    ),
+                    SizedBox(height: ctx.rsi(12)),
+                    AppTextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.right,
+                      decoration: const InputDecoration(
+                        labelText: '일당(원)',
+                        border: OutlineInputBorder(),
+                        suffixText: '원',
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        fieldFmt,
+                        LengthLimitingTextInputFormatter(13),
+                      ],
+                      onChanged: (raw) {
+                        final v = int.tryParse(
+                              raw.replaceAll(RegExp(r'[^\d]'), ''),
+                            ) ??
+                            -1;
+                        final matched = WorkUnitPreset.matchId(
+                          baseWage: baseWage,
+                          amount: v,
+                          units: units,
+                        );
+                        setModalState(() => selectedId = matched ?? selectedId);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final v = int.tryParse(
+                          ctrl.text.replaceAll(RegExp(r'[^\d]'), ''),
+                        ) ??
+                        0;
+                    Navigator.pop(ctx, v);
+                  },
+                  child: const Text('적용'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => ctrl.dispose());
     if (next != null && mounted) {
@@ -590,6 +660,19 @@ class _PlaceWorkforceEditorSheetState
       _editWageCtrl = TextEditingController(
         text: initWageFmt.formatString('${e.dailywage}'),
       );
+      final wageSettings = ref.read(workerRankWageSettingsProvider).value;
+      final units = wageSettings?.workUnits ?? WorkUnitPreset.defaults;
+      _editBaseWage = WorkUnitPreset.resolveBaseWage(
+        hdailyWage: matched?.hdailyWage ?? 0,
+        currentAmount: e.dailywage,
+      );
+      _editWorkUnitId = WorkUnitPreset.matchId(
+            baseWage: _editBaseWage,
+            amount: e.dailywage,
+            units: units,
+          ) ??
+          wageSettings?.defaultWorkUnitId ??
+          WorkUnitPreset.defaultId;
       _editCustomRoleCtrl = TextEditingController();
       final (chip, customFill) = workRolePresetInitialSelection(roleDefault);
       _editRoleChoice = chip;
@@ -1337,13 +1420,16 @@ class _PlaceWorkforceEditorSheetState
                     ),
                     SizedBox(height: context.rsi(10)),
                     _workDateBanner(context),
+                    // TODO(작업지시탭 이관): 인력 투입 시트 작업지시 영역 — 삭제 예정
+                    // if (existing == null) ...[
+                    //   SizedBox(height: context.rsi(14)),
+                    //   _siteInstructionPanel(context),
+                    //   if (_isProcessScopedCreate) ...[
+                    //     SizedBox(height: context.rsi(14)),
+                    //     _processInstructionPanel(context),
+                    //   ],
+                    // ],
                     if (existing == null) ...[
-                      SizedBox(height: context.rsi(14)),
-                      _siteInstructionPanel(context),
-                      if (_isProcessScopedCreate) ...[
-                        SizedBox(height: context.rsi(14)),
-                        _processInstructionPanel(context),
-                      ],
                       SizedBox(height: context.rsi(14)),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1385,13 +1471,15 @@ class _PlaceWorkforceEditorSheetState
                             height: context.rs(48),
                             width: context.rs(48),
                             child: OutlinedButton(
-                              onPressed: () {
-                                showDialog<void>(
+                              onPressed: () async {
+                                ref
+                                    .read(workerProvider.notifier)
+                                    .cancelHumanEditorForm();
+                                await showHumanEditorDialog(
                                   context: context,
-                                  builder: (_) => const AddWorkerDialog(),
-                                ).then((_) {
-                                  if (mounted) _loadRecentWorkers();
-                                });
+                                  ref: ref,
+                                );
+                                if (mounted) await _loadRecentWorkers();
                               },
                               style: OutlinedButton.styleFrom(
                                 padding: EdgeInsets.zero,
@@ -1468,20 +1556,75 @@ class _PlaceWorkforceEditorSheetState
                     ],
                     if (existing != null) ...[
                       const SizedBox(height: 12),
-                      AppTextField(
-                        controller: _editWageCtrl,
-                        decoration: const InputDecoration(
-                          labelText: '일당(원)',
-                          border: OutlineInputBorder(),
-                          suffixText: '원',
-                        ),
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.right,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          _editWageFmt!,
-                          LengthLimitingTextInputFormatter(13),
-                        ],
+                      Builder(
+                        builder: (context) {
+                          final wageSettings =
+                              ref.watch(workerRankWageSettingsProvider).value;
+                          final units = wageSettings?.workUnits ??
+                              WorkUnitPreset.defaults;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                _editBaseWage > 0
+                                    ? '기준 금액(현재 지정액=1공수) ${getPrice(price: _editBaseWage)}'
+                                    : '기준 금액이 없으면 금액을 직접 입력하세요.',
+                                style: tt.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                              SizedBox(height: context.rsi(8)),
+                              WorkUnitChipSelector(
+                                units: units,
+                                selectedId: _editWorkUnitId,
+                                enabled: _editBaseWage > 0,
+                                dense: true,
+                                onSelected: (unit) {
+                                  if (_editBaseWage <= 0 ||
+                                      _editWageCtrl == null ||
+                                      _editWageFmt == null) {
+                                    return;
+                                  }
+                                  final amount =
+                                      unit.amountFromBase(_editBaseWage);
+                                  setState(() {
+                                    _editWorkUnitId = unit.id;
+                                    _editWageCtrl!.text = _editWageFmt!
+                                        .formatDouble(amount.toDouble());
+                                  });
+                                },
+                              ),
+                              SizedBox(height: context.rsi(12)),
+                              AppTextField(
+                                controller: _editWageCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: '일당(원)',
+                                  border: OutlineInputBorder(),
+                                  suffixText: '원',
+                                ),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.right,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  _editWageFmt!,
+                                  LengthLimitingTextInputFormatter(13),
+                                ],
+                                onChanged: (raw) {
+                                  final v = int.tryParse(
+                                        raw.replaceAll(RegExp(r'[^\d]'), ''),
+                                      ) ??
+                                      -1;
+                                  final matched = WorkUnitPreset.matchId(
+                                    baseWage: _editBaseWage,
+                                    amount: v,
+                                    units: units,
+                                  );
+                                  setState(() => _editWorkUnitId = matched);
+                                },
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -1527,6 +1670,8 @@ class _PlaceWorkforceEditorSheetState
                           ),
                         ),
                       ],
+                      // TODO(작업지시탭 이관): 인력 수정 시트 작업 내용 — 삭제 예정
+                      /*
                       SizedBox(height: context.rsi(14)),
                       ListTile(
                         contentPadding:
@@ -1569,6 +1714,7 @@ class _PlaceWorkforceEditorSheetState
                                 }
                               },
                       ),
+                      */
                     ],
                   ],
                 ),
@@ -1763,6 +1909,8 @@ class _WorkforcePickGridCard extends StatelessWidget {
                 ],
               ),
             ),
+            // TODO(작업지시탭 이관): 개별 작업지시 버튼 — 삭제 예정
+            /*
             Material(
               color: hasIndividualInstruction
                   ? cs.tertiaryContainer.withValues(alpha: 0.85)
@@ -1803,6 +1951,7 @@ class _WorkforcePickGridCard extends StatelessWidget {
                 ),
               ),
             ),
+            */
           ],
         ),
       ),

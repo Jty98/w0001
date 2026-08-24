@@ -312,6 +312,80 @@ class _DashboardScheduleMemoEditorSheetState
             trailing: Icon(Icons.calendar_today_outlined, color: cs.onSurface),
             onTap: _pickDateWithScrollableCalendar,
           ),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: cs.surface,
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.55),
+              ),
+            ),
+            child: ListTile(
+              dense: true,
+              leading: Icon(
+                Icons.business_outlined,
+                color: cs.primary,
+              ),
+              title: Text(
+                '현장 이름 불러오기',
+                style: tt.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+              subtitle: Text(
+                '최근 등록된 현장 검색/정렬',
+                style: hintStyle,
+              ),
+              trailing: OutlinedButton.icon(
+                onPressed: _pickPlaceNameFromDialog,
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('선택'),
+                style: _sheetOutlinedButtonStyle(cs).copyWith(
+                  foregroundColor: WidgetStatePropertyAll(cs.primary),
+                  side: WidgetStatePropertyAll(
+                    BorderSide(
+                      color: cs.primary.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppTextField(
+            controller: _titleCtrl,
+            focusNode: _titleFocus,
+            scrollPadding: keyboardScrollPadding(context),
+            decoration: InputDecoration(
+              labelText: '제목',
+              labelStyle: labelStyle,
+              border: const OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+            onTap: scheduleKeyboardScrollIntoView,
+          ),
+          const SizedBox(height: 12),
+          KeyedSubtree(
+            key: _memoFieldKey,
+            child: AppTextField(
+              controller: _memoCtrl,
+              focusNode: _memoFocus,
+              scrollPadding: keyboardScrollPadding(context, extra: 80),
+              decoration: InputDecoration(
+                labelText: '내용',
+                hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
+                labelStyle: labelStyle,
+                hintStyle: hintStyle,
+                border: const OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+              minLines: 3,
+              maxLines: 6,
+              onTap: scheduleKeyboardScrollIntoView,
+            ),
+          ),
+          const SizedBox(height: 8),
           _TaskTimePickerField(
             pickedTime: _pickedTime,
             labelStyle: labelStyle,
@@ -370,79 +444,6 @@ class _DashboardScheduleMemoEditorSheetState
             ),
             const SizedBox(height: 12),
           ],
-          AppTextField(
-            controller: _titleCtrl,
-            focusNode: _titleFocus,
-            scrollPadding: keyboardScrollPadding(context),
-            decoration: InputDecoration(
-              labelText: '제목',
-              labelStyle: labelStyle,
-              border: const OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.next,
-            onTap: scheduleKeyboardScrollIntoView,
-          ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: cs.surface,
-              border: Border.all(
-                color: cs.outlineVariant.withValues(alpha: 0.55),
-              ),
-            ),
-            child: ListTile(
-              dense: true,
-              leading: Icon(
-                Icons.business_outlined,
-                color: cs.primary,
-              ),
-              title: Text(
-                '현장 이름 불러오기',
-                style: tt.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: cs.onSurface,
-                ),
-              ),
-              subtitle: Text(
-                '최근 등록된 현장 검색/정렬',
-                style: hintStyle,
-              ),
-              trailing: OutlinedButton.icon(
-                onPressed: _pickPlaceNameFromDialog,
-                icon: const Icon(Icons.search, size: 16),
-                label: const Text('선택'),
-                style: _sheetOutlinedButtonStyle(cs).copyWith(
-                  foregroundColor: WidgetStatePropertyAll(cs.primary),
-                  side: WidgetStatePropertyAll(
-                    BorderSide(
-                      color: cs.primary.withValues(alpha: 0.55),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          KeyedSubtree(
-            key: _memoFieldKey,
-            child: AppTextField(
-              controller: _memoCtrl,
-              focusNode: _memoFocus,
-              scrollPadding: keyboardScrollPadding(context, extra: 80),
-              decoration: InputDecoration(
-                labelText: '내용',
-                hintText: '작업 상세 내용, 전달사항 등을 입력하세요.',
-                labelStyle: labelStyle,
-                hintStyle: hintStyle,
-                border: const OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              minLines: 3,
-              maxLines: 6,
-              onTap: scheduleKeyboardScrollIntoView,
-            ),
-          ),
           const SizedBox(height: 16),
           Row(
             children: [

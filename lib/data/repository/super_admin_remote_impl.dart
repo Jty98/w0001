@@ -102,7 +102,8 @@ class SuperAdminRemoteRepositoryImpl implements SuperAdminRemoteRepository {
   Future<PlaceRead> placePatch(int pid, Map<String, dynamic> body) =>
       _api.placePatch(pid, body);
   @override
-  Future<void> placeDelete(int pid) => _api.placeDelete(pid);
+  Future<void> placeDelete(int pid, {bool permanent = false}) =>
+      _api.placeDelete(pid, permanent: permanent);
 
   @override
   Future<List<HumanRead>> humansList() => _api.humansList();

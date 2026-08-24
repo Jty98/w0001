@@ -264,6 +264,7 @@ class BulkWorkerGridItem extends StatelessWidget {
     this.workRole,
     this.wageLabel,
     this.primarySpecialty,
+    this.blockedLabel,
   });
 
   final String name;
@@ -273,6 +274,7 @@ class BulkWorkerGridItem extends StatelessWidget {
   final String? workRole;
   final String? wageLabel;
   final String? primarySpecialty;
+  final String? blockedLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -340,6 +342,17 @@ class BulkWorkerGridItem extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (blockedLabel != null) ...[
+                    SizedBox(height: context.rsi(2)),
+                    Text(
+                      blockedLabel!,
+                      style: tt.labelSmall?.copyWith(
+                        fontSize: context.rs(10),
+                        fontWeight: FontWeight.w800,
+                        color: cs.error,
+                      ),
+                    ),
+                  ],
                   SizedBox(height: context.rsi(2)),
                   if (isSelected) ...[
                     if (workRole != null)

@@ -15,7 +15,7 @@ extension UserRoleCapabilities on UserRole {
   /// 하단 탭·상황판(경영 KPI 홈).
   bool get canUseManagementDashboardTab => isManagementRole;
 
-  /// 금액 추가 탭.
+  /// 현장 금액관리에서 금액 추가.
   bool get canUseAddExpenseTab => isManagementRole;
 
   /// 인건비 탭.

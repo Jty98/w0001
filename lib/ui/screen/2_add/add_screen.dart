@@ -28,7 +28,13 @@ String _placePickerDisplayLabel(PlaceModel item, AddCostState state) {
 }
 
 class AddScreen extends ConsumerStatefulWidget {
-  const AddScreen({super.key});
+  const AddScreen({
+    super.key,
+    this.embeddedPlace,
+  });
+
+  /// 현장 금액관리에 임베드할 때 잠글 현장. 있으면 현장 선택 화면을 생략한다.
+  final PlaceModel? embeddedPlace;
 
   @override
   ConsumerState<AddScreen> createState() => _AddScreenState();
@@ -45,36 +51,73 @@ class _AddScreenState extends ConsumerState<AddScreen>
   /// 이 값 이하면 현장 선택 패널만 씀.
   static const _kClosedLayoutThreshold = 0.001;
 
-  late final AnimationController _openController;
+  AnimationController? _openController;
+
+  bool get _embedded => widget.embeddedPlace != null;
 
   @override
   void initState() {
     super.initState();
+    if (_embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _syncEmbeddedPlace();
+      });
+      return;
+    }
     _openController = AnimationController(vsync: this, duration: _openDuration);
     if (ref.read(addCostProvider).selectedPlace != null) {
-      _openController.value = 1;
+      _openController!.value = 1;
+    }
+  }
+
+  void _syncEmbeddedPlace() {
+    final place = widget.embeddedPlace;
+    if (!mounted || place == null) return;
+    final current = ref.read(addCostProvider).selectedPlace;
+    if (current?.pid != place.pid) {
+      ref.read(addCostProvider.notifier).placeChangeAction(context, place);
     }
   }
 
   @override
   void dispose() {
-    _openController.dispose();
+    _openController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(addCostProvider);
+    final vm = ref.read(addCostProvider.notifier);
+
+    if (_embedded) {
+      return DefaultTabController(
+        length: 2,
+        initialIndex: 0,
+        child: GestureDetector(
+          behavior: HitTestBehavior.deferToChild,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: _buildScrollMainPanel(
+            context,
+            ref,
+            vm,
+            state,
+            showPlaceSwitcher: false,
+          ),
+        ),
+      );
+    }
+
+    final openController = _openController!;
     ref.listen<AddCostState>(addCostProvider, (previous, next) {
       if (previous?.selectedPlace == null && next.selectedPlace != null) {
-        _openController.forward(from: 0);
+        openController.forward(from: 0);
       }
       if (previous?.selectedPlace != null && next.selectedPlace == null) {
-        _openController.reverse();
+        openController.reverse();
       }
     });
 
-    final state = ref.watch(addCostProvider);
-    final vm = ref.read(addCostProvider.notifier);
     final hasPlace = state.selectedPlace != null;
 
     return BackButtonListener(
@@ -106,10 +149,10 @@ class _AddScreenState extends ConsumerState<AddScreen>
               child: Scaffold(
                 resizeToAvoidBottomInset: true,
                 body: AnimatedBuilder(
-                  animation: _openController,
+                  animation: openController,
                   builder: (context, _) {
                     final u = Curves.easeInOutCubic
-                        .transform(_openController.value.clamp(0.0, 1.0));
+                        .transform(openController.value.clamp(0.0, 1.0));
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         final media = MediaQuery.of(context);
@@ -248,8 +291,9 @@ class _AddScreenState extends ConsumerState<AddScreen>
     BuildContext context,
     WidgetRef ref,
     AddCostViewModel vm,
-    AddCostState state,
-  ) {
+    AddCostState state, {
+    bool showPlaceSwitcher = true,
+  }) {
     final theme = Theme.of(context);
     final tt = theme.textTheme;
     final headerColor =
@@ -266,18 +310,19 @@ class _AddScreenState extends ConsumerState<AddScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: ResponsiveLayout.only(
-                    context,
-                    left: 12,
-                    top: 6,
-                    right: 12,
+              if (showPlaceSwitcher)
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: ResponsiveLayout.only(
+                      context,
+                      left: 12,
+                      top: 6,
+                      right: 12,
+                    ),
+                    child: placeDropdown(ref, vm, state, context),
                   ),
-                  child: placeDropdown(ref, vm, state, context),
                 ),
-              ),
               TabBar(
                 padding: ResponsiveLayout.symmetric(context, vertical: 5),
                 labelPadding: ResponsiveLayout.symmetric(context, vertical: 5),

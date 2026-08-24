@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -27,15 +26,19 @@ Color _scheduleWeekdayTextColor(
   DateTime day, {
   required bool selected,
 }) {
+  if (selected) {
+    if (day.weekday == DateTime.sunday) {
+      return cs.error;
+    }
+    return cs.onPrimaryContainer;
+  }
   if (day.weekday == DateTime.sunday) {
-    return selected
-        ? cs.error.withValues(alpha: 0.92)
-        : cs.error.withValues(alpha: 0.72);
+    return cs.error.withValues(alpha: 0.72);
   }
   if (day.weekday == DateTime.saturday) {
-    return selected ? cs.onSurface : cs.onSurfaceVariant;
+    return cs.onSurfaceVariant;
   }
-  return selected ? cs.onSurface : cs.onSurfaceVariant;
+  return cs.onSurfaceVariant;
 }
 
 Color _scheduleDayNumberColor(
@@ -43,7 +46,12 @@ Color _scheduleDayNumberColor(
   DateTime day, {
   required bool selected,
 }) {
-  if (selected) return cs.onSurface;
+  if (selected) {
+    if (day.weekday == DateTime.sunday) {
+      return cs.error;
+    }
+    return cs.primary;
+  }
   return _scheduleWeekdayTextColor(cs, day, selected: false);
 }
 
@@ -275,17 +283,16 @@ class DashboardScheduleWeekCalendarStrip extends ConsumerWidget {
                       curve: Curves.easeOut,
                       padding: EdgeInsets.symmetric(vertical: cellPadV),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? cs.surfaceContainerHigh.withValues(alpha: 0.72)
-                            : Colors.transparent,
+                        color:
+                            selected ? cs.primaryContainer : Colors.transparent,
                         borderRadius: BorderRadius.circular(radius),
                         border: Border.all(
-                          color: isToday
-                              ? cs.primary.withValues(alpha: 0.85)
-                              : selected
-                                  ? cs.outline.withValues(alpha: 0.55)
+                          color: selected
+                              ? cs.primary
+                              : isToday
+                                  ? cs.primary.withValues(alpha: 0.55)
                                   : cs.outlineVariant.withValues(alpha: 0.35),
-                          width: isToday || selected ? 1.25 : 1,
+                          width: selected ? 1.6 : (isToday ? 1.25 : 1),
                         ),
                       ),
                       child: Column(
@@ -558,7 +565,8 @@ class DashboardScheduleWeekPicker extends ConsumerWidget {
   }
 }
 
-/// 주간 미니 캘린더 + 주별(좌우 스와이프) 일정 — 기본은 이번 주.
+/// 주간 미니 캘린더 + 선택일 일정 — 기본은 이번 주.
+/// 상황판 세로 스크롤 안에 가로 PageView를 두지 않는다.
 class DashboardScheduleCompactCard extends ConsumerStatefulWidget {
   const DashboardScheduleCompactCard({super.key, this.embedded = false});
 
@@ -577,40 +585,13 @@ class DashboardScheduleCompactBody extends DashboardScheduleCompactCard {
 
 class _DashboardScheduleCompactCardState
     extends ConsumerState<DashboardScheduleCompactCard> {
-  PageController? _pageController;
-  var _pageControllerReady = false;
-  var _syncingPageFromVm = false;
-  final Map<String, ScrollController> _weekScrollControllers = {};
-  final Map<String, Map<String, GlobalKey>> _weekDaySectionKeys = {};
-
   // dispose()에서 안전하게 사용하기 위해 notifier를 필드로 저장
   DashboardScheduleViewModel? _notifier;
 
-  String _weekKeyOf(DateTime day) =>
-      scheduleDateKey(scheduleStartOfWeekMonday(scheduleDateOnly(day)));
-
-  void _scrollToDaySection(DateTime day) {
-    final weekKey = _weekKeyOf(day);
-    final dayKey = scheduleDateKey(scheduleDateOnly(day));
-    final ctx = _weekDaySectionKeys[weekKey]?[dayKey]?.currentContext;
-    final ctrl = _weekScrollControllers[weekKey];
-    if (ctx == null || ctrl == null || !ctrl.hasClients) return;
-
-    final renderObject = ctx.findRenderObject();
-    if (renderObject == null) return;
-    final viewport = RenderAbstractViewport.of(renderObject);
-
-    final targetOffset = viewport.getOffsetToReveal(renderObject, 0.06).offset;
-    final position = ctrl.position;
-    final clamped = targetOffset.clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
-    );
-    ctrl.animateTo(
-      clamped.toDouble(),
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
-    );
+  @override
+  void initState() {
+    super.initState();
+    _notifier = ref.read(dashboardScheduleProvider.notifier);
   }
 
   Future<void> _shareSelectedDay(
@@ -773,25 +754,9 @@ class _DashboardScheduleCompactCardState
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_pageControllerReady) return;
-    final vm = ref.read(dashboardScheduleProvider.notifier);
-    _notifier = vm; // dispose()에서 사용하기 위해 저장
-    final st = ref.read(dashboardScheduleProvider);
-    final idx = vm.weekPageIndexFor(st.weekStart);
-    _pageController = PageController(initialPage: idx);
-    _pageControllerReady = true;
-  }
-
-  @override
   void dispose() {
     // ref 대신 저장해둔 notifier 필드 사용 (dispose에서 ref 사용은 안전하지 않음)
     _notifier?.flushPendingDonePatches();
-    for (final c in _weekScrollControllers.values) {
-      c.dispose();
-    }
-    _pageController?.dispose();
     super.dispose();
   }
 
@@ -802,27 +767,9 @@ class _DashboardScheduleCompactCardState
     final vm = ref.read(dashboardScheduleProvider.notifier);
     final today = scheduleDateOnly(DateTime.now());
     final mediaH = MediaQuery.sizeOf(context).height;
-    final pageHeight = (mediaH * 0.38).clamp(context.rs(300), context.rs(420));
+    // 선택일 목록만 보여 내부 스크롤을 쓰지 않으므로 높이를 조금 낮춤.
+    final pageHeight = (mediaH * 0.34).clamp(context.rs(280), context.rs(380));
     final tt = Theme.of(context).textTheme;
-
-    ref.listen<DashboardScheduleState>(dashboardScheduleProvider, (prev, next) {
-      if (prev?.weekStart == next.weekStart) return;
-      final c = _pageController;
-      if (c == null || !c.hasClients) return;
-      final target = vm.weekPageIndexFor(next.weekStart);
-      final cur = c.page?.round() ?? c.initialPage;
-      if (cur == target) return;
-      _syncingPageFromVm = true;
-      c
-          .animateToPage(
-        target,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
-      )
-          .whenComplete(() {
-        if (mounted) _syncingPageFromVm = false;
-      });
-    });
 
     final scheduleContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -851,81 +798,13 @@ class _DashboardScheduleCompactCardState
           ),
         SizedBox(
           height: pageHeight,
-          child: _pageController == null
-              ? _scheduleWeekPageSkeleton(
-                  context: context,
-                  weekMonday: vm.weekMondayAtPageIndex(
-                    vm.weekPageIndexFor(state.weekStart),
-                  ),
-                  cs: cs,
-                  pageHeight: pageHeight,
-                )
-              : PageView.builder(
-                  controller: _pageController,
-                  itemCount: DashboardScheduleViewModel.weekPageCount,
-                  onPageChanged: (i) {
-                    if (_syncingPageFromVm) return;
-                    ref
-                        .read(dashboardScheduleProvider.notifier)
-                        .setWeekPageIndex(i);
-                  },
-                  itemBuilder: (context, i) {
-                    final mon = vm.weekMondayAtPageIndex(i);
-                    final weekKey = _weekKeyOf(mon);
-                    final scrollCtrl = _weekScrollControllers.putIfAbsent(
-                      weekKey,
-                      ScrollController.new,
-                    );
-                    final daySectionKeys =
-                        _weekDaySectionKeys.putIfAbsent(weekKey, () => {});
-                    final list = state.memosForWeekMondayCached(mon);
-                    final isActivePage =
-                        vm.weekPageIndexFor(state.weekStart) == i;
-                    final loading =
-                        state.isWeekLoading && isActivePage && list.isEmpty;
-                    if (loading) {
-                      return _scheduleWeekPageSkeleton(
-                        context: context,
-                        weekMonday: mon,
-                        cs: cs,
-                        pageHeight: pageHeight,
-                      );
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        DashboardScheduleWeekCalendarStrip(
-                          weekMonday: mon,
-                          showWeekRangeHeader: true,
-                          useFullMemosForDots: false,
-                          onDayTap: _scrollToDaySection,
-                        ),
-                        Divider(
-                          height: context.rs(16),
-                          thickness: 1,
-                          color: cs.outlineVariant.withValues(alpha: 0.32),
-                        ),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            controller: scrollCtrl,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: ResponsiveLayout.only(
-                              context,
-                              top: 2,
-                              bottom: 6,
-                            ),
-                            child: _ScheduleWeekDaySections(
-                              weekMonday: mon,
-                              memos: list,
-                              onDayTap: _scrollToDaySection,
-                              daySectionKeys: daySectionKeys,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+          child: _compactWeekBody(
+            context: context,
+            cs: cs,
+            tt: tt,
+            state: state,
+            pageHeight: pageHeight,
+          ),
         ),
         rsV(context, 4),
         Row(
@@ -938,12 +817,6 @@ class _DashboardScheduleCompactCardState
                   );
                   vm.setWeekPageIndex(idx);
                   vm.selectDay(today);
-                  final c = _pageController;
-                  if (c != null && c.hasClients) {
-                    _syncingPageFromVm = true;
-                    c.jumpToPage(idx);
-                    _syncingPageFromVm = false;
-                  }
                 },
                 child: const Text('오늘'),
               ),
@@ -1024,6 +897,110 @@ class _DashboardScheduleCompactCardState
           ],
         ),
       ),
+    );
+  }
+
+  Widget _compactWeekBody({
+    required BuildContext context,
+    required ColorScheme cs,
+    required TextTheme tt,
+    required DashboardScheduleState state,
+    required double pageHeight,
+  }) {
+    final mon = scheduleDateOnly(state.weekStart);
+    final list = state.memosForWeekMondayCached(mon);
+    final loading = state.isWeekLoading && list.isEmpty;
+    if (loading) {
+      return _scheduleWeekPageSkeleton(
+        context: context,
+        weekMonday: mon,
+        cs: cs,
+        pageHeight: pageHeight,
+      );
+    }
+
+    final weekEnd = mon.add(const Duration(days: 6));
+    final selected = scheduleDateOnly(state.selectedDay);
+    final dayToShow =
+        (selected.isBefore(mon) || selected.isAfter(weekEnd)) ? mon : selected;
+    final dayKey = scheduleDateKey(dayToShow);
+    final dayMemos = list.where((m) => m.taskDate == dayKey).toList()
+      ..sort((a, b) {
+        final aTime = a.taskTime.trim();
+        final bTime = b.taskTime.trim();
+        final aHas = aTime.isNotEmpty;
+        final bHas = bTime.isNotEmpty;
+        if (aHas != bHas) return aHas ? -1 : 1;
+        if (aTime != bTime) return aTime.compareTo(bTime);
+        return a.title.compareTo(b.title);
+      });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const DashboardScheduleWeekPicker(
+          showChevronNav: true,
+          showDayStrip: true,
+        ),
+        Divider(
+          height: context.rs(16),
+          thickness: 1,
+          color: cs.outlineVariant.withValues(alpha: 0.32),
+        ),
+        Padding(
+          padding: EdgeInsets.only(bottom: context.rsi(4)),
+          child: Text(
+            _dayTitleLine(dayToShow),
+            style: tt.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface,
+            ),
+          ),
+        ),
+        Expanded(
+          child: dayMemos.isEmpty
+              ? Center(
+                  child: Text(
+                    '이 날 등록된 일정이 없습니다.',
+                    style: tt.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : ClipRect(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SingleChildScrollView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: ResponsiveLayout.only(
+                        context,
+                        top: 2,
+                        bottom: 4,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final m in dayMemos)
+                            Padding(
+                              padding: ResponsiveLayout.only(
+                                context,
+                                bottom: 8,
+                              ),
+                              child: _memoTile(
+                                context,
+                                ref,
+                                m,
+                                showDayHeading: false,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }

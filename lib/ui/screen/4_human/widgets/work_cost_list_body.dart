@@ -4,10 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:w0001/data/model/total_workcost_model.dart';
+import 'package:w0001/data/model/work_unit_preset.dart';
+import 'package:w0001/domain/same_day_work_cost.dart';
 import 'package:w0001/enums.dart';
+import 'package:w0001/presentation/viewmodel/worker_rank_wage_settings_providers.dart';
 import 'package:w0001/presentation/viewmodel/worker_view_model.dart';
 import 'package:w0001/ui/widget/save_dialog.dart';
 import 'package:w0001/ui/widget/work_cost_delete_dialog.dart';
+import 'package:w0001/ui/widget/work_unit_chip_selector.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
@@ -215,10 +219,10 @@ class WorkCostEntryTile extends ConsumerWidget {
           ),
           CustomSlidableAction(
             onPressed: (slidableCtx) async {
+              final rootCtx = context;
               final pwdid = await vm.placeWorkDayPwdidFor(element);
-              if (!slidableCtx.mounted) return;
               final choice = await showWorkCostDeleteDialog(
-                slidableCtx,
+                rootCtx,
                 placeName: element.pname,
                 workerName: element.hname,
                 dateLabel: element.date,
@@ -227,15 +231,24 @@ class WorkCostEntryTile extends ConsumerWidget {
               );
               if (choice == null ||
                   choice == WorkCostDeleteChoice.cancel ||
-                  !slidableCtx.mounted) {
+                  !rootCtx.mounted) {
                 return;
               }
-              await vm.deleteWorkCostLinked(
-                wid: element.wid,
-                pwdid: choice == WorkCostDeleteChoice.costAndWorkDay
-                    ? pwdid
-                    : null,
-              );
+              try {
+                await vm.deleteWorkCostLinked(
+                  wid: element.wid,
+                  pwdid: choice == WorkCostDeleteChoice.costAndWorkDay
+                      ? pwdid
+                      : null,
+                );
+              } catch (_) {
+                if (!rootCtx.mounted) return;
+                ScaffoldMessenger.of(rootCtx).showSnackBar(
+                  const SnackBar(
+                    content: Text('삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
+                  ),
+                );
+              }
             },
             backgroundColor: cs.error,
             foregroundColor: cs.onError,
@@ -468,7 +481,7 @@ Future<void> showEditWorkCostPriceDialog(
   );
 }
 
-class _EditWorkCostPriceDialog extends StatefulWidget {
+class _EditWorkCostPriceDialog extends ConsumerStatefulWidget {
   const _EditWorkCostPriceDialog({
     required this.element,
     required this.vm,
@@ -480,13 +493,22 @@ class _EditWorkCostPriceDialog extends StatefulWidget {
   final BuildContext parentContext;
 
   @override
-  State<_EditWorkCostPriceDialog> createState() =>
+  ConsumerState<_EditWorkCostPriceDialog> createState() =>
       _EditWorkCostPriceDialogState();
 }
 
-class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
+class _EditWorkCostPriceDialogState
+    extends ConsumerState<_EditWorkCostPriceDialog> {
   late final TextEditingController _priceController;
   late final CurrencyTextInputFormatter _priceFormatter;
+  late final int _baseWage;
+
+  /// null이면 금액·설정 기준으로 자동 매칭.
+  String? _selectedUnitId;
+  var _userPickedUnit = false;
+  late List<SameDayPlaceRef> _places;
+  var _removingPlace = false;
+  late int _workCostWpid;
 
   @override
   void initState() {
@@ -495,17 +517,66 @@ class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
       decimalDigits: 0,
       symbol: '',
     );
+    _baseWage = WorkUnitPreset.resolveBaseWage(
+      hdailyWage: widget.element.hdailyWage,
+      currentAmount: widget.element.price,
+    );
     _priceController = TextEditingController(
       text: widget.element.price > 0
           ? _priceFormatter.formatDouble(widget.element.price.toDouble())
           : '',
     );
+    _places = List<SameDayPlaceRef>.from(widget.element.sameDayPlaces);
+    _workCostWpid = widget.element.wpid;
   }
 
   @override
   void dispose() {
     _priceController.dispose();
     super.dispose();
+  }
+
+  String? _resolveSelectedId(List<WorkUnitPreset> units, String defaultId) {
+    if (_userPickedUnit) return _selectedUnitId;
+    return WorkUnitPreset.matchId(
+          baseWage: _baseWage,
+          amount: widget.element.price,
+          units: units,
+        ) ??
+        defaultId;
+  }
+
+  void _applyUnit(WorkUnitPreset unit) {
+    if (_baseWage <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('기준 금액이 없어 공수를 적용할 수 없습니다.')),
+      );
+      return;
+    }
+    final amount = unit.amountFromBase(_baseWage);
+    setState(() {
+      _userPickedUnit = true;
+      _selectedUnitId = unit.id;
+      _priceController.text = _priceFormatter.formatDouble(amount.toDouble());
+    });
+  }
+
+  void _onPriceEdited(String _) {
+    final price = int.tryParse(
+          _priceController.text.trim().replaceAll(RegExp(r'[,원\s]'), ''),
+        ) ??
+        -1;
+    final settings = ref.read(workerRankWageSettingsProvider).value;
+    final units = settings?.workUnits ?? WorkUnitPreset.defaults;
+    final matched = WorkUnitPreset.matchId(
+      baseWage: _baseWage,
+      amount: price,
+      units: units,
+    );
+    setState(() {
+      _userPickedUnit = true;
+      _selectedUnitId = matched;
+    });
   }
 
   Future<void> _save() async {
@@ -530,11 +601,69 @@ class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
     );
   }
 
+  Future<void> _removePlace(SameDayPlaceRef place) async {
+    if (_removingPlace || _places.length <= 1) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('현장 투입 빼기'),
+        content: Text(
+          '「${place.name}」에 가지 않았다면 이 현장 투입만 빼세요.\n'
+          '인건비(1공수)는 남은 현장에 그대로 유지됩니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('현장 빼기'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _removingPlace = true);
+    try {
+      final nextWpid = await widget.vm.unassignSameDayPlace(
+        hid: widget.element.hid,
+        dateKey: widget.element.date,
+        pidToRemove: place.pid,
+        workCostWid: widget.element.wid,
+        workCostWpid: _workCostWpid,
+      );
+      if (!mounted) return;
+      setState(() {
+        _places = _places.where((p) => p.pid != place.pid).toList();
+        if (nextWpid != null) _workCostWpid = nextWpid;
+        _removingPlace = false;
+      });
+      if (_places.isEmpty) {
+        Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _removingPlace = false);
+      ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+        const SnackBar(content: Text('현장 투입을 빼지 못했습니다. 잠시 후 다시 시도해 주세요.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final role = widget.element.workrole.trim();
+    final settings = ref.watch(workerRankWageSettingsProvider).value;
+    final units = settings?.workUnits ?? WorkUnitPreset.defaults;
+    final defaultId = settings?.defaultWorkUnitId ?? WorkUnitPreset.defaultId;
+    final selectedId = _resolveSelectedId(units, defaultId);
+    final usedRoleFallback =
+        widget.element.price <= 0 && widget.element.hdailyWage > 0;
+
     return Dialog(
       child: Container(
         decoration: BoxDecoration(
@@ -564,17 +693,13 @@ class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
                 ),
                 SizedBox(height: context.rsi(4)),
                 Text(
-                  '현장/날짜를 확인하고 금액을 수정해 저장하세요.',
+                  '공수를 고르면 현재 지정 금액(1공수)에 ×배율 또는 +가산액이 적용됩니다. 필요하면 금액을 직접 수정하세요.',
                   style: tt.bodySmall?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),
                 ),
                 SizedBox(height: context.rsi(10)),
-                _readonlyInfoBox(
-                  context: context,
-                  title: '현장',
-                  value: widget.element.pname,
-                ),
+                _placesBox(context),
                 SizedBox(height: context.rsi(8)),
                 _readonlyInfoBox(
                   context: context,
@@ -590,6 +715,22 @@ class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
                   ),
                 ],
                 SizedBox(height: context.rsi(8)),
+                _readonlyInfoBox(
+                  context: context,
+                  title:
+                      usedRoleFallback ? '기준 일당 (역할)' : '기준 금액 (현재 지정액 = 1공수)',
+                  value:
+                      _baseWage > 0 ? getPrice(price: _baseWage) : '기준 금액 없음',
+                ),
+                SizedBox(height: context.rsi(12)),
+                WorkUnitChipSelector(
+                  units: units,
+                  selectedId: selectedId,
+                  enabled: _baseWage > 0,
+                  dense: true,
+                  onSelected: _applyUnit,
+                ),
+                SizedBox(height: context.rsi(12)),
                 AppTextField(
                   controller: _priceController,
                   keyboardType: TextInputType.number,
@@ -607,7 +748,7 @@ class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  autofocus: true,
+                  onChanged: _onPriceEdited,
                 ),
                 SizedBox(height: context.rsi(10)),
                 Row(
@@ -631,6 +772,86 @@ class _EditWorkCostPriceDialogState extends State<_EditWorkCostPriceDialog> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _placesBox(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final canRemove = _places.length > 1;
+    if (_places.isEmpty) {
+      return _readonlyInfoBox(
+        context: context,
+        title: '현장',
+        value: widget.element.pname,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(context.rsi(10)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        context.rsi(10),
+        context.rsi(8),
+        context.rsi(6),
+        context.rsi(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '현장',
+            style: tt.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (canRemove) ...[
+            SizedBox(height: context.rsi(2)),
+            Text(
+              '가지 않은 현장이 있으면 빼세요. 인건비는 1공수 그대로입니다.',
+              style: tt.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                height: 1.3,
+              ),
+            ),
+          ],
+          SizedBox(height: context.rsi(4)),
+          for (final place in _places)
+            Padding(
+              padding: EdgeInsets.only(top: context.rsi(2)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      place.workrole.trim().isEmpty
+                          ? place.name
+                          : '${place.name} · ${place.workrole.trim()}',
+                      style: tt.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (canRemove)
+                    IconButton(
+                      tooltip: '이 현장 빼기',
+                      visualDensity: VisualDensity.compact,
+                      onPressed:
+                          _removingPlace ? null : () => _removePlace(place),
+                      icon: Icon(
+                        Icons.remove_circle_outline_rounded,
+                        color: cs.error,
+                        size: 20,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

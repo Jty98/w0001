@@ -38,13 +38,6 @@ class DailyQuoteManagementScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('오늘의 명언 관리'),
-        actions: [
-          IconButton(
-            tooltip: '새로고침',
-            onPressed: state.isLoading ? null : () => notifier.load(),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: state.isSaving

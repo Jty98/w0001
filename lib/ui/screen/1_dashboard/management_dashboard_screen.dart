@@ -57,6 +57,7 @@ class _ManagementDashboardScreenState
       yearly: state.yearly,
       places: state.places,
       initialPlaceFilter: placeFilter,
+      initialYearly: state.kpiPeriodMode == DashboardKpiPeriodMode.yearly,
     );
   }
 
@@ -76,7 +77,7 @@ class _ManagementDashboardScreenState
       backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('상황판'),
-        centerTitle: false,
+        centerTitle: true,
         scrolledUnderElevation: 0,
         backgroundColor: cs.surface,
         surfaceTintColor: Colors.transparent,
@@ -169,7 +170,7 @@ class _ManagementDashboardScreenState
                   child: ManagementDashboardSectionShell(
                     icon: Icons.insights_outlined,
                     title: '경영 지표',
-                    subtitle: '월별·연도별 현장 실적 요약',
+                    subtitle: '기간 발생분 · 미수는 현재 · 이익은 완료 현장',
                     child: DashboardKpiSection(
                       horizontalPadding: 0,
                       onMetricChart: _showMetricChart,

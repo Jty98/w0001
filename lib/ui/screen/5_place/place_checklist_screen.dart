@@ -301,7 +301,7 @@ class _PlaceChecklistScreenState extends ConsumerState<PlaceChecklistScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('항목 삭제'),
-        content: Text('"${item.title}" 항목을 삭제할까요?'),
+        content: Text('"${item.displayTitle}" 항목을 삭제할까요?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -672,8 +672,8 @@ class _EmptyChecklistHint extends StatelessWidget {
             rsV(context, 8),
             Text(
               hasScheduleTasks
-                  ? '공정표 공정별로 작업 항목을 추가해 진행 상황을 확인하세요.'
-                  : '공정표를 먼저 만들면 공정별로 항목을 정리하기 쉬워요.',
+                  ? '당일 공정을 고르거나 항목을 한 줄로 입력해 진행 상황을 확인하세요.'
+                  : '공정표를 먼저 만들면 당일 공정 칩으로 더 빨리 넣을 수 있어요.',
               style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
@@ -819,7 +819,7 @@ class _ChecklistItemTile extends StatelessWidget {
           ),
         ),
         title: Text(
-          item.title,
+          item.displayTitle,
           style: tt.bodyLarge?.copyWith(
             fontWeight: FontWeight.w600,
             decoration: deferred

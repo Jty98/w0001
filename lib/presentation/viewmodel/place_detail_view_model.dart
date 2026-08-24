@@ -1027,6 +1027,22 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
     _removeCostFromState(id: wid, category: 'w');
   }
 
+  Future<void> unassignSameDayPlaceFromWorkCost(TotalCostModel item) async {
+    final hid = item.whid;
+    final pid = item.wpid ?? state.pid;
+    if (hid == null || pid <= 0) return;
+    final dateKey =
+        item.date.length >= 10 ? item.date.substring(0, 10) : item.date;
+    await _workCostUseCase.unassignSameDayPlace(
+      hid: hid,
+      dateKey: dateKey,
+      pidToRemove: pid,
+      workCostWid: item.id,
+      workCostWpid: pid,
+    );
+    await refreshCostsForGlobalFetch();
+  }
+
   Future<void> updateCost(String category, int id, String date) async {
     String priceString = mPriceController.text.trim();
     priceString = priceString.replaceAll(RegExp(r'[,원]'), '');
@@ -1071,14 +1087,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
         return;
       }
       state = state.copyWith(alertText: '');
-      final w = WorkCostModel(
-        wid: id,
-        wdate: date,
-        wprice: price,
-        wcomplete: -1,
-        wpid: 1,
-      );
-      await _workCostUseCase.updateWorkCostItem(w);
+      // 인건비 다이얼로그는 날짜 읽기 전용 — 금액만 패치(인건비 탭과 동일).
+      await _workCostUseCase.updateWorkCostPrice(id, price);
       final current = _findCostById(category: category, id: id);
       if (current != null) {
         _upsertCostInState(
@@ -1086,8 +1096,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
             pname: current.pname,
             pcomplete: current.pcomplete,
             name: current.name,
-            date: w.wdate,
-            price: w.wprice,
+            date: current.date,
+            price: price,
             category: current.category,
             id: current.id,
             wcomplete: current.wcomplete,
@@ -1117,7 +1127,8 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
           category: current.category,
           id: current.id,
           wcomplete: nextComplete,
-          wcompletedAt: nextComplete == 1 ? (current.wcompletedAt ?? nowIso) : null,
+          wcompletedAt:
+              nextComplete == 1 ? (current.wcompletedAt ?? nowIso) : null,
           whid: current.whid,
           wpid: current.wpid,
           workrole: current.workrole,
@@ -1140,12 +1151,16 @@ class PlaceDetailViewModel extends Notifier<PlaceDetailState> {
 
   void _upsertCostInState(TotalCostModel updated) {
     final updatedList = state.totalCostList
-        .map((e) => (e.id == updated.id && e.category == updated.category) ? updated : e)
+        .map((e) => (e.id == updated.id && e.category == updated.category)
+            ? updated
+            : e)
         .toList(growable: false);
     final updatedCache = <String, List<TotalCostModel>>{};
     for (final entry in state.costCache.entries) {
       updatedCache[entry.key] = entry.value
-          .map((e) => (e.id == updated.id && e.category == updated.category) ? updated : e)
+          .map((e) => (e.id == updated.id && e.category == updated.category)
+              ? updated
+              : e)
           .toList(growable: false);
     }
     state = state.copyWith(

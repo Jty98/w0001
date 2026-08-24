@@ -51,7 +51,8 @@ abstract class WorkCostRepository {
     required String dateKey,
   });
 
-  /// 작업지시 투입과 짝을 맞춘 인건비 생성·갱신(이미 있으면 금액·역할만 PATCH).
+  /// 작업지시 투입과 짝을 맞춘 인건비 생성·갱신.
+  /// 같은 인력·같은 날에 이미 인건비가 있으면(다른 현장이라도) 추가 생성하지 않는다.
   Future<void> ensureWorkCostForPlaceWorkDay({
     required int pid,
     required int hid,
@@ -64,6 +65,17 @@ abstract class WorkCostRepository {
   Future<void> deleteWorkCostLinked({
     required int wid,
     int? pwdid,
+  });
+
+  /// 같은 날 여러 현장 중 [pidToRemove] 투입만 뺀다. 인건비(1공수)는 남은 현장에 유지.
+  /// 남은 투입이 없으면 인건비도 삭제한다.
+  /// 남은 인건비가 있으면 그 `wpid`, 인건비까지 지웠으면 null.
+  Future<int?> unassignSameDayPlace({
+    required int hid,
+    required String dateKey,
+    required int pidToRemove,
+    required int workCostWid,
+    required int workCostWpid,
   });
   Future<List<Map<String, dynamic>>> getWorkCostDetailsForCsv(
     DateTime startDate,

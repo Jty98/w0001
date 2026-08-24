@@ -31,8 +31,9 @@ Future<bool> _confirmDiscardHumanEditor(BuildContext context) async {
   return result == true;
 }
 
-/// 인력 등록·수정 다이얼로그. [listIndex]가 null이면 신규 등록.
-Future<void> showHumanEditorDialog({
+/// 인력 등록·수정 다이얼로그. [listIndex]/[editHuman]이 없으면 신규 비회원 등록.
+/// 저장 성공 시 저장된 [HumanModel], 취소·실패 시 null.
+Future<HumanModel?> showHumanEditorDialog({
   required BuildContext context,
   required WidgetRef ref,
   int? listIndex,
@@ -44,7 +45,7 @@ Future<void> showHumanEditorDialog({
   final canDeleteNonMember =
       isEdit && editTarget != null && humanIsNonMember(editTarget);
 
-  await showDialog<void>(
+  return showDialog<HumanModel?>(
     context: context,
     builder: (dialogCtx) {
       var isSaving = false;
@@ -190,9 +191,11 @@ Future<void> showHumanEditorDialog({
                                   : () async {
                                       setDialogState(() => isSaving = true);
                                       try {
-                                        await vm.editButtonAction(dialogCtx);
+                                        final saved =
+                                            await vm.editButtonAction(dialogCtx);
+                                        if (saved == null) return;
                                         if (dialogCtx.mounted) {
-                                          Navigator.of(dialogCtx).pop();
+                                          Navigator.of(dialogCtx).pop(saved);
                                           vm.cancelHumanEditorForm();
                                           FocusManager.instance.primaryFocus
                                               ?.unfocus();

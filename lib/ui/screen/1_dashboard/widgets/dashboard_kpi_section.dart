@@ -121,13 +121,22 @@ class DashboardKpiSection extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '${values.periodLabel} 기준',
+                values.periodLabel,
+                style: tt.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+              SizedBox(height: context.rs(2)),
+              Text(
+                '공사·원가·수금은 이 기간 발생분 · 미수는 현재 잔액 · 이익은 완료 현장',
                 style: tt.labelSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: cs.onSurfaceVariant,
+                  height: 1.25,
                 ),
               ),
-              SizedBox(height: context.rs(6)),
+              SizedBox(height: context.rs(8)),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final w = (constraints.maxWidth - gap) / 2;
@@ -181,6 +190,7 @@ class DashboardKpiSection extends ConsumerWidget {
                         width: w,
                         child: DashboardSummaryCard(
                           title: '미수금 잔액',
+                          valueCaption: '현재',
                           value: getPrice(price: values.outstanding),
                           icon: Icons.request_quote_outlined,
                           onTap: () => onOutstanding(context, ref),
@@ -190,6 +200,7 @@ class DashboardKpiSection extends ConsumerWidget {
                         width: w,
                         child: DashboardSummaryCard(
                           title: '영업이익',
+                          valueCaption: '완료 현장',
                           value: getPrice(price: values.profit),
                           valueSecondary: values.showProfitMargin
                               ? '${values.marginPct.toStringAsFixed(1)}%'
@@ -207,7 +218,7 @@ class DashboardKpiSection extends ConsumerWidget {
                       SizedBox(
                         width: w,
                         child: DashboardSummaryCard(
-                          title: '현장 현황',
+                          title: '신규 · 완료',
                           valueCaption: values.sitePrimaryCaption,
                           value: '${values.sitePrimaryCount}곳',
                           valueSecondaryCaption: values.siteSecondaryCaption,

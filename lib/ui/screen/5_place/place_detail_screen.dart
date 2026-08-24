@@ -9,9 +9,10 @@ import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_site_guide_providers.dart';
 import 'package:w0001/theme/app_section_card.dart';
-import 'package:w0001/ui/screen/5_place/place_workforce_screen.dart';
 import 'package:w0001/ui/screen/5_place/widgets/place_site_info_dialog.dart';
-import 'package:w0001/ui/screen/5_place/widgets/place_worker_instruction_week_peek.dart';
+// TODO(작업지시탭 이관): 현장 관리 탭 작업지시 UI — 삭제 예정
+// import 'package:w0001/ui/screen/5_place/place_workforce_screen.dart';
+// import 'package:w0001/ui/screen/5_place/widgets/place_worker_instruction_week_peek.dart';
 import 'package:w0001/navigation/place_navigation.dart';
 import 'package:w0001/util/funtions.dart';
 import 'package:w0001/util/responsive_layout.dart';
@@ -75,7 +76,8 @@ class PlaceDetailScreen extends ConsumerWidget {
     final me = ref.watch(authSessionProvider).asData?.value;
     final isManagement = me?.isManagementRole ?? false;
     final isWorker = me?.isWorker ?? false;
-    final showWorkforce = me != null && me.isManagementRole;
+    // TODO(작업지시탭 이관): 현장 관리 탭 작업지시 메뉴 — 삭제 예정
+    // final showWorkforce = me != null && me.isManagementRole;
 
     final cs = Theme.of(context).colorScheme;
     final mq = MediaQuery.sizeOf(context);
@@ -118,16 +120,17 @@ class PlaceDetailScreen extends ConsumerWidget {
           accentColor: cs.tertiary,
           onTap: () => context.push('/place/detail/cost', extra: place),
         ),
-      if (showWorkforce)
-        _PlaceMenuItem(
-          title: '작업지시',
-          icon: Icons.assignment_rounded,
-          accentColor: const Color(0xFF006A6A),
-          onTap: () => context.push(
-            '/place/detail/workforce',
-            extra: PlaceWorkforceRouteExtra(placeInfo: place),
-          ),
-        ),
+      // TODO(작업지시탭 이관): 현장 관리 탭 작업지시 메뉴 — 삭제 예정
+      // if (showWorkforce)
+      //   _PlaceMenuItem(
+      //     title: '작업지시',
+      //     icon: Icons.assignment_rounded,
+      //     accentColor: const Color(0xFF006A6A),
+      //     onTap: () => context.push(
+      //       '/place/detail/workforce',
+      //       extra: PlaceWorkforceRouteExtra(placeInfo: place),
+      //     ),
+      //   ),
       if (isManagement)
         _PlaceMenuItem(
           title: '인력 초대',
@@ -468,17 +471,27 @@ class _PlaceMenuList extends StatelessWidget {
     if (menuItems.isEmpty) return const SizedBox.shrink();
 
     final gap = _placeMenuListGap(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final count = menuItems.length;
+        final usableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : MediaQuery.sizeOf(context).height * 0.5;
+        final slotHeight = ((usableHeight - (gap * (count - 1))) / count)
+            .clamp(context.rs(68), context.rs(92));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (int i = 0; i < menuItems.length; i++) ...[
-          Expanded(
-            child: _ModernMenuCard(item: menuItems[i]),
+        return ListView.separated(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
           ),
-          if (i < menuItems.length - 1) SizedBox(height: gap),
-        ],
-      ],
+          itemCount: count,
+          separatorBuilder: (_, __) => SizedBox(height: gap),
+          itemBuilder: (context, index) => SizedBox(
+            height: slotHeight,
+            child: _ModernMenuCard(item: menuItems[index]),
+          ),
+        );
+      },
     );
   }
 }
@@ -497,13 +510,16 @@ class _WorkerPlaceDetailColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // TODO(작업지시탭 이관): 작업자 주간 작업지시 미리보기 복원 시 사용
     final hasPid = place.pid != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasPid) PlaceWorkerInstructionWeekPeek(place: place),
-        if (hasPid) SizedBox(height: gapMid * 0.4),
+        // TODO(작업지시탭 이관): 작업자 주간 작업지시 미리보기 — 삭제 예정
+        // if (hasPid) PlaceWorkerInstructionWeekPeek(place: place),
+        // if (hasPid) SizedBox(height: gapMid * 0.4),
+        if (hasPid) SizedBox(height: gapMid * 0),
         Expanded(
           child: _PlaceMenuList(menuItems: menuItems),
         ),
@@ -554,7 +570,8 @@ class _ModernMenuCard extends StatelessWidget {
                 onTap: item.onTap,
                 borderRadius: cardRadius,
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+                  padding:
+                      EdgeInsets.symmetric(horizontal: padH, vertical: padV),
                   child: Row(
                     children: [
                       Container(

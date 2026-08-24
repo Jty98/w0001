@@ -110,7 +110,7 @@ abstract final class ApiEndpoint {
   static String workerManagementConflictPairId(int pairId) =>
       '$workerManagementConflicts/$pairId';
 
-  /// 현장 역할(`worker_rank`)별 기본 일당 — 관리자 전용.
+  /// 현장 역할(`worker_rank`)별 기본 일당 + 공수 설정 — 관리자 전용.
   static const String workerManagementRankWages =
       '/worker-management/rank-wages';
 

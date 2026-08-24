@@ -40,7 +40,6 @@ DashboardKpiCardValues resolveDashboardKpiCardValues(DashboardState state) {
     case DashboardKpiPeriodMode.monthly:
       final m = _monthlyFor(state);
       if (m != null) {
-        final isCurrentMonth = m.year == kpi.year && m.month == kpi.month;
         return DashboardKpiCardValues(
           periodLabel: '${m.year}년 ${m.month}월',
           contract: m.contractAmount,
@@ -49,11 +48,9 @@ DashboardKpiCardValues resolveDashboardKpiCardValues(DashboardState state) {
           outstanding: kpi.outstandingReceivable,
           profit: m.completedProfitAmount,
           marginPct: m.completedContractMarginPct,
-          sitePrimaryCount:
-              isCurrentMonth ? kpi.inProgressPlaces : m.newProjectCount,
-          siteSecondaryCount:
-              isCurrentMonth ? kpi.completedPlaces : m.completedProjectCount,
-          sitePrimaryCaption: isCurrentMonth ? '진행' : '신규',
+          sitePrimaryCount: m.newProjectCount,
+          siteSecondaryCount: m.completedProjectCount,
+          sitePrimaryCaption: '신규',
           siteSecondaryCaption: '완료',
           showProfitMargin: m.completedProjectCount > 0,
         );
@@ -76,7 +73,6 @@ DashboardKpiCardValues resolveDashboardKpiCardValues(DashboardState state) {
     case DashboardKpiPeriodMode.yearly:
       final y = _yearlyFor(state);
       if (y != null) {
-        final isCurrentYear = y.year == kpi.year;
         return DashboardKpiCardValues(
           periodLabel: '${y.year}년',
           contract: y.contractTotal,
@@ -85,11 +81,9 @@ DashboardKpiCardValues resolveDashboardKpiCardValues(DashboardState state) {
           outstanding: kpi.outstandingReceivable,
           profit: y.completedProfitTotal,
           marginPct: y.completedContractMarginPct,
-          sitePrimaryCount:
-              isCurrentYear ? kpi.inProgressPlaces : y.newProjectCount,
-          siteSecondaryCount:
-              isCurrentYear ? kpi.completedPlaces : y.completedProjectCount,
-          sitePrimaryCaption: isCurrentYear ? '진행' : '신규',
+          sitePrimaryCount: y.newProjectCount,
+          siteSecondaryCount: y.completedProjectCount,
+          sitePrimaryCaption: '신규',
           siteSecondaryCaption: '완료',
           showProfitMargin: y.completedProjectCount > 0,
         );
@@ -137,5 +131,27 @@ List<int> availableKpiYears(DashboardState state) {
     ...state.yearly.map((y) => y.year),
   };
   final list = years.toList()..sort((a, b) => b.compareTo(a));
+  return list;
+}
+
+/// 월별 차트가 1~12월 칸과 값이 어긋나지 않도록 빈 달을 0으로 채운다.
+List<MonthlySummaryModel> paddedMonthlyForYear(
+  List<MonthlySummaryModel> monthly,
+  int year,
+) {
+  final byMonth = <int, MonthlySummaryModel>{};
+  for (final m in monthly) {
+    if (m.year == year) byMonth[m.month] = m;
+  }
+  return [
+    for (var month = 1; month <= 12; month++)
+      byMonth[month] ?? MonthlySummaryModel.zero(year: year, month: month),
+  ];
+}
+
+List<YearlyDashboardPoint> sortedYearlyAscending(
+  List<YearlyDashboardPoint> yearly,
+) {
+  final list = [...yearly]..sort((a, b) => a.year.compareTo(b.year));
   return list;
 }

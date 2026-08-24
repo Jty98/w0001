@@ -1,6 +1,13 @@
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/enums.dart';
 
+/// 현장 목록 API `pcomplete` 쿼리 (0 진행 / 1 완료 / 2 보관).
+int pcompleteQueryForPlaceState(PlaceState tab) => switch (tab) {
+      PlaceState.incomplete => 0,
+      PlaceState.complete => 1,
+      PlaceState.archived => 2,
+    };
+
 /// 현장 관리 목록 정렬.
 enum PlaceListSortMode {
   startNewest,
@@ -16,12 +23,12 @@ enum PlaceListSortMode {
       };
 
   static PlaceListSortMode defaultFor(PlaceState tab) =>
-      tab == PlaceState.complete
+      tab == PlaceState.complete || tab == PlaceState.archived
           ? PlaceListSortMode.endNewest
           : PlaceListSortMode.startNewest;
 
   static List<PlaceListSortMode> optionsFor(PlaceState tab) {
-    if (tab == PlaceState.complete) {
+    if (tab == PlaceState.complete || tab == PlaceState.archived) {
       return const [
         PlaceListSortMode.endNewest,
         PlaceListSortMode.endOldest,
@@ -97,7 +104,7 @@ List<PlaceInfoModel> pinFavoritePlacesFirst({
   return [...pinned, ...rest];
 }
 
-/// 진행/완료 탭 · 이름 검색 · 정렬을 적용한 목록.
+/// 진행/완료/보관 탭 · 이름 검색 · 정렬을 적용한 목록.
 List<PlaceInfoModel> applyPlaceListDisplay({
   required List<PlaceInfoModel> all,
   required PlaceState tab,
@@ -107,12 +114,12 @@ List<PlaceInfoModel> applyPlaceListDisplay({
   bool skipTabFilter = false,
   bool skipSearchFilter = false,
 }) {
-  final wantComplete = tab == PlaceState.complete ? 1 : 0;
+  final want = pcompleteQueryForPlaceState(tab);
   final q = searchQuery.trim().toLowerCase();
 
   var list = skipTabFilter
       ? all
-      : all.where((p) => p.pcomplete == wantComplete).toList();
+      : all.where((p) => p.pcomplete == want).toList();
 
   if (!skipSearchFilter && q.isNotEmpty) {
     list = list
@@ -130,6 +137,6 @@ List<PlaceInfoModel> applyPlaceListDisplay({
 }
 
 int countPlacesForTab(List<PlaceInfoModel> all, PlaceState tab) {
-  final wantComplete = tab == PlaceState.complete ? 1 : 0;
-  return all.where((p) => p.pcomplete == wantComplete).length;
+  final want = pcompleteQueryForPlaceState(tab);
+  return all.where((p) => p.pcomplete == want).length;
 }

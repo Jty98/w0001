@@ -5,6 +5,7 @@ import 'package:w0001/data/datasources/local/worker_rank_wage_settings_storage.d
 import 'package:w0001/data/datasources/remote/http_client.dart';
 import 'package:w0001/data/datasources/remote/worker_management/worker_management_api.dart';
 import 'package:w0001/data/model/worker_rank_wage_settings.dart';
+import 'package:w0001/data/model/work_unit_preset.dart';
 import 'package:w0001/data/repository/worker_rank_wage_settings_repository_impl.dart';
 import 'package:w0001/domain/repository/worker_rank_wage_settings_repository.dart';
 import 'package:w0001/domain/use_case/worker_rank_wage_settings_use_case.dart';
@@ -65,11 +66,22 @@ class WorkerRankWageSettingsNotifier
   Future<bool> save({
     required List<String> rankOrder,
     required Map<String, int> wagesByRank,
+    List<WorkUnitPreset>? workUnits,
+    String? defaultWorkUnitId,
   }) async {
     final previous = state.value ?? WorkerRankWageSettings.empty();
-    final next = previous.withOrderedRanks(rankOrder, wagesByRank).copyWith(
-          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-        );
+    var next = previous.withOrderedRanks(rankOrder, wagesByRank);
+    if (workUnits != null) {
+      next = next.withWorkUnits(
+        workUnits,
+        defaultWorkUnitId: defaultWorkUnitId,
+      );
+    } else if (defaultWorkUnitId != null) {
+      next = next.copyWith(defaultWorkUnitId: defaultWorkUnitId);
+    }
+    next = next.copyWith(
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
     state = AsyncData(next);
 
     try {

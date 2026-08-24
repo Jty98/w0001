@@ -71,14 +71,15 @@ final class LocalNotificationInboxStore {
       return null;
     }
 
-    return switch (type) {
-      'signup_pending' => 'signup:${pick(['pending_uid', 'uid', 'user_id'])}',
-      'worker_announcement_global' ||
-      'worker_announcement_place' =>
-        'wa:${pick(['wa_id', 'waId', 'announcement_id'])}',
-      'placeworkday_assignment' ||
-      'placeworkday_instruction' =>
-        'pwd:${pick(['pwdid', 'pwd_id', 'place_work_day_id'])}:'
+    switch (type) {
+      case 'signup_pending':
+        return 'signup:${pick(['pending_uid', 'uid', 'user_id'])}';
+      case 'worker_announcement_global':
+      case 'worker_announcement_place':
+        return 'wa:${pick(['wa_id', 'waId', 'announcement_id'])}';
+      case 'placeworkday_assignment':
+      case 'placeworkday_instruction':
+        return 'pwd:${pick(['pwdid', 'pwd_id', 'place_work_day_id'])}:'
             '${pick([
               'workdate',
               'work_date',
@@ -86,18 +87,41 @@ final class LocalNotificationInboxStore {
               'startDate',
               'start_date'
             ])}:'
-            '${pick(['endDate', 'end_date', 'workdate_end', 'workdateEnd'])}',
-      'worker_place_photo' => 'photo:${pick([
+            '${pick(['endDate', 'end_date', 'workdate_end', 'workdateEnd'])}';
+      case 'worker_place_photo':
+        return 'photo:${pick([
               'pid',
               'place_id',
               'placeId'
-            ])}:${pick(['phid', 'photo_id'])}',
-      'place_end_date_reminder' =>
-        'pend:${pick(['pid', 'place_id'])}:${pick(['pend', 'reminder_date'])}',
-      'place_access_revoked' => 'revoke:${pick(['pid', 'place_id'])}',
-      _ when type.startsWith('account_') => '$type:${pick(['uid', 'user_id'])}',
-      _ => '$type:${pick(['notification_id', 'id'])}',
-    };
+            ])}:${pick(['phid', 'photo_id'])}';
+      case 'place_end_date_reminder':
+        final pid = pick(['pid', 'place_id', 'placeId']);
+        final reminder = pick(['pend', 'reminder_date', 'reminderDate']) ?? '';
+        final placeNameRaw = pick(['place_name', 'placeName', 'pname']) ?? '';
+        final placeName =
+            placeNameRaw.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+        final notificationId = pick(
+          ['notification_id', 'id', 'fcm_message_id', 'message_id'],
+        );
+        if (pid != null && pid.isNotEmpty) {
+          return 'pend:$pid:$reminder';
+        }
+        if (placeName.isNotEmpty) {
+          return 'pend-name:$placeName:$reminder';
+        }
+        if (notificationId != null && notificationId.isNotEmpty) {
+          return 'pend-id:$notificationId';
+        }
+        // pid/현장명 없는 레거시 payload는 항목 소실보다 중복 허용이 낫다.
+        return 'pend-fallback:${payload.toString().hashCode}';
+      case 'place_access_revoked':
+        return 'revoke:${pick(['pid', 'place_id'])}';
+      default:
+        if (type.startsWith('account_')) {
+          return '$type:${pick(['uid', 'user_id'])}';
+        }
+        return '$type:${pick(['notification_id', 'id'])}';
+    }
   }
 
   static String _dedupeKeyForItem(UserNotificationItem item) {

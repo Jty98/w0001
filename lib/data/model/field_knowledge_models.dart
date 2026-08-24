@@ -1,12 +1,12 @@
-/// 현장 지식 사전 — 자재사전, 용어사전, 시공사례 모델
+/// 현장 지식 사전 — 철물 사전, 용어사전, 시공사례 모델
 ///
 /// 모든 항목은 ID·제목·상태(활성/비활성)·검색·태그를 공유한다.
 
 import 'package:w0001/data/model/worker_announcement_models.dart';
 
 enum KnowledgeEntryType {
-  material('material', '자재사전', '대표·상세 이미지, 특징, 주의사항과 현장 팁'),
-  term('term', '용어사전', '현장 용어 정의와 예시, 관련 자재 연결'),
+  material('material', '철물 사전', '자재와 공구의 대표·상세 이미지, 특징, 주의사항과 현장 팁'),
+  term('term', '용어사전', '현장 용어 정의와 예시, 관련 철물 연결'),
   constructionCase('construction_case', '시공사례', '베스트·워스트 사례를 비교하며 작업 노하우 공유'),
   processGuide('process_guide', '공정 가이드', '시공 공정별 작업 순서와 주의사항 가이드');
 
@@ -78,20 +78,20 @@ class KnowledgeEntry {
   final String content;
   final bool isActive;
 
-  /// 이미지 URL 리스트 (자재사전, 시공사례 용어사전만)
+  /// 이미지 URL 리스트 (철물 사전, 시공사례)
   final List<String> imageUrls;
 
   /// 썸네일 URL (리스트 표시용, 서버에서 자동 생성)
   final String? thumbnailUrl;
 
-  /// 구조화된 분류 카테고리 (예: ["바닥재", "마루"])
-  /// 자재와 용어에 사용, 여러 카테고리 할당 가능
+  /// 구조화된 분류 카테고리 (예: ["자재", "바닥재"] 또는 ["공구", "전동공구"])
+  /// 철물 사전과 용어에 사용, 여러 카테고리 할당 가능
   final List<String> categories;
 
   /// 검색·필터용 태그
   final List<String> tags;
 
-  /// 연결된 다른 항목 ID (예: 용어 → 자재 연결)
+  /// 연결된 다른 항목 ID (예: 용어 → 철물 연결)
   final List<int> relatedEntryIds;
 
   /// 연관 항목 리스트 (상세 조회 시 서버에서 포함)
@@ -587,23 +587,80 @@ List<int> _jsonIntList(Object? value) {
 // 카테고리 상수
 // ────────────────────────────────────────────────────────────────────────────
 
+/// 철물 사전 1차 분기 (자재 / 공구)
+enum HardwareDictionaryKind {
+  material('자재', '시공에 쓰는 자재의 특징과 현장 팁'),
+  tool('공구', '작업에 쓰는 공구의 용도와 주의사항');
+
+  const HardwareDictionaryKind(this.label, this.description);
+
+  final String label;
+  final String description;
+}
+
 /// 현장 지식 사전 카테고리 정의
 class KnowledgeCategories {
   const KnowledgeCategories._();
 
-  /// 자재사전 카테고리
-  static const List<String> materials = [
-    '바닥재',
-    '벽재',
-    '목재/합판',
-    '철물/부속',
-    '전기/조명',
-    '위생/배관',
-    '창호/문',
-    '단열/방수',
-    '도료/접착',
-    '기타',
+  static const String hardwareKindMaterial = '자재';
+  static const String hardwareKindTool = '공구';
+
+  /// 철물 사전 · 자재 하위 카테고리 (인테리어 현장 공정 기준)
+  static const List<String> hardwareMaterials = [
+    '장판/데코타일',
+    '마루/강마루',
+    '바닥 타일',
+    '벽 타일',
+    '벽지/도배지',
+    '페인트/젯소',
+    '시트지/인테리어필름',
+    '몰딩/걸레받이',
+    '합판/MDF/PB',
+    '각목/루바',
+    '석고보드/천장재',
+    '문/중문',
+    '창호/샷시',
+    '손잡이/경첩/잠금',
+    '피스/앵커/브래킷',
+    '실리콘/코킹',
+    '접착제/본드',
+    '단열재',
+    '방수재',
+    '전선/스위치/콘센트',
+    '조명기구',
+    '수전/배관부속',
+    '위생도기',
+    '기타 자재',
   ];
+
+  /// 철물 사전 · 공구 하위 카테고리 (현장 작업 용도 기준)
+  static const List<String> hardwareTools = [
+    '드릴/임팩드라이버',
+    '함마드릴/해머드릴',
+    '원형톱/직쏘/컷쏘',
+    '그라인더/절단기',
+    '샌더/대패',
+    '타카/네일건',
+    '열풍기/글루건',
+    '망치/타격공구',
+    '드라이버/렌치/소켓',
+    '펜치/니퍼/커터',
+    '줄자/수평/직각자',
+    '레이저레벨/거리측정',
+    '흙손/헤라/미장',
+    '타일커터/줄눈공구',
+    '컴프레서/에어공구',
+    '검전기/테스터',
+    '사다리/작업대',
+    '안전보호구',
+    '비트/날/디스크',
+    '타카핀/못/피스',
+    '배터리/충전기',
+    '기타 공구',
+  ];
+
+  /// 자재사전 카테고리 (하위 호환)
+  static const List<String> materials = hardwareMaterials;
 
   /// 용어사전 카테고리
   static const List<String> terms = [
@@ -629,7 +686,7 @@ class KnowledgeCategories {
   static List<String> forType(KnowledgeEntryType type) {
     switch (type) {
       case KnowledgeEntryType.material:
-        return materials;
+        return hardwareMaterials;
       case KnowledgeEntryType.term:
         return terms;
       case KnowledgeEntryType.processGuide:
@@ -639,9 +696,82 @@ class KnowledgeCategories {
     }
   }
 
+  static List<String> forHardwareKind(HardwareDictionaryKind kind) {
+    switch (kind) {
+      case HardwareDictionaryKind.material:
+        return hardwareMaterials;
+      case HardwareDictionaryKind.tool:
+        return hardwareTools;
+    }
+  }
+
+  static HardwareDictionaryKind hardwareKindOf(Iterable<String> categories) {
+    final set =
+        categories.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+    if (set.contains(hardwareKindTool) || hardwareTools.any(set.contains)) {
+      return HardwareDictionaryKind.tool;
+    }
+    return HardwareDictionaryKind.material;
+  }
+
+  static List<String> subcategoriesOf(Iterable<String> categories) {
+    return categories
+        .map((e) => e.trim())
+        .where((e) =>
+            e.isNotEmpty && e != hardwareKindMaterial && e != hardwareKindTool)
+        .toList(growable: false);
+  }
+
+  static List<String> composeHardwareCategories({
+    required HardwareDictionaryKind kind,
+    required List<String> subcategories,
+  }) {
+    final kindLabel = kind == HardwareDictionaryKind.tool
+        ? hardwareKindTool
+        : hardwareKindMaterial;
+    final allowed = forHardwareKind(kind).toSet();
+    final matches =
+        subcategoriesOf(subcategories).where(allowed.contains).toList();
+    final primary = matches.isEmpty ? null : matches.first;
+    return primary == null ? <String>[kindLabel] : <String>[kindLabel, primary];
+  }
+
+  static String? primarySubcategory(
+    Iterable<String> categories, {
+    HardwareDictionaryKind? kind,
+  }) {
+    final subs = subcategoriesOf(categories);
+    if (subs.isEmpty) return null;
+    if (kind == null) return subs.first;
+    final allowed = forHardwareKind(kind).toSet();
+    for (final item in subs) {
+      if (allowed.contains(item)) return item;
+    }
+    return subs.first;
+  }
+
+  static String entryKindLabel(KnowledgeEntry entry) {
+    if (entry.type != KnowledgeEntryType.material) {
+      return entry.type.displayName;
+    }
+    return hardwareKindOf(entry.categories).label;
+  }
+
+  static List<String> filterCategoriesFor({
+    required HardwareDictionaryKind kind,
+    String? subcategory,
+  }) {
+    final trimmed = subcategory?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) return <String>[trimmed];
+    if (kind == HardwareDictionaryKind.tool) {
+      return const <String>[hardwareKindTool];
+    }
+    return const <String>[];
+  }
+
   /// 모든 카테고리 (중복 제거)
   static List<String> get all {
-    final set = <String>{...materials, ...terms};
+    final set = <String>{...hardwareMaterials, ...hardwareTools, ...terms};
     return set.toList()..sort();
   }
 }

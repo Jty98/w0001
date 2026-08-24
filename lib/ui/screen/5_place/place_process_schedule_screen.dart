@@ -14,7 +14,8 @@ import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
 import 'package:w0001/presentation/viewmodel/place_process_schedule_notifier.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_chart_views.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_dialogs.dart';
-import 'package:w0001/ui/screen/5_place/place_workforce_screen.dart';
+// TODO(작업지시탭 이관): 공정표 → 작업지시 화면 — 삭제 예정
+// import 'package:w0001/ui/screen/5_place/place_workforce_screen.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_dim.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_helpers.dart';
 import 'package:w0001/ui/screen/5_place/process_schedule/process_schedule_layout_segment.dart';
@@ -93,17 +94,18 @@ class _PlaceProcessScheduleScreenState
   List<DateTime> _columnDates(ProcessScheduleData d) =>
       ProcessScheduleEditor.columnDates(d);
 
-  void _openWorkforceForDay(DateTime day) {
-    final p = widget.placeInfo;
-    if (p.pid == null) return;
-    context.push(
-      '/place/detail/workforce',
-      extra: PlaceWorkforceRouteExtra(
-        placeInfo: p,
-        initialWorkDate: DateTime(day.year, day.month, day.day),
-      ),
-    );
-  }
+  // TODO(작업지시탭 이관): 공정표 날짜 → 작업지시 화면 — 삭제 예정
+  // void _openWorkforceForDay(DateTime day) {
+  //   final p = widget.placeInfo;
+  //   if (p.pid == null) return;
+  //   context.push(
+  //     '/place/detail/workforce',
+  //     extra: PlaceWorkforceRouteExtra(
+  //       placeInfo: p,
+  //       initialWorkDate: DateTime(day.year, day.month, day.day),
+  //     ),
+  //   );
+  // }
 
   static const Duration _longPressBrushDuration = Duration(milliseconds: 480);
 
@@ -540,10 +542,11 @@ class _PlaceProcessScheduleScreenState
           data: (u) => u != null && !u.role.canEditProcessSchedule,
           orElse: () => false,
         );
-    final canWorkforceFromHeader = ref.watch(authSessionProvider).maybeWhen(
-          data: (u) => u != null && u.isManagementRole,
-          orElse: () => false,
-        );
+    // TODO(작업지시탭 이관): 공정표 날짜 탭 → 작업지시 — 삭제 예정
+    // final canWorkforceFromHeader = ref.watch(authSessionProvider).maybeWhen(
+    //       data: (u) => u != null && u.isManagementRole,
+    //       orElse: () => false,
+    //     );
     final schedule = ref.watch(placeProcessScheduleProvider(_scheduleKey));
     final d = schedule.data;
     final dates = _columnDates(d);
@@ -939,9 +942,11 @@ class _PlaceProcessScheduleScreenState
                                             _onStickyChartPointerUp(e, d),
                                         onStickyPointerCancel:
                                             _onStickyChartPointerCancel,
-                                        onDateHeaderTap: canWorkforceFromHeader
-                                            ? _openWorkforceForDay
-                                            : null,
+                                        onDateHeaderTap: null,
+                                        // TODO(작업지시탭 이관): 삭제 예정
+                                        // onDateHeaderTap: canWorkforceFromHeader
+                                        //     ? _openWorkforceForDay
+                                        //     : null,
                                         onAddProcess:
                                             !readOnly && schedule.isReady
                                                 ? _addEmptyProcessRow
@@ -973,10 +978,12 @@ class _PlaceProcessScheduleScreenState
                                               onCellTap: readOnly
                                                   ? (_, __) {}
                                                   : _toggleCell,
-                                              onDateHeaderTap:
-                                                  canWorkforceFromHeader
-                                                      ? _openWorkforceForDay
-                                                      : null,
+                                              onDateHeaderTap: null,
+                                              // TODO(작업지시탭 이관): 삭제 예정
+                                              // onDateHeaderTap:
+                                              //     canWorkforceFromHeader
+                                              //         ? _openWorkforceForDay
+                                              //         : null,
                                               readOnly: readOnly,
                                               onAddProcess:
                                                   !readOnly && schedule.isReady

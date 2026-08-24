@@ -29,6 +29,7 @@ import 'package:w0001/ui/screen/0_auth/worker_earnings_screen.dart';
 import 'package:w0001/ui/screen/0_auth/worker_more_screen.dart';
 import 'package:w0001/ui/screen/0_auth/worker_settings_screen.dart';
 import 'package:w0001/ui/screen/0_auth/operator_settings_screen.dart';
+import 'package:w0001/ui/screen/0_auth/archived_places_management_screen.dart';
 import 'package:w0001/ui/screen/0_auth/worker_profile_settings_screen.dart';
 import 'package:w0001/ui/screen/0_auth/worker_mgmt/worker_mgmt_route_screens.dart';
 import 'package:w0001/ui/screen/0_auth/worker_mgmt/worker_rank_wage_settings_screen.dart';
@@ -37,7 +38,6 @@ import 'package:w0001/ui/screen/1_dashboard/worker_personal_dashboard_screen.dar
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_schedule_section.dart';
 import 'package:w0001/ui/screen/5_place/place_detail_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_images_screen.dart';
-import 'package:w0001/ui/screen/2_add/add_screen.dart';
 import 'package:w0001/ui/screen/3_calendar/calendar_branch_screen.dart';
 import 'package:w0001/ui/screen/4_human/human_screen.dart';
 import 'package:w0001/ui/screen/4_human/w_detail_screen.dart';
@@ -45,6 +45,7 @@ import 'package:w0001/ui/screen/4_human/work_cost_screen.dart';
 import 'package:w0001/ui/screen/4_human/worker_work_cost_items_screen.dart';
 import 'package:w0001/ui/screen/4_human/work_cost_human_key_codec.dart';
 import 'package:w0001/ui/screen/5_place/place_screen.dart';
+import 'package:w0001/ui/screen/2_work_instruction/work_instruction_hub_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_revenue_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_cost_screen.dart';
 import 'package:w0001/ui/screen/5_place/place_process_schedule_screen.dart';
@@ -493,10 +494,10 @@ GoRouter createAppRouter({
                         }
                         final isWorker =
                             session.asData?.value?.isWorker ?? false;
-                        // 작업자는 전국 생활 지도 탭, 관리자는 금액 추가 탭.
+                        // 작업자는 전국 생활 지도 탭. 관리자는 별도 작업지시 허브 탭.
                         return isWorker
                             ? const WorkerSupplyMapScreen()
-                            : const AddScreen();
+                            : const WorkInstructionHubScreen();
                       },
                     ),
                   ),
@@ -699,6 +700,14 @@ GoRouter createAppRouter({
                     ),
                   ),
                   GoRoute(
+                    path: 'archived-places',
+                    parentNavigatorKey: rootNavigatorKey,
+                    pageBuilder: (context, state) => materialOverlayPage(
+                      state: state,
+                      child: const ArchivedPlacesManagementScreen(),
+                    ),
+                  ),
+                  GoRoute(
                     path: 'earnings',
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (context, state) => materialOverlayPage(
@@ -802,8 +811,8 @@ class _MainShellState extends ConsumerState<_MainShell>
       _workerLayout = worker;
       _tabController.dispose();
       final di = shellIndexToDisplayIndex(_shell.currentIndex, _workerLayout);
-      // 작업자 5탭(대시보드·내 일정·현장·지도·더보기), 관리자 6탭
-      final len = worker ? 5 : 6;
+      // 작업자 5탭(대시보드·내 일정·현장·지도·더보기), 관리자 6탭(상황판·현장·작업지시·캘린더·인건비·설정)
+      final len = _workerLayout ? 5 : 6;
       _tabController = TabController(
         length: len,
         vsync: this,
@@ -963,8 +972,8 @@ class _MainShellState extends ConsumerState<_MainShell>
                               text: '현장 관리',
                             ),
                             Tab(
-                              icon: Icon(Icons.add_circle),
-                              text: '금액 추가',
+                              icon: Icon(Icons.assignment_turned_in_outlined),
+                              text: '작업지시',
                             ),
                             Tab(
                               icon: Icon(Icons.calendar_month),

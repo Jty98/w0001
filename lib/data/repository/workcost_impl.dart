@@ -9,8 +9,10 @@ import 'package:w0001/data/model/work_cost_period_totals.dart';
 import 'package:w0001/data/model/work_cost_worker_summary.dart';
 import 'package:w0001/data/model/workcost_model.dart';
 import 'package:w0001/data/repository/remote_entity_lookup.dart';
+import 'package:w0001/domain/place_archive.dart';
 import 'package:w0001/domain/repository/super_admin_remote_abst.dart';
 import 'package:w0001/domain/repository/workcost_abst.dart';
+import 'package:w0001/domain/same_day_work_cost.dart';
 import 'package:w0001/ui/screen/2_add/work_role_presets.dart';
 import 'package:w0001/util/funtions.dart';
 
@@ -39,46 +41,87 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     final pwdFuture = _remote.placeWorkDaysQuery(rangeQ);
     final wcs = await wcFuture;
     final pwdList = await pwdFuture;
-    final pwdByKey = buildPlaceWorkDayByKey(pwdList);
     final maps = await Future.wait([
-      loadPlaceMapForPids(_remote, wcs.map((w) => w.wpid)),
+      loadPlaceMapForPids(
+        _remote,
+        [...wcs.map((w) => w.wpid), ...pwdList.map((e) => e.pid)],
+      ),
       loadHumanMapForHids(_remote, wcs.map((w) => w.whid)),
     ]);
     final pMap = maps[0] as Map<int, PlaceRead>;
     final hMap = maps[1] as Map<int, HumanRead>;
 
-    final out = <TotalWorkCostModel>[];
+    final placesByPersonDay = <String, List<SameDayPlaceRef>>{};
+    for (final pwd in pwdList) {
+      final p = pMap[pwd.pid];
+      if (p == null) continue;
+      addSameDayPlace(
+        placesByPersonDay,
+        hid: pwd.hid,
+        dateKey: normalizeToIsoDateString(pwd.workdate),
+        place: SameDayPlaceRef(
+          pid: pwd.pid,
+          name: formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
+          workrole: pwd.workrole.trim(),
+        ),
+      );
+    }
+
+    final groups = <String, List<WorkCostRead>>{};
     for (final w in wcs) {
       final h = hMap[w.whid];
       final p = pMap[w.wpid];
-      if (h == null || p == null) continue;
-      if (h.hdelete != 0) continue;
-      if (p.pcomplete == 2) continue;
+      if (h == null || p == null || h.hdelete != 0) continue;
       final dateKey = normalizeToIsoDateString(w.wdate);
-      final pwd = pwdByKey['${w.whid}|${w.wpid}|$dateKey'];
-      final role = pwd != null && pwd.workrole.trim().isNotEmpty
-          ? pwd.workrole.trim()
-          : w.wrole.trim();
+      groups.putIfAbsent(personWorkDayKey(w.whid, dateKey), () => []).add(w);
+      addSameDayPlace(
+        placesByPersonDay,
+        hid: w.whid,
+        dateKey: dateKey,
+        place: SameDayPlaceRef(
+          pid: w.wpid,
+          name: formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
+          workrole: w.wrole.trim(),
+        ),
+      );
+    }
+
+    final out = <TotalWorkCostModel>[];
+    for (final entry in groups.entries) {
+      final group = [...entry.value]..sort((a, b) => a.wid.compareTo(b.wid));
+      final w = group.first;
+      final h = hMap[w.whid];
+      final p = pMap[w.wpid];
+      if (h == null || p == null) continue;
+      final dateKey = normalizeToIsoDateString(w.wdate);
+      final places = [
+        ...(placesByPersonDay[entry.key] ?? const <SameDayPlaceRef>[]),
+      ]..sort((a, b) => a.name.compareTo(b.name));
+      final joinedName = joinSameDayPlaceNames(places);
+      final joinedRole = joinSameDayWorkRoles(places);
       out.add(
         TotalWorkCostModel(
           hname: h.hname,
           hid: h.hid,
           hstar: h.hstar,
           hnumber: h.hnumber,
-          pname: p.pname,
+          pname: joinedName.isNotEmpty
+              ? joinedName
+              : formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
           wpid: w.wpid,
           wid: w.wid,
           pcomplete: p.pcomplete,
           wcomplete: w.wcomplete,
           date: dateKey,
-          price: w.wprice,
+          price: firstPositiveAmount(group.map((e) => e.wprice)),
           wcompletedAt: w.wcompletedAt,
-          workrole: role,
+          workrole: joinedRole.isNotEmpty ? joinedRole : w.wrole.trim(),
           hdailyWage: h.hdailywage,
           hdefaultRole: h.hdefaultrole,
           workerRank: h.workerRank,
           primarySpecialty: h.primarySpecialty,
           specialties: h.specialties,
+          sameDayPlaces: places,
         ),
       );
     }
@@ -121,36 +164,83 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     DateTime endDate,
     int pid,
   ) async {
-    final q = listQueryForDateRange(startDate, endDate,
-        hid: hid, pid: pid == 0 ? null : pid);
-    final pwdFuture = _remote.placeWorkDaysQuery(q);
-    final wcFuture = _remote.workCostsQuery(q);
+    final pwdQ = listQueryForDateRange(
+      startDate,
+      endDate,
+      hid: hid,
+      pid: pid == 0 ? null : pid,
+    );
+    final wcQ = listQueryForDateRange(startDate, endDate, hid: hid);
+    final pwdFuture = _remote.placeWorkDaysQuery(pwdQ);
+    final wcFuture = _remote.workCostsQuery(wcQ);
     final list = await pwdFuture;
     final wcs = await wcFuture;
 
-    final wcByPlaceDate = <String, WorkCostRead>{};
+    final wcByPersonDay = <String, WorkCostRead>{};
     for (final w in wcs) {
       if (w.whid != hid) continue;
-      if (pid != 0 && w.wpid != pid) continue;
-      final key = '${w.wpid}|${normalizeToIsoDateString(w.wdate)}';
-      wcByPlaceDate[key] = w;
+      final key = normalizeToIsoDateString(w.wdate);
+      final prev = wcByPersonDay[key];
+      if (prev == null ||
+          (prev.wprice <= 0 && w.wprice > 0) ||
+          (w.wprice > 0 && w.wid < prev.wid)) {
+        wcByPersonDay[key] = w;
+      }
     }
 
     final pMap = await loadPlaceMapForPids(_remote, list.map((e) => e.pid));
 
+    if (pid == 0) {
+      final byDate = <String, List<PlaceWorkDayRead>>{};
+      for (final pwd in list) {
+        final dateKey = normalizeToIsoDateString(pwd.workdate);
+        byDate.putIfAbsent(dateKey, () => []).add(pwd);
+      }
+      final out = <WorkCost2Model>[];
+      final dates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
+      for (final dateKey in dates) {
+        final pwds = byDate[dateKey]!;
+        final places = <SameDayPlaceRef>[];
+        final seenPid = <int>{};
+        for (final pwd in pwds) {
+          final p = pMap[pwd.pid];
+          if (p == null || !seenPid.add(pwd.pid)) continue;
+          places.add(
+            SameDayPlaceRef(
+              pid: pwd.pid,
+              name: formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
+              workrole: pwd.workrole.trim(),
+            ),
+          );
+        }
+        final wc = wcByPersonDay[dateKey];
+        final joined = joinSameDayPlaceNames(places);
+        out.add(
+          WorkCost2Model(
+            wdate: pwds.first.workdate,
+            wprice:
+                wc?.wprice ?? firstPositiveAmount(pwds.map((e) => e.dailywage)),
+            wcomplete: wc?.wcomplete ?? pwds.first.paid,
+            pname: joined,
+          ),
+        );
+      }
+      return out;
+    }
+
     final out = <WorkCost2Model>[];
     for (final pwd in list) {
-      if (pid != 0 && pwd.pid != pid) continue;
+      if (pwd.pid != pid) continue;
       final p = pMap[pwd.pid];
-      if (p == null || p.pcomplete == 2) continue;
+      if (p == null) continue;
       final dateKey = normalizeToIsoDateString(pwd.workdate);
-      final wc = wcByPlaceDate['${pwd.pid}|$dateKey'];
+      final wc = wcByPersonDay[dateKey];
       out.add(
         WorkCost2Model(
           wdate: pwd.workdate,
           wprice: wc?.wprice ?? pwd.dailywage,
           wcomplete: wc?.wcomplete ?? pwd.paid,
-          pname: p.pname,
+          pname: formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
         ),
       );
     }
@@ -199,24 +289,29 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     final role =
         w.wrole.trim().isEmpty ? kWorkRoleManualAddDefault : w.wrole.trim();
 
-    WorkCostRead? existing;
+    WorkCostRead? existingSamePlace;
+    WorkCostRead? existingOtherPlace;
     final hid = w.whid ?? 0;
     for (final c in existingList) {
-      if (c.whid == hid &&
-          c.wpid == w.wpid &&
-          normalizeToIsoDateString(c.wdate) == wd) {
-        existing = c;
+      if (c.whid != hid) continue;
+      if (normalizeToIsoDateString(c.wdate) != wd) continue;
+      if (c.wpid == w.wpid) {
+        existingSamePlace = c;
         break;
       }
+      existingOtherPlace ??= c;
     }
-    if (existing != null) {
+    if (existingSamePlace != null) {
       await _remote.workCostPatch(
-        existing.wid,
+        existingSamePlace.wid,
         <String, dynamic>{
           'wprice': w.wprice,
           'wrole': role,
         },
       );
+      return;
+    }
+    if (existingOtherPlace != null) {
       return;
     }
 
@@ -308,17 +403,30 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     final wd = normalizeToIsoDateString(dateKey);
     final role =
         wrole.trim().isEmpty ? kWorkRoleManualAddDefault : wrole.trim();
-    final wcs = await _remote.workCostsQuery(
-      ListQuery(pid: pid, hid: hid, from: wd, to: wd),
-    );
+    final parsed = DateTime.tryParse(wd);
+    final q = parsed == null
+        ? ListQuery(hid: hid, from: wd, to: wd)
+        : listQueryForSingleDay(parsed, hid: hid);
+    final wcs = await _remote.workCostsQuery(q);
+    WorkCostRead? samePlace;
+    WorkCostRead? otherPlace;
     for (final c in wcs) {
-      if (normalizeToIsoDateString(c.wdate) == wd) {
-        await _remote.workCostPatch(
-          c.wid,
-          <String, dynamic>{'wprice': wprice, 'wrole': role},
-        );
-        return;
+      if (normalizeToIsoDateString(c.wdate) != wd) continue;
+      if (c.wpid == pid) {
+        samePlace = c;
+        break;
       }
+      otherPlace ??= c;
+    }
+    if (samePlace != null) {
+      await _remote.workCostPatch(
+        samePlace.wid,
+        <String, dynamic>{'wprice': wprice, 'wrole': role},
+      );
+      return;
+    }
+    if (otherPlace != null) {
+      return;
     }
     await _remote.workCostCreate(<String, dynamic>{
       'wpid': pid,
@@ -341,6 +449,56 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     }
   }
 
+  @override
+  Future<int?> unassignSameDayPlace({
+    required int hid,
+    required String dateKey,
+    required int pidToRemove,
+    required int workCostWid,
+    required int workCostWpid,
+  }) async {
+    final wd = normalizeToIsoDateString(dateKey);
+    final pwdid = await findPlaceWorkDayPwdid(
+      pid: pidToRemove,
+      hid: hid,
+      dateKey: wd,
+    );
+    if (pwdid == null) {
+      throw Exception('해당 현장 투입 내역을 찾을 수 없습니다.');
+    }
+
+    final parsed = DateTime.tryParse(wd);
+    final q = parsed == null
+        ? ListQuery(hid: hid, from: wd, to: wd)
+        : listQueryForSingleDay(parsed, hid: hid);
+    final all = await _remote.placeWorkDaysQuery(q);
+    final remaining = all
+        .where(
+          (p) =>
+              p.pid != pidToRemove &&
+              normalizeToIsoDateString(p.workdate) == wd,
+        )
+        .toList();
+
+    await _remote.placeWorkDayDelete(pwdid);
+
+    if (remaining.isEmpty) {
+      await _remote.workCostDelete(workCostWid);
+      return null;
+    }
+
+    var nextWpid = workCostWpid;
+    if (workCostWpid == pidToRemove) {
+      remaining.sort((a, b) => a.pwdid.compareTo(b.pwdid));
+      nextWpid = remaining.first.pid;
+      await _remote.workCostPatch(
+        workCostWid,
+        <String, dynamic>{'wpid': nextWpid},
+      );
+    }
+    return nextWpid;
+  }
+
   Future<List<Map<String, dynamic>>> _workDayCsvRows(
     DateTime startDate,
     DateTime endDate,
@@ -351,31 +509,56 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     final list = await pwdFuture;
     final wcs = await wcFuture;
 
-    final wcByKey = <String, WorkCostRead>{};
+    final wcByPersonDay = <String, WorkCostRead>{};
     for (final w in wcs) {
-      final key = '${w.whid}|${w.wpid}|${normalizeToIsoDateString(w.wdate)}';
-      wcByKey[key] = w;
+      final key = personWorkDayKey(w.whid, normalizeToIsoDateString(w.wdate));
+      final prev = wcByPersonDay[key];
+      if (prev == null ||
+          (prev.wprice <= 0 && w.wprice > 0) ||
+          (w.wprice > 0 && w.wid < prev.wid)) {
+        wcByPersonDay[key] = w;
+      }
     }
 
     final pMap = await loadPlaceMapForPids(_remote, list.map((e) => e.pid));
     final hMap = await loadHumanMapForHids(_remote, list.map((e) => e.hid));
 
-    final out = <Map<String, dynamic>>[];
+    final byPersonDay = <String, List<PlaceWorkDayRead>>{};
     for (final pwd in list) {
-      final p = pMap[pwd.pid];
-      final h = hMap[pwd.hid];
-      if (p == null || h == null) continue;
-      if (h.hdelete != 0) continue;
-      if (p.pcomplete == 2) continue;
       final dateKey = normalizeToIsoDateString(pwd.workdate);
-      final wc = wcByKey['${pwd.hid}|${pwd.pid}|$dateKey'];
-      final amount = wc?.wprice ?? pwd.dailywage;
+      byPersonDay
+          .putIfAbsent(personWorkDayKey(pwd.hid, dateKey), () => [])
+          .add(pwd);
+    }
+
+    final out = <Map<String, dynamic>>[];
+    for (final entry in byPersonDay.entries) {
+      final pwds = entry.value;
+      final hid = pwds.first.hid;
+      final h = hMap[hid];
+      if (h == null || h.hdelete != 0) continue;
+      final dateKey = normalizeToIsoDateString(pwds.first.workdate);
+      final places = <SameDayPlaceRef>[];
+      final seenPid = <int>{};
+      for (final pwd in pwds) {
+        final p = pMap[pwd.pid];
+        if (p == null || !seenPid.add(pwd.pid)) continue;
+        places.add(
+          SameDayPlaceRef(
+            pid: pwd.pid,
+            name: formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
+          ),
+        );
+      }
+      final wc = wcByPersonDay[entry.key];
+      final amount =
+          wc?.wprice ?? firstPositiveAmount(pwds.map((e) => e.dailywage));
       final deduct = (amount * 0.967).toInt();
       out.add(<String, dynamic>{
         '이름': h.hname,
-        '현장': p.pname,
+        '현장': joinSameDayPlaceNames(places),
         '주민등록번호': h.hnumber,
-        '날짜': pwd.workdate,
+        '날짜': dateKey,
         '금액': amount,
         '공제금액': deduct,
       });
@@ -443,14 +626,18 @@ class WorkCostRepositoryImpl implements WorkCostRepository {
     final seen = <int, PlaceRead>{};
     for (final pwd in list) {
       final p = pMap[pwd.pid];
-      if (p == null || p.pcomplete == 2) continue;
+      if (p == null) continue;
       seen[p.pid] = p;
     }
     final sorted = seen.values.toList()
       ..sort((a, b) => a.pname.compareTo(b.pname));
     return [
       whole,
-      for (final p in sorted) PlaceDropDownModel(pname: p.pname, pid: p.pid),
+      for (final p in sorted)
+        PlaceDropDownModel(
+          pname: formatPlaceDisplayName(p.pname, pcomplete: p.pcomplete),
+          pid: p.pid,
+        ),
     ];
   }
 

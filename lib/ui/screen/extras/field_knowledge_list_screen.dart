@@ -9,20 +9,23 @@ import 'package:w0001/presentation/viewmodel/field_knowledge_providers.dart';
 import 'package:w0001/ui/screen/extras/field_knowledge_construction_case_detail_screen.dart';
 import 'package:w0001/ui/screen/extras/field_knowledge_detail_screen.dart';
 import 'package:w0001/ui/screen/extras/field_knowledge_editor_screen.dart';
+import 'package:w0001/ui/screen/extras/hardware_dictionary_style.dart';
 import 'package:w0001/ui/screen/extras/widgets/term_dictionary_list_body.dart';
 import 'package:w0001/ui/widget/app_refresh_indicator.dart';
 import 'package:w0001/ui/widget/app_text_field.dart';
 import 'package:w0001/util/korean_chosung.dart';
 import 'package:w0001/util/responsive_layout.dart';
 
-/// 현장 지식 항목 리스트 — 자재사전, 용어사전, 베스트/워스트 시공사례
+/// 현장 지식 항목 리스트 — 철물 사전, 용어사전, 베스트/워스트 시공사례
 class FieldKnowledgeListScreen extends ConsumerStatefulWidget {
   const FieldKnowledgeListScreen({
     super.key,
     required this.type,
+    this.hardwareKind,
   });
 
   final KnowledgeEntryType type;
+  final HardwareDictionaryKind? hardwareKind;
 
   @override
   ConsumerState<FieldKnowledgeListScreen> createState() =>
@@ -34,8 +37,17 @@ class _FieldKnowledgeListScreenState
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _selectedSubcategory;
 
   bool get _isTermDictionary => widget.type == KnowledgeEntryType.term;
+  bool get _isHardwareDictionary =>
+      widget.type == KnowledgeEntryType.material && widget.hardwareKind != null;
+
+  String get _screenTitle {
+    final kind = widget.hardwareKind;
+    if (kind != null) return kind.label;
+    return widget.type.displayName;
+  }
 
   @override
   void initState() {
@@ -45,6 +57,11 @@ class _FieldKnowledgeListScreenState
       ref.read(fieldKnowledgeListProvider.notifier).load(
             filter: KnowledgeFilter(
               type: widget.type,
+              categories: widget.hardwareKind == null
+                  ? const <String>[]
+                  : KnowledgeCategories.filterCategoriesFor(
+                      kind: widget.hardwareKind!,
+                    ),
               sortBy: _isTermDictionary
                   ? KnowledgeSortBy.title
                   : KnowledgeSortBy.recent,
@@ -99,6 +116,37 @@ class _FieldKnowledgeListScreenState
     ref.read(fieldKnowledgeListProvider.notifier).search(value);
   }
 
+  void _selectSubcategory(String? subcategory) {
+    final kind = widget.hardwareKind;
+    if (kind == null) return;
+    setState(() => _selectedSubcategory = subcategory);
+    final current = ref.read(fieldKnowledgeListProvider).filter;
+    ref.read(fieldKnowledgeListProvider.notifier).setFilter(
+          current.copyWith(
+            categories: KnowledgeCategories.filterCategoriesFor(
+              kind: kind,
+              subcategory: subcategory,
+            ),
+          ),
+        );
+  }
+
+  List<KnowledgeEntry> _visibleItems(List<KnowledgeEntry> items) {
+    final kind = widget.hardwareKind;
+    if (kind == null) return items;
+    if (kind == HardwareDictionaryKind.material &&
+        (_selectedSubcategory == null || _selectedSubcategory!.isEmpty)) {
+      return items
+          .where(
+            (entry) =>
+                KnowledgeCategories.hardwareKindOf(entry.categories) ==
+                HardwareDictionaryKind.material,
+          )
+          .toList(growable: false);
+    }
+    return items;
+  }
+
   /// 복합 초성 검색 결과가 비었고 다음 페이지가 있으면 이어서 로드.
   void _maybeLoadMoreForLocalChosungSearch(FieldKnowledgeListState state) {
     if (!_isTermDictionary) return;
@@ -136,9 +184,16 @@ class _FieldKnowledgeListScreenState
       );
     }
 
+    final visibleItems = _visibleItems(state.items);
+    final displayTotal =
+        widget.hardwareKind == HardwareDictionaryKind.material &&
+                (_selectedSubcategory == null || _selectedSubcategory!.isEmpty)
+            ? visibleItems.length
+            : state.total;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.type.displayName),
+        title: Text(_screenTitle),
       ),
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
@@ -167,7 +222,7 @@ class _FieldKnowledgeListScreenState
               controller: _searchController,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: '검색',
+                hintText: _isHardwareDictionary ? '이름이나 카테고리로 검색' : '검색',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _searchQuery.isEmpty
                     ? null
@@ -180,11 +235,21 @@ class _FieldKnowledgeListScreenState
               onChanged: (value) => setState(() => _searchQuery = value),
               onSubmitted: _submitSearch,
             ),
+            if (_isHardwareDictionary) ...[
+              SizedBox(height: context.rsi(12)),
+              _HardwareSubcategoryChips(
+                kind: widget.hardwareKind!,
+                selected: _selectedSubcategory,
+                onSelected: _selectSubcategory,
+              ),
+            ],
             SizedBox(height: context.rsi(16)),
             _StatsBanner(
               type: widget.type,
-              total: state.total,
+              title: _screenTitle,
+              total: displayTotal,
               isLoading: state.isLoading,
+              hardwareKind: widget.hardwareKind,
             ),
             SizedBox(height: context.rsi(16)),
             if (state.isLoading && state.items.isEmpty)
@@ -192,16 +257,18 @@ class _FieldKnowledgeListScreenState
                 padding: EdgeInsets.symmetric(vertical: context.rsi(48)),
                 child: const AppLoadingIndicator(),
               )
-            else if (state.items.isEmpty)
+            else if (visibleItems.isEmpty)
               _EmptyState(
                 type: widget.type,
+                title: _screenTitle,
                 onAdd: canManage
                     ? () => _openEditor(context, type: widget.type)
                     : null,
               )
             else if (widget.type.hasImages)
               _GridView(
-                items: state.items,
+                items: visibleItems,
+                hardwareKind: widget.hardwareKind,
                 onTap: (entry) => _openDetail(context, entry),
                 onEdit: canManage
                     ? (entry) => _openEditor(context, existing: entry)
@@ -209,7 +276,7 @@ class _FieldKnowledgeListScreenState
               )
             else
               _ListView(
-                items: state.items,
+                items: visibleItems,
                 onTap: (entry) => _openDetail(context, entry),
                 onEdit: canManage
                     ? (entry) => _openEditor(context, existing: entry)
@@ -358,6 +425,7 @@ class _FieldKnowledgeListScreenState
         builder: (_) => FieldKnowledgeEditorScreen(
           type: type ?? widget.type,
           existingEntry: resolvedExisting,
+          initialHardwareKind: widget.hardwareKind,
         ),
       ),
     );
@@ -365,6 +433,99 @@ class _FieldKnowledgeListScreenState
     if (result == true && mounted) {
       await ref.read(fieldKnowledgeListProvider.notifier).load();
     }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 철물 사전 하위 카테고리 칩
+// ────────────────────────────────────────────────────────────────────────────
+
+class _HardwareSubcategoryChips extends StatelessWidget {
+  const _HardwareSubcategoryChips({
+    required this.kind,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final HardwareDictionaryKind kind;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final accent = HardwareDictionaryStyle.accentFor(kind);
+    final categories = KnowledgeCategories.forHardwareKind(kind);
+
+    Widget pill({
+      required String label,
+      required bool isSelected,
+      required VoidCallback onTap,
+      IconData? icon,
+    }) {
+      return Material(
+        color: isSelected ? accent : cs.surface,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: context.rsi(11),
+              vertical: context.rsi(8),
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: isSelected
+                    ? accent
+                    : cs.outlineVariant.withValues(alpha: 0.7),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: context.rsi(14),
+                    color: isSelected ? Colors.white : accent,
+                  ),
+                  SizedBox(width: context.rsi(5)),
+                ],
+                Text(
+                  label,
+                  style: tt.labelMedium?.copyWith(
+                    color: isSelected ? Colors.white : cs.onSurface,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: context.rsi(8),
+      runSpacing: context.rsi(8),
+      children: [
+        pill(
+          label: '전체',
+          isSelected: selected == null || selected!.isEmpty,
+          onTap: () => onSelected(null),
+        ),
+        for (final category in categories)
+          pill(
+            label: category,
+            isSelected: selected == category,
+            icon: HardwareDictionaryStyle.iconForCategory(category),
+            onTap: () => onSelected(category),
+          ),
+      ],
+    );
   }
 }
 
@@ -377,39 +538,51 @@ class _StatsBanner extends StatelessWidget {
     required this.type,
     required this.total,
     required this.isLoading,
+    this.title,
+    this.hardwareKind,
   });
 
   final KnowledgeEntryType type;
+  final String? title;
   final int total;
   final bool isLoading;
+  final HardwareDictionaryKind? hardwareKind;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final accent = hardwareKind == null
+        ? cs.primary
+        : HardwareDictionaryStyle.accentFor(hardwareKind!);
 
     return Container(
       padding: EdgeInsets.all(context.rsi(16)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            cs.primaryContainer.withValues(alpha: 0.75),
-            cs.tertiaryContainer.withValues(alpha: 0.55),
+            accent.withValues(alpha: 0.16),
+            cs.surfaceContainerHighest.withValues(alpha: 0.55),
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
           Container(
             padding: EdgeInsets.all(context.rsi(10)),
             decoration: BoxDecoration(
-              color: cs.surface.withValues(alpha: 0.85),
+              color: cs.surface.withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(_getTypeIcon(type),
-                color: cs.primary, size: context.rsi(24)),
+            child: Icon(
+              hardwareKind == null
+                  ? _getTypeIcon(type)
+                  : HardwareDictionaryStyle.iconForKind(hardwareKind!),
+              color: accent,
+              size: context.rsi(24),
+            ),
           ),
           SizedBox(width: context.rsi(12)),
           Expanded(
@@ -417,7 +590,7 @@ class _StatsBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  type.displayName,
+                  title ?? type.displayName,
                   style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 SizedBox(height: context.rsi(2)),
@@ -439,7 +612,7 @@ class _StatsBanner extends StatelessWidget {
   IconData _getTypeIcon(KnowledgeEntryType type) {
     switch (type) {
       case KnowledgeEntryType.material:
-        return Icons.inventory_2_outlined;
+        return Icons.hardware_outlined;
       case KnowledgeEntryType.term:
         return Icons.menu_book_outlined;
       case KnowledgeEntryType.constructionCase:
@@ -457,10 +630,12 @@ class _StatsBanner extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
     required this.type,
+    this.title,
     this.onAdd,
   });
 
   final KnowledgeEntryType type;
+  final String? title;
   final VoidCallback? onAdd;
 
   @override
@@ -476,7 +651,7 @@ class _EmptyState extends StatelessWidget {
           ),
           SizedBox(height: context.rsi(12)),
           Text(
-            '등록된 ${type.displayName} 항목이 없습니다.',
+            '등록된 ${title ?? type.displayName} 항목이 없습니다.',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           if (onAdd != null) ...[
@@ -495,7 +670,7 @@ class _EmptyState extends StatelessWidget {
   IconData _getTypeIcon(KnowledgeEntryType type) {
     switch (type) {
       case KnowledgeEntryType.material:
-        return Icons.inventory_2_outlined;
+        return Icons.hardware_outlined;
       case KnowledgeEntryType.term:
         return Icons.menu_book_outlined;
       case KnowledgeEntryType.constructionCase:
@@ -507,7 +682,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// 그리드 뷰 (자재사전, 베스트/워스트 사례 — 이미지 포함)
+// 그리드 뷰 (철물 사전, 베스트/워스트 사례 — 이미지 포함)
 // ────────────────────────────────────────────────────────────────────────────
 
 class _GridView extends StatelessWidget {
@@ -515,11 +690,13 @@ class _GridView extends StatelessWidget {
     required this.items,
     required this.onTap,
     this.onEdit,
+    this.hardwareKind,
   });
 
   final List<KnowledgeEntry> items;
   final void Function(KnowledgeEntry) onTap;
   final void Function(KnowledgeEntry)? onEdit;
+  final HardwareDictionaryKind? hardwareKind;
 
   @override
   Widget build(BuildContext context) {
@@ -540,6 +717,7 @@ class _GridView extends StatelessWidget {
         final entry = items[index];
         return _GridCard(
           entry: entry,
+          hardwareKind: hardwareKind,
           onTap: () => onTap(entry),
           onEdit: onEdit != null ? () => onEdit!(entry) : null,
         );
@@ -553,49 +731,94 @@ class _GridCard extends StatelessWidget {
     required this.entry,
     required this.onTap,
     this.onEdit,
+    this.hardwareKind,
   });
 
   final KnowledgeEntry entry;
   final VoidCallback onTap;
   final VoidCallback? onEdit;
+  final HardwareDictionaryKind? hardwareKind;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final hideTags = hardwareKind == HardwareDictionaryKind.tool;
+    final category = KnowledgeCategories.primarySubcategory(
+      entry.categories,
+      kind: hardwareKind,
+    );
+    final accent = hardwareKind == null
+        ? cs.primary
+        : HardwareDictionaryStyle.accentFor(hardwareKind!);
 
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.45)),
+      ),
       child: InkWell(
         onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 이미지
             Expanded(
-              child: entry.primaryImageUrl != null
-                  ? Image.network(
-                      entry.primaryImageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _PlaceholderImage(type: entry.type),
-                    )
-                  : _PlaceholderImage(type: entry.type),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  entry.primaryImageUrl != null
+                      ? Image.network(
+                          entry.primaryImageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _PlaceholderImage(type: entry.type),
+                        )
+                      : _PlaceholderImage(type: entry.type),
+                  if (category != null)
+                    Positioned(
+                      left: context.rsi(8),
+                      bottom: context.rsi(8),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: context.rsi(8),
+                          vertical: context.rsi(4),
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.62),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          category,
+                          style: tt.labelSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            // 텍스트
             Padding(
-              padding: EdgeInsets.all(context.rsi(12)),
+              padding: EdgeInsets.fromLTRB(
+                context.rsi(12),
+                context.rsi(10),
+                context.rsi(8),
+                context.rsi(10),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     entry.title,
-                    style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (entry.tags.isNotEmpty) ...[
+                  if (!hideTags && entry.tags.isNotEmpty) ...[
                     SizedBox(height: context.rsi(6)),
                     Wrap(
                       spacing: context.rsi(4),
@@ -606,13 +829,13 @@ class _GridCard extends StatelessWidget {
                             vertical: context.rsi(2),
                           ),
                           decoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest,
+                            color: accent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             '#$tag',
                             style: tt.labelSmall?.copyWith(
-                              color: cs.onSurfaceVariant,
+                              color: accent,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -621,17 +844,15 @@ class _GridCard extends StatelessWidget {
                     ),
                   ],
                   if (onEdit != null) ...[
-                    SizedBox(height: context.rsi(8)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          onPressed: onEdit,
-                          icon: const Icon(Icons.edit_outlined),
-                          iconSize: context.rsi(18),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+                    SizedBox(height: context.rsi(4)),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_outlined),
+                        iconSize: context.rsi(18),
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
                   ],
                 ],
@@ -791,7 +1012,7 @@ class _PlaceholderImage extends StatelessWidget {
   IconData _getIcon(KnowledgeEntryType type) {
     switch (type) {
       case KnowledgeEntryType.material:
-        return Icons.inventory_2_outlined;
+        return Icons.hardware_outlined;
       case KnowledgeEntryType.constructionCase:
         return Icons.compare_outlined;
       case KnowledgeEntryType.term:

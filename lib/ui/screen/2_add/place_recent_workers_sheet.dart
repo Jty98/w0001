@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:w0001/data/model/human_model.dart';
 import 'package:w0001/presentation/viewmodel/add_cost_view_model.dart';
+import 'package:w0001/presentation/viewmodel/super_admin_remote_providers.dart';
 import 'package:w0001/ui/widget/app_loading_indicator.dart';
 import 'package:w0001/ui/widget/hammer_loading_indicator.dart';
 import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_sheet.dart'
@@ -9,6 +10,7 @@ import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_sheet.da
 import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_utils.dart';
 import 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_person_tile.dart';
 import 'package:w0001/util/funtions.dart';
+import 'package:w0001/util/human_work_assignability.dart';
 
 export 'package:w0001/ui/widget/worker_grouped_list/worker_grouped_list_utils.dart'
     show initialIndexKeyForName, kKoreanInitialIndex;
@@ -62,14 +64,23 @@ Future<void> showPlaceRecentWorkersSheet({
   required WidgetRef ref,
 }) async {
   final vm = ref.read(addCostProvider.notifier);
-  final initial = ref.read(addCostProvider).placeRecentWorkers;
+  var blocked = const <String>{};
+  try {
+    blocked = await ref.read(nonAssignableMemberUidsProvider.future);
+  } catch (_) {}
+  final initial = filterAssignableHumans(
+    ref.read(addCostProvider).placeRecentWorkers,
+    blockedMemberUids: blocked,
+  );
   if (initial.isEmpty) {
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('이 현장에 기록된 인원이 없습니다.')),
     );
     return;
   }
 
+  if (!context.mounted) return;
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -84,7 +95,13 @@ Future<void> showPlaceRecentWorkersSheet({
           return Consumer(
             builder: (ctx, ref, _) {
               final state = ref.watch(addCostProvider);
-              final all = state.placeRecentWorkers;
+              final blocked =
+                  ref.watch(nonAssignableMemberUidsProvider).asData?.value ??
+                      const <String>{};
+              final all = filterAssignableHumans(
+                state.placeRecentWorkers,
+                blockedMemberUids: blocked,
+              );
               final loading = state.placeRecentWorkersLoading;
 
               return _PlaceRecentWorkersGroupedLauncher(
@@ -93,7 +110,27 @@ Future<void> showPlaceRecentWorkersSheet({
                 initialWorkers: all,
                 isLoading: loading,
                 scrollController: scrollController,
-                onWorkerTap: (h) => vm.tapPlaceRecentWorker(context, h),
+                onWorkerTap: (h) async {
+                  if (!humanCanBeAssignedToWork(
+                    h,
+                    blockedMemberUids: blocked,
+                  )) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            humanWorkAssignBlockMessage(
+                              h,
+                              blockedMemberUids: blocked,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  await vm.tapPlaceRecentWorker(context, h);
+                },
                 onRemoveFromList: (h) async {
                   final hid = h.hid;
                   if (hid == null) return;

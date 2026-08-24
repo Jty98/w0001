@@ -10,6 +10,7 @@ import 'package:w0001/access/user_role_access.dart';
 import 'package:w0001/data/model/place_info_model.dart';
 import 'package:w0001/presentation/viewmodel/auth_providers.dart';
 import 'package:w0001/presentation/viewmodel/place_list_view_model.dart';
+import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_kpi_display.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_legend.dart';
 import 'package:w0001/ui/screen/1_dashboard/widgets/dashboard_line_charts.dart';
 import 'package:w0001/theme/app_segmented_button.dart';
@@ -44,6 +45,7 @@ Future<void> showDashboardMetricChartSheet(
   required List<DashboardPlaceRow> places,
   DashboardPlaceBreakdownFilter initialPlaceFilter =
       DashboardPlaceBreakdownFilter.all,
+  bool initialYearly = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -51,13 +53,23 @@ Future<void> showDashboardMetricChartSheet(
     useSafeArea: true,
     showDragHandle: true,
     builder: (ctx) {
-      return _DashboardMetricChartSheetBody(
-        kind: kind,
-        selectedYear: selectedYear,
-        monthly: monthly,
-        yearly: yearly,
-        places: places,
-        initialPlaceFilter: initialPlaceFilter,
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.78,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) {
+          return _DashboardMetricChartSheetBody(
+            kind: kind,
+            selectedYear: selectedYear,
+            monthly: monthly,
+            yearly: yearly,
+            places: places,
+            initialPlaceFilter: initialPlaceFilter,
+            initialYearly: initialYearly,
+            scrollController: scrollController,
+          );
+        },
       );
     },
   );
@@ -71,6 +83,8 @@ class _DashboardMetricChartSheetBody extends ConsumerStatefulWidget {
     required this.yearly,
     required this.places,
     required this.initialPlaceFilter,
+    required this.initialYearly,
+    required this.scrollController,
   });
 
   final DashboardMetricKind kind;
@@ -79,6 +93,8 @@ class _DashboardMetricChartSheetBody extends ConsumerStatefulWidget {
   final List<YearlyDashboardPoint> yearly;
   final List<DashboardPlaceRow> places;
   final DashboardPlaceBreakdownFilter initialPlaceFilter;
+  final bool initialYearly;
+  final ScrollController scrollController;
 
   @override
   ConsumerState<_DashboardMetricChartSheetBody> createState() =>
@@ -89,20 +105,32 @@ enum _SheetPeriod { monthly, yearly }
 
 class _DashboardMetricChartSheetBodyState
     extends ConsumerState<_DashboardMetricChartSheetBody> {
-  _SheetPeriod _period = _SheetPeriod.monthly;
+  static const _kPlacePageSize = 30;
+
+  late _SheetPeriod _period;
   late DashboardPlaceBreakdownFilter _placeFilter;
   final Map<int, int> _placeCompleteByPid = {};
   final Map<int, PlaceInfoModel> _placeByPid = {};
   bool _placeMetaReady = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _placeQuery = '';
+  int _placeListLimit = _kPlacePageSize;
 
   @override
   void initState() {
     super.initState();
+    _period = widget.initialYearly ? _SheetPeriod.yearly : _SheetPeriod.monthly;
     _placeFilter = widget.initialPlaceFilter;
     _seedPlaceMetaFromBundle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_loadPlaceMeta());
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _seedPlaceMetaFromBundle() {
@@ -172,18 +200,34 @@ class _DashboardMetricChartSheetBodyState
       case DashboardMetricKind.cost:
         return '공사원가 추이';
       case DashboardMetricKind.profitAndMargin:
-        return '영업이익 · 이익률 [완료현장 기준 그래프]';
+        return '영업이익 · 이익률';
       case DashboardMetricKind.siteCounts:
-        return '현장 현황 (진행중·완료)';
+        return '신규 · 완료 현장';
+    }
+  }
+
+  String get _definitionNote {
+    switch (widget.kind) {
+      case DashboardMetricKind.construction:
+        return '공사금액 확정일(없으면 시작일) 기준';
+      case DashboardMetricKind.collection:
+        return '실제 입금일 기준';
+      case DashboardMetricKind.cost:
+        return '해당 기간 발생 원가(인건비·자재)';
+      case DashboardMetricKind.profitAndMargin:
+        return '완료 현장만 · 수금 − 원가';
+      case DashboardMetricKind.siteCounts:
+        return '해당 기간에 새로 잡히거나 완료된 건수(진행 중 재고 아님)';
     }
   }
 
   List<Widget> _chartsForPeriod(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final monthLabels = List<String>.generate(12, (i) => '${i + 1}');
-    final yearLabels = widget.yearly.map((e) => '${e.year}').toList();
-    final m = widget.monthly;
-    final y = widget.yearly;
+    final yearly = sortedYearlyAscending(widget.yearly);
+    final yearLabels = yearly.map((e) => '${e.year}').toList();
+    final m = paddedMonthlyForYear(widget.monthly, widget.selectedYear);
+    final y = yearly;
     final h = _chartHeight(context);
 
     if (_period == _SheetPeriod.monthly) {
@@ -294,12 +338,12 @@ class _DashboardMetricChartSheetBodyState
             DashboardLegend(
               items: [
                 DashboardLegendItem(
-                  label: '진행중 현장(건)',
-                  color: cs.primaryContainer,
+                  label: '신규 현장(건)',
+                  color: cs.primary,
                 ),
                 DashboardLegendItem(
                   label: '완료 현장(건)',
-                  color: cs.secondaryContainer,
+                  color: cs.tertiary,
                 ),
               ],
             ),
@@ -311,18 +355,13 @@ class _DashboardMetricChartSheetBodyState
                 integerYAxis: true,
                 series: [
                   DashboardLineSeries(
-                    label: '진행중',
-                    color: cs.primaryContainer,
-                    values: m
-                        .map((e) =>
-                            (e.newProjectCount - e.completedProjectCount)
-                                .clamp(0, 1 << 20)
-                                .toDouble())
-                        .toList(),
+                    label: '신규',
+                    color: cs.primary,
+                    values: m.map((e) => e.newProjectCount.toDouble()).toList(),
                   ),
                   DashboardLineSeries(
                     label: '완료',
-                    color: cs.secondaryContainer,
+                    color: cs.tertiary,
                     values: m
                         .map((e) => e.completedProjectCount.toDouble())
                         .toList(),
@@ -440,12 +479,12 @@ class _DashboardMetricChartSheetBodyState
           DashboardLegend(
             items: [
               DashboardLegendItem(
-                label: '진행중 현장(건)',
-                color: cs.primaryContainer,
+                label: '신규 현장(건)',
+                color: cs.primary,
               ),
               DashboardLegendItem(
                 label: '완료 현장(건)',
-                color: cs.secondaryContainer,
+                color: cs.tertiary,
               ),
             ],
           ),
@@ -457,17 +496,13 @@ class _DashboardMetricChartSheetBodyState
               integerYAxis: true,
               series: [
                 DashboardLineSeries(
-                  label: '진행중',
-                  color: cs.primaryContainer,
-                  values: y
-                      .map((e) => (e.newProjectCount - e.completedProjectCount)
-                          .clamp(0, 1 << 20)
-                          .toDouble())
-                      .toList(),
+                  label: '신규',
+                  color: cs.primary,
+                  values: y.map((e) => e.newProjectCount.toDouble()).toList(),
                 ),
                 DashboardLineSeries(
                   label: '완료',
-                  color: cs.secondaryContainer,
+                  color: cs.tertiary,
                   values:
                       y.map((e) => e.completedProjectCount.toDouble()).toList(),
                 ),
@@ -481,31 +516,33 @@ class _DashboardMetricChartSheetBodyState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final visibleRows = widget.places.where(_matchesPlaceFilter).toList()
-      ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
-    final inProgressRows = widget.places
-        .where((r) => _completeFor(r) == 0)
-        .toList()
-      ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
-    final completedRows = widget.places
-        .where((r) => _completeFor(r) == 1)
-        .toList()
-      ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
-    final yearLabels = widget.yearly.map((e) => '${e.year}').toList();
+    final visibleRows = _withSearch(
+      widget.places.where(_matchesPlaceFilter),
+    );
+    final inProgressRows = _withSearch(
+      widget.places.where((r) => _completeFor(r) == 0),
+    );
+    final completedRows = _withSearch(
+      widget.places.where((r) => _completeFor(r) == 1),
+    );
+    final yearly = sortedYearlyAscending(widget.yearly);
     final periodNote = _period == _SheetPeriod.monthly
         ? '${widget.selectedYear}년 월별'
-        : '선택 연도를 끝으로 최근 ${yearLabels.length}년';
-    final showCharts = widget.kind != DashboardMetricKind.siteCounts &&
-        widget.kind != DashboardMetricKind.collection;
+        : yearly.isEmpty
+            ? '연도별 추이'
+            : '${yearly.first.year}–${yearly.last.year}년';
 
     final tt = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.only(
         left: context.rsi(16),
         right: context.rsi(16),
-        bottom: MediaQuery.paddingOf(context).bottom + context.rsi(16),
+        bottom: MediaQuery.paddingOf(context).bottom +
+            MediaQuery.viewInsetsOf(context).bottom +
+            context.rsi(16),
       ),
       child: SingleChildScrollView(
+        controller: widget.scrollController,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -514,45 +551,79 @@ class _DashboardMetricChartSheetBodyState
               _titleBase,
               style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
-            if (showCharts) ...[
-              SizedBox(height: context.rsi(4)),
-              Text(
-                periodNote,
-                style: tt.labelMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+            SizedBox(height: context.rsi(4)),
+            Text(
+              '$_definitionNote · $periodNote',
+              style: tt.labelMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+              ),
+            ),
+            SizedBox(height: context.rsi(12)),
+            SegmentedButton<_SheetPeriod>(
+              segments: const [
+                ButtonSegment<_SheetPeriod>(
+                  value: _SheetPeriod.monthly,
+                  label: Text('월별'),
+                  icon: Icon(Icons.calendar_view_month, size: 18),
                 ),
-              ),
-              SizedBox(height: context.rsi(12)),
-              SegmentedButton<_SheetPeriod>(
-                segments: const [
-                  ButtonSegment<_SheetPeriod>(
-                    value: _SheetPeriod.monthly,
-                    label: Text('월별'),
-                    icon: Icon(Icons.calendar_view_month, size: 18),
-                  ),
-                  ButtonSegment<_SheetPeriod>(
-                    value: _SheetPeriod.yearly,
-                    label: Text('연도별'),
-                    icon: Icon(Icons.timeline, size: 18),
-                  ),
-                ],
-                selected: {_period},
-                style: AppSegmentedButton.styleFrom(),
-                onSelectionChanged: (Set<_SheetPeriod> next) {
-                  if (next.isEmpty) return;
-                  setState(() => _period = next.first);
-                },
-              ),
-              SizedBox(height: context.rsi(12)),
-              ..._chartsForPeriod(context),
-            ],
+                ButtonSegment<_SheetPeriod>(
+                  value: _SheetPeriod.yearly,
+                  label: Text('연도별'),
+                  icon: Icon(Icons.timeline, size: 18),
+                ),
+              ],
+              selected: {_period},
+              style: AppSegmentedButton.styleFrom(),
+              onSelectionChanged: (Set<_SheetPeriod> next) {
+                if (next.isEmpty) return;
+                setState(() => _period = next.first);
+              },
+            ),
+            SizedBox(height: context.rsi(12)),
+            ..._chartsForPeriod(context),
             SizedBox(height: context.rsi(16)),
             Text(
               '현장별 상세',
               style: tt.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
                 color: cs.onSurface,
+              ),
+            ),
+            SizedBox(height: context.rsi(2)),
+            Text(
+              '전 기간 누적 · 위 기간 합계와 다를 수 있음',
+              style: tt.labelSmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: context.rsi(8)),
+            TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              onChanged: (v) => setState(() {
+                _placeQuery = v;
+                _placeListLimit = _kPlacePageSize;
+              }),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '현장 이름 검색',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _placeQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '지우기',
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _placeQuery = '';
+                            _placeListLimit = _kPlacePageSize;
+                          });
+                        },
+                      ),
               ),
             ),
             SizedBox(height: context.rsi(8)),
@@ -575,7 +646,10 @@ class _DashboardMetricChartSheetBodyState
               style: AppSegmentedButton.styleFrom(),
               onSelectionChanged: (next) {
                 if (next.isEmpty) return;
-                setState(() => _placeFilter = next.first);
+                setState(() {
+                  _placeFilter = next.first;
+                  _placeListLimit = _kPlacePageSize;
+                });
               },
             ),
             const SizedBox(height: 8),
@@ -627,6 +701,28 @@ class _DashboardMetricChartSheetBodyState
     );
   }
 
+  List<DashboardPlaceRow> _withSearch(Iterable<DashboardPlaceRow> rows) {
+    final q = _placeQuery.trim().toLowerCase();
+    final list = rows.where((r) {
+      if (q.isEmpty) return true;
+      return r.pname.toLowerCase().contains(q);
+    }).toList()
+      ..sort((a, b) => _metricValue(b).compareTo(_metricValue(a)));
+    return list;
+  }
+
+  List<DashboardPlaceRow> _visiblePlaceRows(List<DashboardPlaceRow> rows) {
+    if (_placeQuery.trim().isNotEmpty) return rows;
+    if (rows.length <= _placeListLimit) return rows;
+    return rows.take(_placeListLimit).toList();
+  }
+
+  int _hiddenPlaceCount(List<DashboardPlaceRow> rows) {
+    if (_placeQuery.trim().isNotEmpty) return 0;
+    if (rows.length <= _placeListLimit) return 0;
+    return rows.length - _placeListLimit;
+  }
+
   int _metricValue(DashboardPlaceRow row) {
     switch (widget.kind) {
       case DashboardMetricKind.construction:
@@ -638,7 +734,7 @@ class _DashboardMetricChartSheetBodyState
       case DashboardMetricKind.profitAndMargin:
         return row.profitOnContract;
       case DashboardMetricKind.siteCounts:
-        return 0;
+        return row.contractTotal;
     }
   }
 
@@ -850,9 +946,11 @@ class _DashboardMetricChartSheetBodyState
                   child: Row(
                     children: [
                       SizedBox(
-                        width: context.rs(30),
+                        width: context.rs(48),
                         child: Text(
-                          '${i + 1}차',
+                          d.kind.trim().isEmpty ? '${i + 1}차' : d.kind,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: tt.labelSmall?.copyWith(
                             fontWeight: FontWeight.w800,
                             color: cs.primary,
@@ -1002,89 +1100,91 @@ class _DashboardMetricChartSheetBodyState
             ),
           ),
           rsV(context, 6),
-          ...rows.take(30).map(
-                (row) => Padding(
-                  padding: ResponsiveLayout.only(context, bottom: 6),
-                  child: Material(
-                    color: cs.surface.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(context.rs(10)),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(context.rs(10)),
-                      onTap: () => _openPlaceDetail(context, row.pid),
-                      child: Padding(
-                        padding: ResponsiveLayout.only(
-                          context,
-                          left: 10,
-                          top: 8,
-                          right: 10,
-                          bottom: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+          ..._visiblePlaceRows(rows).map(
+            (row) => Padding(
+              padding: ResponsiveLayout.only(context, bottom: 6),
+              child: Material(
+                color: cs.surface.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(context.rs(10)),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(context.rs(10)),
+                  onTap: () => _openPlaceDetail(context, row.pid),
+                  child: Padding(
+                    padding: ResponsiveLayout.only(
+                      context,
+                      left: 10,
+                      top: 8,
+                      right: 10,
+                      bottom: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          row.pname,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: tt.bodyMedium?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                          ),
+                                  Expanded(
+                                    child: Text(
+                                      row.pname,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: tt.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: ResponsiveLayout.only(
+                                      context,
+                                      left: 8,
+                                    ),
+                                    child: Container(
+                                      padding: ResponsiveLayout.symmetric(
+                                        context,
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: cs.primaryContainer,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        getPrice(price: _metricValue(row)),
+                                        style: tt.labelSmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: cs.onPrimaryContainer,
                                         ),
                                       ),
-                                      if (widget.kind !=
-                                          DashboardMetricKind.siteCounts)
-                                        Padding(
-                                          padding: ResponsiveLayout.only(
-                                            context,
-                                            left: 8,
-                                          ),
-                                          child: Container(
-                                            padding: ResponsiveLayout.symmetric(
-                                              context,
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: cs.primaryContainer,
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
-                                            ),
-                                            child: Text(
-                                              getPrice(
-                                                  price: _metricValue(row)),
-                                              style: tt.labelSmall?.copyWith(
-                                                fontWeight: FontWeight.w800,
-                                                color: cs.onPrimaryContainer,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                                    ),
                                   ),
-                                  rsV(context, 2),
-                                  _rowSubtitleWidget(row, cs),
                                 ],
                               ),
-                            ),
-                            rsH(context, 4),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              size: context.rsi(18),
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ],
+                              rsV(context, 2),
+                              _rowSubtitleWidget(row, cs),
+                            ],
+                          ),
                         ),
-                      ),
+                        rsH(context, 4),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: context.rsi(18),
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
+            ),
+          ),
+          if (_hiddenPlaceCount(rows) > 0)
+            TextButton(
+              onPressed: () => setState(() => _placeListLimit = 1 << 20),
+              child: Text('나머지 ${_hiddenPlaceCount(rows)}곳 더보기'),
+            ),
         ],
       ),
     );
